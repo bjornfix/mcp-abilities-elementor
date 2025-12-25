@@ -1,9 +1,14 @@
 # MCP Abilities - Elementor
 
-**Elementor page builder integration for WordPress via MCP.** Get, update, and patch Elementor page data. Manage templates and cache.
+Elementor page builder integration for WordPress via MCP.
 
 [![GitHub release](https://img.shields.io/github/v/release/bjornfix/mcp-abilities-elementor)](https://github.com/bjornfix/mcp-abilities-elementor/releases)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
+
+**Tested up to:** 6.7
+**Stable tag:** 1.0.1
+**License:** GPLv2 or later
+**License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
 ## What It Does
 
