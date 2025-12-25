@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 1.0.0
+ * Version: 1.0.1
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -622,6 +622,101 @@ function mcp_register_elementor_abilities(): void {
 				}
 
 				return array( 'success' => false, 'message' => 'Provide either "id" or set "all" to true' );
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+	// =========================================================================
+	// ELEMENTOR - Update Page Settings
+	// =========================================================================
+	wp_register_ability(
+		'elementor/update-page-settings',
+		array(
+			'label'               => 'Update Elementor Page Settings',
+			'description'         => 'Updates Elementor page settings (stored in _elementor_page_settings postmeta). Can update individual keys or replace entire settings object. Use for Site Settings Kit to set global padding, typography, colors, etc.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id' ),
+				'properties'           => array(
+					'id'       => array(
+						'type'        => 'integer',
+						'description' => 'Post/Page/Kit ID to update settings for.',
+					),
+					'settings' => array(
+						'type'        => 'object',
+						'description' => 'Settings object to merge with existing settings. Keys will be added/updated.',
+					),
+					'replace'  => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'If true, replace entire settings object instead of merging.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'  => array( 'type' => 'boolean' ),
+					'id'       => array( 'type' => 'integer' ),
+					'message'  => array( 'type' => 'string' ),
+					'settings' => array( 'type' => 'object' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input = is_array( $input ) ? $input : array();
+
+				if ( empty( $input['id'] ) ) {
+					return array( 'success' => false, 'message' => 'Post/Page/Kit ID is required' );
+				}
+
+				$post = get_post( $input['id'] );
+				if ( ! $post ) {
+					return array( 'success' => false, 'message' => 'Post not found' );
+				}
+
+				$existing_settings = get_post_meta( $input['id'], '_elementor_page_settings', true );
+				if ( ! is_array( $existing_settings ) ) {
+					$existing_settings = array();
+				}
+
+				$new_settings = $input['settings'] ?? array();
+				$replace      = ! empty( $input['replace'] );
+
+				if ( $replace ) {
+					$final_settings = $new_settings;
+				} else {
+					// Merge new settings into existing (new values override).
+					$final_settings = array_merge( $existing_settings, $new_settings );
+				}
+
+				update_post_meta( $input['id'], '_elementor_page_settings', $final_settings );
+
+				// Clear Elementor CSS cache.
+				delete_post_meta( $input['id'], '_elementor_css' );
+
+				// If this is a kit, clear all site CSS.
+				$active_kit = get_option( 'elementor_active_kit' );
+				if ( (int) $active_kit === (int) $input['id'] && class_exists( '\Elementor\Plugin' ) ) {
+					\Elementor\Plugin::$instance->files_manager->clear_cache();
+				}
+
+				return array(
+					'success'  => true,
+					'id'       => $input['id'],
+					'message'  => 'Page settings updated successfully',
+					'settings' => $final_settings,
+				);
 			},
 			'permission_callback' => function (): bool {
 				return current_user_can( 'edit_posts' );
