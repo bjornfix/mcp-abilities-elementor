@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 1.0.1
+ * Version: 1.0.2
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -93,6 +93,10 @@ function mcp_register_elementor_abilities(): void {
 					return array( 'success' => false, 'message' => 'Post not found' );
 				}
 
+				if ( ! current_user_can( 'edit_post', $post->ID ) ) {
+					return array( 'success' => false, 'message' => 'You do not have permission to access this post' );
+				}
+
 				$elementor_data = get_post_meta( $input['id'], '_elementor_data', true );
 				$edit_mode      = get_post_meta( $input['id'], '_elementor_edit_mode', true );
 				$page_settings  = get_post_meta( $input['id'], '_elementor_page_settings', true );
@@ -178,6 +182,10 @@ function mcp_register_elementor_abilities(): void {
 				$post = get_post( $input['id'] );
 				if ( ! $post ) {
 					return array( 'success' => false, 'message' => 'Post not found' );
+				}
+
+				if ( ! current_user_can( 'edit_post', $post->ID ) ) {
+					return array( 'success' => false, 'message' => 'You do not have permission to update this post' );
 				}
 
 				// Encode data to JSON.
@@ -280,6 +288,10 @@ function mcp_register_elementor_abilities(): void {
 				$post = get_post( $input['id'] );
 				if ( ! $post ) {
 					return array( 'success' => false, 'message' => 'Post not found' );
+				}
+
+				if ( ! current_user_can( 'edit_post', $post->ID ) ) {
+					return array( 'success' => false, 'message' => 'You do not have permission to update this post' );
 				}
 
 				$elementor_data = get_post_meta( $input['id'], '_elementor_data', true );
@@ -404,6 +416,10 @@ function mcp_register_elementor_abilities(): void {
 				$post = get_post( $input['id'] );
 				if ( ! $post ) {
 					return array( 'success' => false, 'message' => 'Post not found' );
+				}
+
+				if ( ! current_user_can( 'edit_post', $post->ID ) ) {
+					return array( 'success' => false, 'message' => 'You do not have permission to update this post' );
 				}
 
 				$elementor_data = get_post_meta( $input['id'], '_elementor_data', true );
@@ -617,6 +633,10 @@ function mcp_register_elementor_abilities(): void {
 						return array( 'success' => false, 'message' => 'Post not found' );
 					}
 
+					if ( ! current_user_can( 'edit_post', $post->ID ) ) {
+						return array( 'success' => false, 'message' => 'You do not have permission to clear cache for this post' );
+					}
+
 					delete_post_meta( $input['id'], '_elementor_css' );
 					return array( 'success' => true, 'message' => "Cache cleared for post {$input['id']}" );
 				}
@@ -683,6 +703,10 @@ function mcp_register_elementor_abilities(): void {
 				$post = get_post( $input['id'] );
 				if ( ! $post ) {
 					return array( 'success' => false, 'message' => 'Post not found' );
+				}
+
+				if ( ! current_user_can( 'edit_post', $post->ID ) ) {
+					return array( 'success' => false, 'message' => 'You do not have permission to update this post' );
 				}
 
 				$existing_settings = get_post_meta( $input['id'], '_elementor_page_settings', true );
