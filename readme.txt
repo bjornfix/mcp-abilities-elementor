@@ -3,7 +3,7 @@ Contributors: devenia
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 6.9
-Stable tag: 2.0.3
+Stable tag: 2.0.4
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -24,6 +24,11 @@ Part of the MCP Expose Abilities ecosystem.
 4. Activate the plugin
 
 == Changelog ==
+
+= 2.0.4 =
+* Fixed: Popup conditions now stored as strings (PHP 8.4 compatibility)
+* Fixed: Theme builder templates (popup, header, footer) no longer crash site on PHP 8.4
+* Root cause: Elementor expects conditions as "include/general/site" strings, not arrays
 
 = 2.0.3 =
 * Fixed: delete-template now properly trashes instead of permanently deleting (wp_trash_post for custom post types)

@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.0.3
+ * Version: 2.0.4
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -773,11 +773,37 @@ function mcp_register_elementor_abilities(): void {
 
 				// Set display conditions (for theme builder templates).
 				if ( ! empty( $input['conditions'] ) && is_array( $input['conditions'] ) ) {
-					update_post_meta( $post_id, '_elementor_conditions', $input['conditions'] );
+					// Convert conditions from array format to string format.
+					// Elementor stores conditions as strings like "include/general/site".
+					$conditions_to_save = array();
+					foreach ( $input['conditions'] as $condition ) {
+						if ( is_array( $condition ) ) {
+							// Build condition string from array parts.
+							$parts = array();
+							if ( isset( $condition['type'] ) ) {
+								$parts[] = $condition['type'];
+							}
+							if ( isset( $condition['name'] ) ) {
+								$parts[] = $condition['name'];
+							}
+							if ( isset( $condition['sub_name'] ) && '' !== $condition['sub_name'] ) {
+								$parts[] = $condition['sub_name'];
+							}
+							if ( isset( $condition['sub_id'] ) && '' !== $condition['sub_id'] ) {
+								$parts[] = $condition['sub_id'];
+							}
+							$conditions_to_save[] = implode( '/', $parts );
+						} elseif ( is_string( $condition ) ) {
+							// Already in string format.
+							$conditions_to_save[] = $condition;
+						}
+					}
+
+					update_post_meta( $post_id, '_elementor_conditions', $conditions_to_save );
 
 					// Also update the global conditions option for Elementor Pro.
 					$theme_builder_conditions = get_option( 'elementor_pro_theme_builder_conditions', array() );
-					$theme_builder_conditions[ $input['type'] ][ $post_id ] = $input['conditions'];
+					$theme_builder_conditions[ $input['type'] ][ $post_id ] = $conditions_to_save;
 					update_option( 'elementor_pro_theme_builder_conditions', $theme_builder_conditions );
 				}
 
@@ -994,10 +1020,36 @@ function mcp_register_elementor_abilities(): void {
 
 				// Update display conditions if provided.
 				if ( ! empty( $input['conditions'] ) && is_array( $input['conditions'] ) ) {
-					update_post_meta( $post->ID, '_elementor_conditions', $input['conditions'] );
+					// Convert conditions from array format to string format.
+					// Elementor stores conditions as strings like "include/general/site".
+					$conditions_to_save = array();
+					foreach ( $input['conditions'] as $condition ) {
+						if ( is_array( $condition ) ) {
+							// Build condition string from array parts.
+							$parts = array();
+							if ( isset( $condition['type'] ) ) {
+								$parts[] = $condition['type'];
+							}
+							if ( isset( $condition['name'] ) ) {
+								$parts[] = $condition['name'];
+							}
+							if ( isset( $condition['sub_name'] ) && '' !== $condition['sub_name'] ) {
+								$parts[] = $condition['sub_name'];
+							}
+							if ( isset( $condition['sub_id'] ) && '' !== $condition['sub_id'] ) {
+								$parts[] = $condition['sub_id'];
+							}
+							$conditions_to_save[] = implode( '/', $parts );
+						} elseif ( is_string( $condition ) ) {
+							// Already in string format.
+							$conditions_to_save[] = $condition;
+						}
+					}
+
+					update_post_meta( $post->ID, '_elementor_conditions', $conditions_to_save );
 
 					$theme_builder_conditions = get_option( 'elementor_pro_theme_builder_conditions', array() );
-					$theme_builder_conditions[ $template_type ][ $post->ID ] = $input['conditions'];
+					$theme_builder_conditions[ $template_type ][ $post->ID ] = $conditions_to_save;
 					update_option( 'elementor_pro_theme_builder_conditions', $theme_builder_conditions );
 				}
 
