@@ -3,7 +3,7 @@ Contributors: devenia
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 6.9
-Stable tag: 2.0.4
+Stable tag: 2.2.0
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -12,7 +12,7 @@ Elementor page builder integration for WordPress via MCP.
 
 == Description ==
 
-This add-on plugin exposes Elementor functionality through MCP (Model Context Protocol). Your AI assistant can read Elementor page structures, update widgets, and manage templates directly.
+This add-on plugin exposes Elementor functionality through MCP (Model Context Protocol). Your AI assistant can read Elementor page structures, locate and update elements, manage templates and conditions, and run Elementor tools like maintenance mode, experiments, and URL replacement.
 
 Part of the MCP Expose Abilities ecosystem.
 
@@ -24,6 +24,27 @@ Part of the MCP Expose Abilities ecosystem.
 4. Activate the plugin
 
 == Changelog ==
+
+= 2.2.0 =
+* Added: custom code snippet CRUD abilities (Elementor Pro)
+* Added: form submissions list/get/delete abilities (Elementor Pro)
+* Added: template sub type support for WooCommerce/theme builder templates
+
+= 2.1.0 =
+* Added: get-element and find-elements abilities for targeted updates
+* Added: theme builder conditions get/update abilities
+* Added: maintenance mode get/update abilities
+* Added: experiments list/update abilities
+* Added: replace-urls tool
+* Changed: conditions normalization helper (conditions can be cleared)
+
+= 2.0.6 =
+* Added: success/message fields to list-templates and list-global-widgets outputs
+
+= 2.0.5 =
+* Fixed: Popups now use Elementor's native Documents Manager API for creation
+* Fixed: Popups created via MCP now display correctly on frontend (proper document registration)
+* Changed: create-template ability now uses \Elementor\Plugin::$instance->documents->create() instead of direct post meta
 
 = 2.0.4 =
 * Fixed: Popup conditions now stored as strings (PHP 8.4 compatibility)

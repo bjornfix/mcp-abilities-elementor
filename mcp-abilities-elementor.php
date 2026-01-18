@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.0.4
+ * Version: 2.2.0
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -36,10 +36,155 @@ function mcp_elementor_check_dependencies(): bool {
 }
 
 /**
+ * Check if Elementor is active.
+ */
+function mcp_elementor_is_active(): bool {
+	return class_exists( '\\Elementor\\Plugin' ) || defined( 'ELEMENTOR_VERSION' );
+}
+
+/**
+ * Normalize theme builder conditions into Elementor's string format.
+ *
+ * @param array $conditions Raw conditions array.
+ * @return array
+ */
+function mcp_elementor_normalize_conditions( array $conditions ): array {
+	$normalized = array();
+
+	foreach ( $conditions as $condition ) {
+		if ( is_string( $condition ) ) {
+			$normalized[] = $condition;
+			continue;
+		}
+
+		if ( ! is_array( $condition ) ) {
+			continue;
+		}
+
+		$parts = array();
+		if ( isset( $condition['type'] ) ) {
+			$parts[] = $condition['type'];
+		}
+		if ( isset( $condition['name'] ) ) {
+			$parts[] = $condition['name'];
+		}
+		if ( isset( $condition['sub_name'] ) && '' !== $condition['sub_name'] ) {
+			$parts[] = $condition['sub_name'];
+		}
+		if ( isset( $condition['sub_id'] ) && '' !== $condition['sub_id'] ) {
+			$parts[] = $condition['sub_id'];
+		}
+
+		if ( ! empty( $parts ) ) {
+			$normalized[] = implode( '/', $parts );
+		}
+	}
+
+	return $normalized;
+}
+
+/**
+ * Persist theme builder conditions to post meta and Elementor Pro options.
+ *
+ * @param int    $post_id Post ID.
+ * @param string $template_type Template type.
+ * @param array  $conditions_to_save Normalized conditions.
+ */
+function mcp_elementor_save_conditions( int $post_id, string $template_type, array $conditions_to_save ): void {
+	update_post_meta( $post_id, '_elementor_conditions', $conditions_to_save );
+
+	if ( '' === $template_type ) {
+		return;
+	}
+
+	$theme_builder_conditions = get_option( 'elementor_pro_theme_builder_conditions', array() );
+	if ( ! is_array( $theme_builder_conditions ) ) {
+		$theme_builder_conditions = array();
+	}
+	if ( empty( $theme_builder_conditions[ $template_type ] ) || ! is_array( $theme_builder_conditions[ $template_type ] ) ) {
+		$theme_builder_conditions[ $template_type ] = array();
+	}
+	$theme_builder_conditions[ $template_type ][ $post_id ] = $conditions_to_save;
+	update_option( 'elementor_pro_theme_builder_conditions', $theme_builder_conditions );
+}
+
+/**
+ * Check if a database table exists.
+ *
+ * @param string $table_name Table name.
+ * @return bool
+ */
+function mcp_elementor_table_exists( string $table_name ): bool {
+	global $wpdb;
+
+	$found = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table_name ) );
+
+	return $found === $table_name;
+}
+
+/**
+ * Get table column names.
+ *
+ * @param string $table_name Table name.
+ * @return array
+ */
+function mcp_elementor_table_columns( string $table_name ): array {
+	global $wpdb;
+
+	$columns = array();
+	$results = $wpdb->get_results( 'SHOW COLUMNS FROM `' . esc_sql( $table_name ) . '`', ARRAY_A );
+
+	if ( empty( $results ) ) {
+		return $columns;
+	}
+
+	foreach ( $results as $row ) {
+		if ( isset( $row['Field'] ) ) {
+			$columns[] = $row['Field'];
+		}
+	}
+
+	return $columns;
+}
+
+/**
+ * Find a column name from candidate list.
+ *
+ * @param array $columns Column list.
+ * @param array $candidates Candidate names.
+ * @return string
+ */
+function mcp_elementor_find_column( array $columns, array $candidates ): string {
+	if ( empty( $columns ) || empty( $candidates ) ) {
+		return '';
+	}
+
+	$lookup = array();
+	foreach ( $columns as $column ) {
+		$lookup[ strtolower( (string) $column ) ] = (string) $column;
+	}
+
+	foreach ( $candidates as $candidate ) {
+		$key = strtolower( (string) $candidate );
+		if ( isset( $lookup[ $key ] ) ) {
+			return $lookup[ $key ];
+		}
+	}
+
+	return '';
+}
+
+/**
  * Register Elementor abilities.
  */
 function mcp_register_elementor_abilities(): void {
 	if ( ! mcp_elementor_check_dependencies() ) {
+		return;
+	}
+	if ( ! mcp_elementor_is_active() ) {
+		add_action( 'admin_notices', function () {
+			echo '<div class="notice notice-error"><p><strong>MCP Abilities - Elementor</strong> requires the <a href="https://wordpress.org/plugins/elementor/">Elementor</a> plugin to be installed and activated.</p></div>';
+		} );
 		return;
 	}
 
@@ -76,7 +221,10 @@ function mcp_register_elementor_abilities(): void {
 					'id'            => array( 'type' => 'integer' ),
 					'title'         => array( 'type' => 'string' ),
 					'edit_mode'     => array( 'type' => 'string' ),
-					'data'          => array( 'type' => 'array' ),
+					'data'          => array(
+						'type'        => array( 'array', 'string' ),
+						'description' => 'Elementor data as array or raw JSON string when format is "json".',
+					),
 					'page_settings' => array( 'type' => 'object' ),
 					'message'       => array( 'type' => 'string' ),
 				),
@@ -500,6 +648,376 @@ function mcp_register_elementor_abilities(): void {
 	);
 
 	// =========================================================================
+	// ELEMENTOR - Get Element
+	// =========================================================================
+	wp_register_ability(
+		'elementor/get-element',
+		array(
+			'label'               => 'Get Elementor Element',
+			'description'         => 'Retrieves a single Elementor element (container or widget) by element ID from a page.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id', 'element_id' ),
+				'properties'           => array(
+					'id'         => array(
+						'type'        => 'integer',
+						'description' => 'Post/Page ID containing the element.',
+					),
+					'element_id' => array(
+						'type'        => 'string',
+						'description' => 'Element ID to retrieve.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'    => array( 'type' => 'boolean' ),
+					'id'         => array( 'type' => 'integer' ),
+					'element_id' => array( 'type' => 'string' ),
+					'path'       => array( 'type' => 'array' ),
+					'element'    => array( 'type' => 'object' ),
+					'message'    => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input = is_array( $input ) ? $input : array();
+
+				if ( empty( $input['id'] ) ) {
+					return array( 'success' => false, 'message' => 'Post/Page ID is required' );
+				}
+				if ( empty( $input['element_id'] ) ) {
+					return array( 'success' => false, 'message' => 'Element ID is required' );
+				}
+
+				$post = get_post( $input['id'] );
+				if ( ! $post ) {
+					return array( 'success' => false, 'message' => 'Post not found' );
+				}
+
+				if ( ! current_user_can( 'edit_post', $post->ID ) ) {
+					return array( 'success' => false, 'message' => 'You do not have permission to access this post' );
+				}
+
+				$elementor_data = get_post_meta( $input['id'], '_elementor_data', true );
+				if ( empty( $elementor_data ) ) {
+					return array( 'success' => false, 'message' => 'No Elementor data found for this post' );
+				}
+
+				$data = json_decode( $elementor_data, true );
+				if ( null === $data && json_last_error() !== JSON_ERROR_NONE ) {
+					return array( 'success' => false, 'message' => 'Failed to parse Elementor data' );
+				}
+
+				$found_element = null;
+				$found_path    = array();
+
+				$find_element = function ( $elements, $target_id, $path = array() ) use ( &$find_element, &$found_element, &$found_path ) {
+					foreach ( $elements as $element ) {
+						$element_id   = $element['id'] ?? '';
+						$element_path = $path;
+						if ( '' !== $element_id ) {
+							$element_path[] = $element_id;
+						}
+
+						if ( $element_id === $target_id ) {
+							$found_element = $element;
+							$found_path    = $element_path;
+							return true;
+						}
+
+						if ( ! empty( $element['elements'] ) && is_array( $element['elements'] ) ) {
+							if ( $find_element( $element['elements'], $target_id, $element_path ) ) {
+								return true;
+							}
+						}
+					}
+
+					return false;
+				};
+
+				$find_element( $data, $input['element_id'], array() );
+
+				if ( null === $found_element ) {
+					return array(
+						'success'    => false,
+						'id'         => $input['id'],
+						'element_id' => $input['element_id'],
+						'message'    => 'Element with ID "' . $input['element_id'] . '" not found in page structure',
+					);
+				}
+
+				return array(
+					'success'    => true,
+					'id'         => $input['id'],
+					'element_id' => $input['element_id'],
+					'path'       => $found_path,
+					'element'    => $found_element,
+					'message'    => 'Element retrieved successfully',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Find Elements
+	// =========================================================================
+	wp_register_ability(
+		'elementor/find-elements',
+		array(
+			'label'               => 'Find Elementor Elements',
+			'description'         => 'Searches Elementor elements by type, widget, settings, or text. Useful for locating IDs before targeted updates.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id' ),
+				'properties'           => array(
+					'id'             => array(
+						'type'        => 'integer',
+						'description' => 'Post/Page ID to search.',
+					),
+					'element_type'  => array(
+						'type'        => 'string',
+						'description' => 'Element type to match (container, section, widget).',
+					),
+					'widget_type'   => array(
+						'type'        => 'string',
+						'description' => 'Widget type to match (e.g., heading, image, text-editor).',
+					),
+					'settings_key'  => array(
+						'type'        => 'string',
+						'description' => 'Settings key to match (e.g., title, text, link).',
+					),
+					'settings_value' => array(
+						'type'        => 'string',
+						'description' => 'String to match within the settings value.',
+					),
+					'contains'      => array(
+						'type'        => 'string',
+						'description' => 'String to search for within the element JSON.',
+					),
+					'case_sensitive' => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'If true, perform case-sensitive matches.',
+					),
+					'limit'         => array(
+						'type'        => 'integer',
+						'default'     => 20,
+						'description' => 'Maximum number of matches to return.',
+					),
+					'include_element' => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'If true, include the full element data in results.',
+					),
+					'include_path' => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'If true, include the element ID path from root.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'   => array( 'type' => 'boolean' ),
+					'id'        => array( 'type' => 'integer' ),
+					'total'     => array( 'type' => 'integer' ),
+					'truncated' => array( 'type' => 'boolean' ),
+					'matches'   => array( 'type' => 'array' ),
+					'message'   => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input = is_array( $input ) ? $input : array();
+
+				if ( empty( $input['id'] ) ) {
+					return array( 'success' => false, 'message' => 'Post/Page ID is required' );
+				}
+
+				$has_filters = ! empty( $input['element_type'] )
+					|| ! empty( $input['widget_type'] )
+					|| ! empty( $input['settings_key'] )
+					|| ! empty( $input['settings_value'] )
+					|| ! empty( $input['contains'] );
+
+				if ( ! $has_filters ) {
+					return array( 'success' => false, 'message' => 'Provide at least one filter to search for elements' );
+				}
+
+				if ( ! empty( $input['settings_value'] ) && empty( $input['settings_key'] ) ) {
+					return array( 'success' => false, 'message' => 'settings_key is required when settings_value is provided' );
+				}
+
+				$post = get_post( $input['id'] );
+				if ( ! $post ) {
+					return array( 'success' => false, 'message' => 'Post not found' );
+				}
+
+				if ( ! current_user_can( 'edit_post', $post->ID ) ) {
+					return array( 'success' => false, 'message' => 'You do not have permission to access this post' );
+				}
+
+				$elementor_data = get_post_meta( $input['id'], '_elementor_data', true );
+				if ( empty( $elementor_data ) ) {
+					return array( 'success' => false, 'message' => 'No Elementor data found for this post' );
+				}
+
+				$data = json_decode( $elementor_data, true );
+				if ( null === $data && json_last_error() !== JSON_ERROR_NONE ) {
+					return array( 'success' => false, 'message' => 'Failed to parse Elementor data' );
+				}
+
+				$element_type    = $input['element_type'] ?? '';
+				$widget_type     = $input['widget_type'] ?? '';
+				$settings_key    = $input['settings_key'] ?? '';
+				$settings_value  = $input['settings_value'] ?? null;
+				$contains        = $input['contains'] ?? '';
+				$case_sensitive  = ! empty( $input['case_sensitive'] );
+				$include_element = ! empty( $input['include_element'] );
+				$include_path    = ! empty( $input['include_path'] );
+				$limit           = isset( $input['limit'] ) ? (int) $input['limit'] : 20;
+				$limit           = max( 1, min( 200, $limit ) );
+
+				$matches   = array();
+				$truncated = false;
+
+				$match_text = function ( string $haystack, string $needle ) use ( $case_sensitive ): bool {
+					if ( '' === $needle ) {
+						return true;
+					}
+					if ( $case_sensitive ) {
+						return false !== strpos( $haystack, $needle );
+					}
+					return false !== stripos( $haystack, $needle );
+				};
+
+				$search_elements = function ( $elements, $path = array() ) use (
+					&$search_elements,
+					$element_type,
+					$widget_type,
+					$settings_key,
+					$settings_value,
+					$contains,
+					$include_element,
+					$include_path,
+					$match_text,
+					$limit,
+					&$matches,
+					&$truncated
+				) {
+					foreach ( $elements as $element ) {
+						if ( $truncated ) {
+							return;
+						}
+
+						$element_id   = $element['id'] ?? '';
+						$element_path = $path;
+						if ( '' !== $element_id ) {
+							$element_path[] = $element_id;
+						}
+
+						$is_match = true;
+
+						if ( '' !== $element_type && ( $element['elType'] ?? '' ) !== $element_type ) {
+							$is_match = false;
+						}
+
+						if ( '' !== $widget_type && ( $element['widgetType'] ?? '' ) !== $widget_type ) {
+							$is_match = false;
+						}
+
+						if ( $is_match && '' !== $settings_key ) {
+							if ( empty( $element['settings'] ) || ! array_key_exists( $settings_key, $element['settings'] ) ) {
+								$is_match = false;
+							} elseif ( null !== $settings_value ) {
+								$raw_value = $element['settings'][ $settings_key ];
+								if ( is_array( $raw_value ) || is_object( $raw_value ) ) {
+									$raw_value = wp_json_encode( $raw_value );
+								}
+								$raw_value = is_string( $raw_value ) ? $raw_value : (string) $raw_value;
+								if ( ! $match_text( $raw_value, (string) $settings_value ) ) {
+									$is_match = false;
+								}
+							}
+						}
+
+						if ( $is_match && '' !== $contains ) {
+							$haystack = wp_json_encode( $element );
+							if ( ! $match_text( $haystack, $contains ) ) {
+								$is_match = false;
+							}
+						}
+
+						if ( $is_match ) {
+							$entry = array(
+								'id'          => $element_id,
+								'el_type'     => $element['elType'] ?? '',
+								'widget_type' => $element['widgetType'] ?? '',
+							);
+							if ( $include_path ) {
+								$entry['path'] = $element_path;
+							}
+							if ( $include_element ) {
+								$entry['element'] = $element;
+							}
+							$matches[] = $entry;
+
+							if ( count( $matches ) >= $limit ) {
+								$truncated = true;
+								return;
+							}
+						}
+
+						if ( ! empty( $element['elements'] ) && is_array( $element['elements'] ) ) {
+							$search_elements( $element['elements'], $element_path );
+						}
+					}
+				};
+
+				$search_elements( $data, array() );
+
+				$message = $truncated
+					? "Returned first {$limit} match(es) out of more results"
+					: 'Matches retrieved successfully';
+
+				return array(
+					'success'   => true,
+					'id'        => $input['id'],
+					'total'     => count( $matches ),
+					'truncated' => $truncated,
+					'matches'   => $matches,
+					'message'   => $message,
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
 	// ELEMENTOR - List Templates
 	// =========================================================================
 	wp_register_ability(
@@ -517,14 +1035,25 @@ function mcp_register_elementor_abilities(): void {
 						'default'     => 'all',
 						'description' => 'Filter by template type.',
 					),
+					'sub_type' => array(
+						'type'        => 'string',
+						'description' => 'Filter by template sub type (e.g., product, product-archive).',
+					),
+					'sub_type_like' => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'If true, match sub_type using LIKE instead of exact match.',
+					),
 				),
 				'additionalProperties' => false,
 			),
 			'output_schema'       => array(
 				'type'       => 'object',
 				'properties' => array(
+					'success'   => array( 'type' => 'boolean' ),
 					'templates' => array( 'type' => 'array' ),
 					'total'     => array( 'type' => 'integer' ),
+					'message'   => array( 'type' => 'string' ),
 				),
 			),
 			'execute_callback'    => function ( $input = array() ): array {
@@ -550,23 +1079,38 @@ function mcp_register_elementor_abilities(): void {
 					);
 				}
 
+				$sub_type = $input['sub_type'] ?? '';
+				if ( '' !== $sub_type ) {
+					$args['meta_query'] = array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- Optional sub type filter.
+						array(
+							'key'     => '_elementor_template_sub_type',
+							'value'   => $sub_type,
+							'compare' => ! empty( $input['sub_type_like'] ) ? 'LIKE' : '=',
+						),
+					);
+				}
+
 				$query     = new WP_Query( $args );
 				$templates = array();
 
 				foreach ( $query->posts as $template ) {
 					$template_type = get_post_meta( $template->ID, '_elementor_template_type', true );
+					$template_sub_type = get_post_meta( $template->ID, '_elementor_template_sub_type', true );
 					$templates[]   = array(
 						'id'       => $template->ID,
 						'title'    => $template->post_title,
 						'type'     => $template_type ?: 'unknown',
+						'sub_type' => $template_sub_type ?: '',
 						'date'     => $template->post_date,
 						'modified' => $template->post_modified,
 					);
 				}
 
 				return array(
+					'success'   => true,
 					'templates' => $templates,
 					'total'     => count( $templates ),
+					'message'   => 'Templates retrieved successfully',
 				);
 			},
 			'permission_callback' => function (): bool {
@@ -655,6 +1199,76 @@ function mcp_register_elementor_abilities(): void {
 			),
 		)
 	);
+
+	// =========================================================================
+	// ELEMENTOR - Replace URLs
+	// =========================================================================
+	wp_register_ability(
+		'elementor/replace-urls',
+		array(
+			'label'               => 'Replace URLs in Elementor Data',
+			'description'         => 'Replaces URLs inside Elementor data across the site using Elementor\'s built-in tool.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'from', 'to' ),
+				'properties'           => array(
+					'from' => array(
+						'type'        => 'string',
+						'description' => 'Old URL to replace.',
+					),
+					'to'   => array(
+						'type'        => 'string',
+						'description' => 'New URL to apply.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'from'    => array( 'type' => 'string' ),
+					'to'      => array( 'type' => 'string' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input = is_array( $input ) ? $input : array();
+
+				if ( empty( $input['from'] ) || empty( $input['to'] ) ) {
+					return array( 'success' => false, 'message' => 'Both "from" and "to" URLs are required' );
+				}
+
+				if ( ! class_exists( '\Elementor\Utils' ) ) {
+					return array( 'success' => false, 'message' => 'Elementor utilities are not available' );
+				}
+
+				try {
+					$result = \Elementor\Utils::replace_urls( $input['from'], $input['to'] );
+				} catch ( \Exception $e ) {
+					return array( 'success' => false, 'message' => $e->getMessage() );
+				}
+
+				return array(
+					'success' => true,
+					'from'    => $input['from'],
+					'to'      => $input['to'],
+					'message' => $result,
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'manage_options' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => true,
+					'idempotent'  => false,
+				),
+			),
+		)
+	);
 	// =========================================================================
 	// ELEMENTOR - Create Template
 	// =========================================================================
@@ -691,6 +1305,10 @@ function mcp_register_elementor_abilities(): void {
 						'type'        => 'object',
 						'description' => 'Elementor page settings (dimensions, background, etc.).',
 					),
+					'template_sub_type'  => array(
+						'type'        => 'string',
+						'description' => 'Template sub type for theme builder (e.g., product, product-archive).',
+					),
 					'conditions'         => array(
 						'type'        => 'array',
 						'description' => 'Display conditions for theme builder templates (header/footer/popup). Format: [["include", "general"]] for entire site.',
@@ -719,6 +1337,7 @@ function mcp_register_elementor_abilities(): void {
 					'id'      => array( 'type' => 'integer' ),
 					'title'   => array( 'type' => 'string' ),
 					'type'    => array( 'type' => 'string' ),
+					'sub_type' => array( 'type' => 'string' ),
 					'link'    => array( 'type' => 'string' ),
 					'edit'    => array( 'type' => 'string' ),
 					'message' => array( 'type' => 'string' ),
@@ -739,23 +1358,39 @@ function mcp_register_elementor_abilities(): void {
 					return array( 'success' => false, 'message' => 'Invalid template type: ' . $input['type'] );
 				}
 
-				// Create the post.
+				// Check if Elementor is loaded.
+				if ( ! did_action( 'elementor/loaded' ) || ! class_exists( '\Elementor\Plugin' ) ) {
+					return array( 'success' => false, 'message' => 'Elementor is not loaded' );
+				}
+
+				// Use Elementor's Documents Manager to create the template properly.
+				// This ensures all internal registration and hooks are triggered.
+				$documents_manager = \Elementor\Plugin::$instance->documents;
+
+				// Check if the document type is registered.
+				$document_types = $documents_manager->get_document_types();
+				if ( ! isset( $document_types[ $input['type'] ] ) ) {
+					return array( 'success' => false, 'message' => 'Document type "' . $input['type'] . '" is not registered. Make sure Elementor Pro is active for theme builder templates.' );
+				}
+
+				// Create the document using Elementor's native API.
 				$post_data = array(
 					'post_title'  => sanitize_text_field( $input['title'] ),
 					'post_type'   => 'elementor_library',
 					'post_status' => $input['status'] ?? 'publish',
 				);
 
-				$post_id = wp_insert_post( $post_data, true );
-				if ( is_wp_error( $post_id ) ) {
-					return array( 'success' => false, 'message' => 'Failed to create template: ' . $post_id->get_error_message() );
+				$document = $documents_manager->create( $input['type'], $post_data );
+
+				if ( is_wp_error( $document ) ) {
+					return array( 'success' => false, 'message' => 'Failed to create template: ' . $document->get_error_message() );
 				}
 
-				// Set template type.
-				update_post_meta( $post_id, '_elementor_template_type', $input['type'] );
+				if ( ! $document ) {
+					return array( 'success' => false, 'message' => 'Failed to create template document' );
+				}
 
-				// Set edit mode to builder.
-				update_post_meta( $post_id, '_elementor_edit_mode', 'builder' );
+				$post_id = $document->get_main_id();
 
 				// Set Elementor data.
 				$elementor_data = $input['data'] ?? array();
@@ -771,40 +1406,20 @@ function mcp_register_elementor_abilities(): void {
 					update_post_meta( $post_id, '_elementor_page_settings', $input['page_settings'] );
 				}
 
-				// Set display conditions (for theme builder templates).
-				if ( ! empty( $input['conditions'] ) && is_array( $input['conditions'] ) ) {
-					// Convert conditions from array format to string format.
-					// Elementor stores conditions as strings like "include/general/site".
-					$conditions_to_save = array();
-					foreach ( $input['conditions'] as $condition ) {
-						if ( is_array( $condition ) ) {
-							// Build condition string from array parts.
-							$parts = array();
-							if ( isset( $condition['type'] ) ) {
-								$parts[] = $condition['type'];
-							}
-							if ( isset( $condition['name'] ) ) {
-								$parts[] = $condition['name'];
-							}
-							if ( isset( $condition['sub_name'] ) && '' !== $condition['sub_name'] ) {
-								$parts[] = $condition['sub_name'];
-							}
-							if ( isset( $condition['sub_id'] ) && '' !== $condition['sub_id'] ) {
-								$parts[] = $condition['sub_id'];
-							}
-							$conditions_to_save[] = implode( '/', $parts );
-						} elseif ( is_string( $condition ) ) {
-							// Already in string format.
-							$conditions_to_save[] = $condition;
-						}
+				// Set template sub type if provided.
+				if ( array_key_exists( 'template_sub_type', $input ) ) {
+					$sub_type = (string) $input['template_sub_type'];
+					if ( '' === $sub_type ) {
+						delete_post_meta( $post_id, '_elementor_template_sub_type' );
+					} else {
+						update_post_meta( $post_id, '_elementor_template_sub_type', $sub_type );
 					}
+				}
 
-					update_post_meta( $post_id, '_elementor_conditions', $conditions_to_save );
-
-					// Also update the global conditions option for Elementor Pro.
-					$theme_builder_conditions = get_option( 'elementor_pro_theme_builder_conditions', array() );
-					$theme_builder_conditions[ $input['type'] ][ $post_id ] = $conditions_to_save;
-					update_option( 'elementor_pro_theme_builder_conditions', $theme_builder_conditions );
+				// Set display conditions (for theme builder templates).
+				if ( array_key_exists( 'conditions', $input ) && is_array( $input['conditions'] ) ) {
+					$conditions_to_save = mcp_elementor_normalize_conditions( $input['conditions'] );
+					mcp_elementor_save_conditions( $post_id, $input['type'], $conditions_to_save );
 				}
 
 				// Set popup display settings (for popups).
@@ -871,11 +1486,14 @@ function mcp_register_elementor_abilities(): void {
 				// Build edit URL.
 				$edit_url = admin_url( 'post.php?post=' . $post_id . '&action=elementor' );
 
+				$template_sub_type = get_post_meta( $post_id, '_elementor_template_sub_type', true );
+
 				return array(
 					'success' => true,
 					'id'      => $post_id,
 					'title'   => $input['title'],
 					'type'    => $input['type'],
+					'sub_type' => $template_sub_type ?: '',
 					'link'    => get_permalink( $post_id ),
 					'edit'    => $edit_url,
 					'message' => ucfirst( $input['type'] ) . ' template created successfully',
@@ -933,6 +1551,10 @@ function mcp_register_elementor_abilities(): void {
 						'default'     => false,
 						'description' => 'If true, replace page_settings entirely instead of merging.',
 					),
+					'template_sub_type'  => array(
+						'type'        => 'string',
+						'description' => 'Template sub type for theme builder (e.g., product, product-archive).',
+					),
 					'conditions'         => array(
 						'type'        => 'array',
 						'description' => 'Display conditions for theme builder templates.',
@@ -951,6 +1573,7 @@ function mcp_register_elementor_abilities(): void {
 					'id'      => array( 'type' => 'integer' ),
 					'title'   => array( 'type' => 'string' ),
 					'type'    => array( 'type' => 'string' ),
+					'sub_type' => array( 'type' => 'string' ),
 					'link'    => array( 'type' => 'string' ),
 					'edit'    => array( 'type' => 'string' ),
 					'message' => array( 'type' => 'string' ),
@@ -1018,39 +1641,20 @@ function mcp_register_elementor_abilities(): void {
 					delete_post_meta( $post->ID, '_elementor_css' );
 				}
 
-				// Update display conditions if provided.
-				if ( ! empty( $input['conditions'] ) && is_array( $input['conditions'] ) ) {
-					// Convert conditions from array format to string format.
-					// Elementor stores conditions as strings like "include/general/site".
-					$conditions_to_save = array();
-					foreach ( $input['conditions'] as $condition ) {
-						if ( is_array( $condition ) ) {
-							// Build condition string from array parts.
-							$parts = array();
-							if ( isset( $condition['type'] ) ) {
-								$parts[] = $condition['type'];
-							}
-							if ( isset( $condition['name'] ) ) {
-								$parts[] = $condition['name'];
-							}
-							if ( isset( $condition['sub_name'] ) && '' !== $condition['sub_name'] ) {
-								$parts[] = $condition['sub_name'];
-							}
-							if ( isset( $condition['sub_id'] ) && '' !== $condition['sub_id'] ) {
-								$parts[] = $condition['sub_id'];
-							}
-							$conditions_to_save[] = implode( '/', $parts );
-						} elseif ( is_string( $condition ) ) {
-							// Already in string format.
-							$conditions_to_save[] = $condition;
-						}
+				// Update template sub type if provided.
+				if ( array_key_exists( 'template_sub_type', $input ) ) {
+					$sub_type = (string) $input['template_sub_type'];
+					if ( '' === $sub_type ) {
+						delete_post_meta( $post->ID, '_elementor_template_sub_type' );
+					} else {
+						update_post_meta( $post->ID, '_elementor_template_sub_type', $sub_type );
 					}
+				}
 
-					update_post_meta( $post->ID, '_elementor_conditions', $conditions_to_save );
-
-					$theme_builder_conditions = get_option( 'elementor_pro_theme_builder_conditions', array() );
-					$theme_builder_conditions[ $template_type ][ $post->ID ] = $conditions_to_save;
-					update_option( 'elementor_pro_theme_builder_conditions', $theme_builder_conditions );
+				// Update display conditions if provided.
+				if ( array_key_exists( 'conditions', $input ) && is_array( $input['conditions'] ) ) {
+					$conditions_to_save = mcp_elementor_normalize_conditions( $input['conditions'] );
+					mcp_elementor_save_conditions( $post->ID, $template_type, $conditions_to_save );
 				}
 
 				// Update popup display settings if provided.
@@ -1095,12 +1699,14 @@ function mcp_register_elementor_abilities(): void {
 				// Refresh post data.
 				$post = get_post( $post->ID );
 				$edit_url = admin_url( 'post.php?post=' . $post->ID . '&action=elementor' );
+				$template_sub_type = get_post_meta( $post->ID, '_elementor_template_sub_type', true );
 
 				return array(
 					'success' => true,
 					'id'      => $post->ID,
 					'title'   => $post->post_title,
 					'type'    => $template_type,
+					'sub_type' => $template_sub_type ?: '',
 					'link'    => get_permalink( $post->ID ),
 					'edit'    => $edit_url,
 					'message' => 'Template updated successfully',
@@ -1246,6 +1852,7 @@ function mcp_register_elementor_abilities(): void {
 					'id'             => array( 'type' => 'integer' ),
 					'title'          => array( 'type' => 'string' ),
 					'type'           => array( 'type' => 'string' ),
+					'sub_type'       => array( 'type' => 'string' ),
 					'status'         => array( 'type' => 'string' ),
 					'data'           => array( 'type' => 'array' ),
 					'page_settings'  => array( 'type' => 'object' ),
@@ -1277,6 +1884,7 @@ function mcp_register_elementor_abilities(): void {
 				}
 
 				$template_type  = get_post_meta( $post->ID, '_elementor_template_type', true );
+				$template_sub_type = get_post_meta( $post->ID, '_elementor_template_sub_type', true );
 				$elementor_data = get_post_meta( $post->ID, '_elementor_data', true );
 				$page_settings  = get_post_meta( $post->ID, '_elementor_page_settings', true );
 				$conditions     = get_post_meta( $post->ID, '_elementor_conditions', true );
@@ -1287,6 +1895,7 @@ function mcp_register_elementor_abilities(): void {
 					'id'             => $post->ID,
 					'title'          => $post->post_title,
 					'type'           => $template_type ?: 'unknown',
+					'sub_type'       => $template_sub_type ?: '',
 					'status'         => $post->post_status,
 					'data'           => $elementor_data ? json_decode( $elementor_data, true ) : array(),
 					'page_settings'  => $page_settings ?: array(),
@@ -1303,6 +1912,189 @@ function mcp_register_elementor_abilities(): void {
 			'meta'                => array(
 				'annotations' => array(
 					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Get Theme Builder Conditions
+	// =========================================================================
+	wp_register_ability(
+		'elementor/get-theme-builder-conditions',
+		array(
+			'label'               => 'Get Theme Builder Conditions',
+			'description'         => 'Retrieves Elementor theme builder display conditions. Filter by template type or template ID.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'type' => array(
+						'type'        => 'string',
+						'description' => 'Template type (header, footer, single, archive, popup). Optional.',
+					),
+					'id'   => array(
+						'type'        => 'integer',
+						'description' => 'Template ID to fetch conditions for. Optional.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'    => array( 'type' => 'boolean' ),
+					'type'       => array( 'type' => 'string' ),
+					'id'         => array( 'type' => 'integer' ),
+					'conditions' => array( 'type' => 'array' ),
+					'message'    => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input = is_array( $input ) ? $input : array();
+
+				$conditions = get_option( 'elementor_pro_theme_builder_conditions', array() );
+				if ( ! is_array( $conditions ) ) {
+					$conditions = array();
+				}
+
+				if ( ! empty( $input['id'] ) ) {
+					$post = get_post( $input['id'] );
+					if ( ! $post ) {
+						return array( 'success' => false, 'message' => 'Template not found' );
+					}
+
+					if ( ! current_user_can( 'edit_post', $post->ID ) ) {
+						return array( 'success' => false, 'message' => 'You do not have permission to access this template' );
+					}
+
+					$template_type = $input['type'] ?? get_post_meta( $post->ID, '_elementor_template_type', true );
+					if ( empty( $template_type ) ) {
+						return array( 'success' => false, 'message' => 'Template type is required to fetch conditions' );
+					}
+
+					$template_conditions = $conditions[ $template_type ][ $post->ID ] ?? array();
+
+					return array(
+						'success'    => true,
+						'type'       => $template_type,
+						'id'         => $post->ID,
+						'conditions' => $template_conditions,
+						'message'    => 'Theme builder conditions retrieved successfully',
+					);
+				}
+
+				if ( ! empty( $input['type'] ) ) {
+					$type_conditions = $conditions[ $input['type'] ] ?? array();
+
+					return array(
+						'success'    => true,
+						'type'       => $input['type'],
+						'conditions' => $type_conditions,
+						'message'    => 'Theme builder conditions retrieved successfully',
+					);
+				}
+
+				return array(
+					'success'    => true,
+					'conditions' => $conditions,
+					'message'    => 'Theme builder conditions retrieved successfully',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Update Theme Builder Conditions
+	// =========================================================================
+	wp_register_ability(
+		'elementor/update-theme-builder-conditions',
+		array(
+			'label'               => 'Update Theme Builder Conditions',
+			'description'         => 'Updates Elementor theme builder display conditions for a template.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id', 'conditions' ),
+				'properties'           => array(
+					'id'         => array(
+						'type'        => 'integer',
+						'description' => 'Template ID to update conditions for.',
+					),
+					'type'       => array(
+						'type'        => 'string',
+						'description' => 'Template type (header, footer, single, archive, popup). Optional if template has a saved type.',
+					),
+					'conditions' => array(
+						'type'        => 'array',
+						'description' => 'Conditions array to apply (will be normalized into Elementor format).',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'    => array( 'type' => 'boolean' ),
+					'id'         => array( 'type' => 'integer' ),
+					'type'       => array( 'type' => 'string' ),
+					'conditions' => array( 'type' => 'array' ),
+					'message'    => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input = is_array( $input ) ? $input : array();
+
+				if ( empty( $input['id'] ) ) {
+					return array( 'success' => false, 'message' => 'Template ID is required' );
+				}
+				if ( ! isset( $input['conditions'] ) || ! is_array( $input['conditions'] ) ) {
+					return array( 'success' => false, 'message' => 'Conditions array is required' );
+				}
+
+				$post = get_post( $input['id'] );
+				if ( ! $post ) {
+					return array( 'success' => false, 'message' => 'Template not found' );
+				}
+
+				if ( ! current_user_can( 'edit_post', $post->ID ) ) {
+					return array( 'success' => false, 'message' => 'You do not have permission to update this template' );
+				}
+
+				$template_type = $input['type'] ?? get_post_meta( $post->ID, '_elementor_template_type', true );
+				if ( empty( $template_type ) ) {
+					return array( 'success' => false, 'message' => 'Template type is required to update conditions' );
+				}
+
+				$conditions_to_save = mcp_elementor_normalize_conditions( $input['conditions'] );
+				mcp_elementor_save_conditions( $post->ID, $template_type, $conditions_to_save );
+
+				return array(
+					'success'    => true,
+					'id'         => $post->ID,
+					'type'       => $template_type,
+					'conditions' => $conditions_to_save,
+					'message'    => 'Theme builder conditions updated successfully',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
 					'destructive' => false,
 					'idempotent'  => true,
 				),
@@ -1788,6 +2580,911 @@ function mcp_register_elementor_abilities(): void {
 	);
 
 	// =========================================================================
+	// ELEMENTOR - List Custom Code
+	// =========================================================================
+	wp_register_ability(
+		'elementor/list-custom-code',
+		array(
+			'label'               => 'List Elementor Custom Code',
+			'description'         => 'Lists Elementor custom code snippets.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'status' => array(
+						'type'        => 'string',
+						'enum'        => array( 'publish', 'draft', 'private', 'trash', 'any' ),
+						'default'     => 'publish',
+						'description' => 'Filter by post status.',
+					),
+					'limit'  => array(
+						'type'        => 'integer',
+						'default'     => 50,
+						'description' => 'Maximum number of snippets to return.',
+					),
+					'offset' => array(
+						'type'        => 'integer',
+						'default'     => 0,
+						'description' => 'Offset for pagination.',
+					),
+					'include_code' => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'If true, include the snippet code.',
+					),
+					'include_meta' => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'If true, include all post meta for each snippet.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'  => array( 'type' => 'boolean' ),
+					'snippets' => array( 'type' => 'array' ),
+					'total'    => array( 'type' => 'integer' ),
+					'message'  => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				if ( ! post_type_exists( 'elementor_snippet' ) ) {
+					return array( 'success' => false, 'message' => 'Elementor custom code post type is not available' );
+				}
+
+				$input  = is_array( $input ) ? $input : array();
+				$status = $input['status'] ?? 'publish';
+				$limit  = isset( $input['limit'] ) ? (int) $input['limit'] : 50;
+				$offset = isset( $input['offset'] ) ? (int) $input['offset'] : 0;
+				$limit  = max( 1, min( 200, $limit ) );
+				$offset = max( 0, $offset );
+
+				$args = array(
+					'post_type'      => 'elementor_snippet',
+					'post_status'    => 'any' === $status ? array( 'publish', 'draft', 'private', 'trash' ) : $status,
+					'posts_per_page' => $limit,
+					'offset'         => $offset,
+					'orderby'        => 'date',
+					'order'          => 'DESC',
+				);
+
+				$query    = new WP_Query( $args );
+				$snippets = array();
+
+				foreach ( $query->posts as $snippet ) {
+					$item = array(
+						'id'       => $snippet->ID,
+						'title'    => $snippet->post_title,
+						'status'   => $snippet->post_status,
+						'date'     => $snippet->post_date,
+						'modified' => $snippet->post_modified,
+					);
+
+					if ( ! empty( $input['include_code'] ) ) {
+						$item['code'] = $snippet->post_content;
+					}
+
+					if ( ! empty( $input['include_meta'] ) ) {
+						$item['meta'] = get_post_meta( $snippet->ID );
+					}
+
+					$snippets[] = $item;
+				}
+
+				return array(
+					'success'  => true,
+					'snippets' => $snippets,
+					'total'    => count( $snippets ),
+					'message'  => 'Custom code snippets retrieved successfully',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'manage_options' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Get Custom Code
+	// =========================================================================
+	wp_register_ability(
+		'elementor/get-custom-code',
+		array(
+			'label'               => 'Get Elementor Custom Code',
+			'description'         => 'Retrieves a single Elementor custom code snippet.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id' ),
+				'properties'           => array(
+					'id' => array(
+						'type'        => 'integer',
+						'description' => 'Snippet ID.',
+					),
+					'include_meta' => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'If true, include all post meta.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'id'      => array( 'type' => 'integer' ),
+					'title'   => array( 'type' => 'string' ),
+					'status'  => array( 'type' => 'string' ),
+					'code'    => array( 'type' => 'string' ),
+					'meta'    => array( 'type' => 'object' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input = is_array( $input ) ? $input : array();
+
+				if ( empty( $input['id'] ) ) {
+					return array( 'success' => false, 'message' => 'Snippet ID is required' );
+				}
+
+				$post = get_post( $input['id'] );
+				if ( ! $post ) {
+					return array( 'success' => false, 'message' => 'Snippet not found' );
+				}
+
+				if ( 'elementor_snippet' !== $post->post_type ) {
+					return array( 'success' => false, 'message' => 'Post is not an Elementor custom code snippet' );
+				}
+
+				if ( ! current_user_can( 'edit_post', $post->ID ) ) {
+					return array( 'success' => false, 'message' => 'You do not have permission to access this snippet' );
+				}
+
+				$response = array(
+					'success' => true,
+					'id'      => $post->ID,
+					'title'   => $post->post_title,
+					'status'  => $post->post_status,
+					'code'    => $post->post_content,
+					'message' => 'Custom code snippet retrieved successfully',
+				);
+
+				if ( ! empty( $input['include_meta'] ) ) {
+					$response['meta'] = get_post_meta( $post->ID );
+				}
+
+				return $response;
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'manage_options' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Create Custom Code
+	// =========================================================================
+	wp_register_ability(
+		'elementor/create-custom-code',
+		array(
+			'label'               => 'Create Elementor Custom Code',
+			'description'         => 'Creates a new Elementor custom code snippet.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'title', 'code' ),
+				'properties'           => array(
+					'title' => array(
+						'type'        => 'string',
+						'description' => 'Snippet title.',
+					),
+					'code'  => array(
+						'type'        => 'string',
+						'description' => 'Code snippet content.',
+					),
+					'status' => array(
+						'type'        => 'string',
+						'enum'        => array( 'publish', 'draft', 'private' ),
+						'default'     => 'publish',
+						'description' => 'Post status.',
+					),
+					'meta' => array(
+						'type'        => 'object',
+						'description' => 'Optional meta fields to store on the snippet.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'id'      => array( 'type' => 'integer' ),
+					'title'   => array( 'type' => 'string' ),
+					'status'  => array( 'type' => 'string' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input = is_array( $input ) ? $input : array();
+
+				if ( empty( $input['title'] ) ) {
+					return array( 'success' => false, 'message' => 'Snippet title is required' );
+				}
+				if ( ! array_key_exists( 'code', $input ) ) {
+					return array( 'success' => false, 'message' => 'Snippet code is required' );
+				}
+
+				if ( ! post_type_exists( 'elementor_snippet' ) ) {
+					return array( 'success' => false, 'message' => 'Elementor custom code post type is not available' );
+				}
+
+				$post_id = wp_insert_post( array(
+					'post_title'   => sanitize_text_field( $input['title'] ),
+					'post_type'    => 'elementor_snippet',
+					'post_status'  => $input['status'] ?? 'publish',
+					'post_content' => (string) $input['code'],
+				), true );
+
+				if ( is_wp_error( $post_id ) ) {
+					return array( 'success' => false, 'message' => 'Failed to create snippet: ' . $post_id->get_error_message() );
+				}
+
+				if ( ! empty( $input['meta'] ) && is_array( $input['meta'] ) ) {
+					foreach ( $input['meta'] as $key => $value ) {
+						update_post_meta( $post_id, (string) $key, $value );
+					}
+				}
+
+				return array(
+					'success' => true,
+					'id'      => $post_id,
+					'title'   => $input['title'],
+					'status'  => $input['status'] ?? 'publish',
+					'message' => 'Custom code snippet created successfully',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'manage_options' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => false,
+					'idempotent'  => false,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Update Custom Code
+	// =========================================================================
+	wp_register_ability(
+		'elementor/update-custom-code',
+		array(
+			'label'               => 'Update Elementor Custom Code',
+			'description'         => 'Updates an existing Elementor custom code snippet.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id' ),
+				'properties'           => array(
+					'id' => array(
+						'type'        => 'integer',
+						'description' => 'Snippet ID.',
+					),
+					'title' => array(
+						'type'        => 'string',
+						'description' => 'New snippet title.',
+					),
+					'code'  => array(
+						'type'        => 'string',
+						'description' => 'New snippet code content.',
+					),
+					'status' => array(
+						'type'        => 'string',
+						'enum'        => array( 'publish', 'draft', 'private' ),
+						'description' => 'Post status.',
+					),
+					'meta' => array(
+						'type'        => 'object',
+						'description' => 'Meta fields to update.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'id'      => array( 'type' => 'integer' ),
+					'title'   => array( 'type' => 'string' ),
+					'status'  => array( 'type' => 'string' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input = is_array( $input ) ? $input : array();
+
+				if ( empty( $input['id'] ) ) {
+					return array( 'success' => false, 'message' => 'Snippet ID is required' );
+				}
+
+				$post = get_post( $input['id'] );
+				if ( ! $post ) {
+					return array( 'success' => false, 'message' => 'Snippet not found' );
+				}
+
+				if ( 'elementor_snippet' !== $post->post_type ) {
+					return array( 'success' => false, 'message' => 'Post is not an Elementor custom code snippet' );
+				}
+
+				if ( ! current_user_can( 'edit_post', $post->ID ) ) {
+					return array( 'success' => false, 'message' => 'You do not have permission to update this snippet' );
+				}
+
+				$update = array( 'ID' => $post->ID );
+				$has_update = false;
+
+				if ( array_key_exists( 'title', $input ) ) {
+					$update['post_title'] = sanitize_text_field( (string) $input['title'] );
+					$has_update = true;
+				}
+				if ( array_key_exists( 'code', $input ) ) {
+					$update['post_content'] = (string) $input['code'];
+					$has_update = true;
+				}
+				if ( ! empty( $input['status'] ) ) {
+					$update['post_status'] = $input['status'];
+					$has_update = true;
+				}
+
+				if ( $has_update ) {
+					$result = wp_update_post( $update, true );
+					if ( is_wp_error( $result ) ) {
+						return array( 'success' => false, 'message' => 'Failed to update snippet: ' . $result->get_error_message() );
+					}
+				}
+
+				if ( ! empty( $input['meta'] ) && is_array( $input['meta'] ) ) {
+					foreach ( $input['meta'] as $key => $value ) {
+						update_post_meta( $post->ID, (string) $key, $value );
+					}
+				}
+
+				$post = get_post( $post->ID );
+
+				return array(
+					'success' => true,
+					'id'      => $post->ID,
+					'title'   => $post->post_title,
+					'status'  => $post->post_status,
+					'message' => 'Custom code snippet updated successfully',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'manage_options' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Delete Custom Code
+	// =========================================================================
+	wp_register_ability(
+		'elementor/delete-custom-code',
+		array(
+			'label'               => 'Delete Elementor Custom Code',
+			'description'         => 'Deletes an Elementor custom code snippet. Moves to trash unless force is true.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id' ),
+				'properties'           => array(
+					'id' => array(
+						'type'        => 'integer',
+						'description' => 'Snippet ID.',
+					),
+					'force' => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'If true, permanently delete instead of moving to trash.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'id'      => array( 'type' => 'integer' ),
+					'title'   => array( 'type' => 'string' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input = is_array( $input ) ? $input : array();
+
+				if ( empty( $input['id'] ) ) {
+					return array( 'success' => false, 'message' => 'Snippet ID is required' );
+				}
+
+				$post = get_post( $input['id'] );
+				if ( ! $post ) {
+					return array( 'success' => false, 'message' => 'Snippet not found' );
+				}
+
+				if ( 'elementor_snippet' !== $post->post_type ) {
+					return array( 'success' => false, 'message' => 'Post is not an Elementor custom code snippet' );
+				}
+
+				if ( ! current_user_can( 'delete_post', $post->ID ) ) {
+					return array( 'success' => false, 'message' => 'You do not have permission to delete this snippet' );
+				}
+
+				$title = $post->post_title;
+				$force = ! empty( $input['force'] );
+
+				$result = $force ? wp_delete_post( $post->ID, true ) : wp_trash_post( $post->ID );
+				if ( ! $result ) {
+					return array( 'success' => false, 'message' => 'Failed to delete snippet' );
+				}
+
+				$action = $force ? 'permanently deleted' : 'moved to trash';
+
+				return array(
+					'success' => true,
+					'id'      => $post->ID,
+					'title'   => $title,
+					'message' => "Custom code snippet \"{$title}\" {$action}",
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'manage_options' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => true,
+					'idempotent'  => false,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - List Form Submissions
+	// =========================================================================
+	wp_register_ability(
+		'elementor/list-form-submissions',
+		array(
+			'label'               => 'List Elementor Form Submissions',
+			'description'         => 'Lists Elementor form submissions (Elementor Pro).',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'form_id' => array(
+						'type'        => 'string',
+						'description' => 'Filter by form ID if supported by the database schema.',
+					),
+					'form_name' => array(
+						'type'        => 'string',
+						'description' => 'Filter by form name if supported by the database schema.',
+					),
+					'post_id' => array(
+						'type'        => 'integer',
+						'description' => 'Filter by post/page ID if supported by the database schema.',
+					),
+					'user_id' => array(
+						'type'        => 'integer',
+						'description' => 'Filter by user ID if supported by the database schema.',
+					),
+					'status' => array(
+						'type'        => 'string',
+						'description' => 'Filter by submission status if supported by the database schema.',
+					),
+					'limit'  => array(
+						'type'        => 'integer',
+						'default'     => 50,
+						'description' => 'Maximum number of submissions to return.',
+					),
+					'offset' => array(
+						'type'        => 'integer',
+						'default'     => 0,
+						'description' => 'Offset for pagination.',
+					),
+					'include_values' => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'If true, include submission field values.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'          => array( 'type' => 'boolean' ),
+					'submissions'      => array( 'type' => 'array' ),
+					'total'            => array( 'type' => 'integer' ),
+					'values_included'  => array( 'type' => 'boolean' ),
+					'filters_applied'  => array( 'type' => 'array' ),
+					'filters_ignored'  => array( 'type' => 'array' ),
+					'message'          => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				global $wpdb;
+
+				$input = is_array( $input ) ? $input : array();
+
+				$submissions_table = $wpdb->prefix . 'e_submissions';
+				if ( ! mcp_elementor_table_exists( $submissions_table ) ) {
+					return array( 'success' => false, 'message' => 'Elementor submissions table not found' );
+				}
+
+				$columns = mcp_elementor_table_columns( $submissions_table );
+				$id_column = mcp_elementor_find_column( $columns, array( 'id', 'submission_id', 'submissionid' ) );
+				$form_id_column = mcp_elementor_find_column( $columns, array( 'form_id', 'formid' ) );
+				$form_name_column = mcp_elementor_find_column( $columns, array( 'form_name', 'formname', 'form_title', 'form' ) );
+				$post_id_column = mcp_elementor_find_column( $columns, array( 'post_id', 'postid', 'page_id', 'pageid' ) );
+				$user_id_column = mcp_elementor_find_column( $columns, array( 'user_id', 'userid', 'author_id' ) );
+				$status_column = mcp_elementor_find_column( $columns, array( 'status', 'state' ) );
+				$order_column = mcp_elementor_find_column( $columns, array( 'created_at', 'created', 'date_created', 'created_time', 'submitted_at', 'submitted', 'date_submitted', 'id' ) );
+
+				$filters_applied = array();
+				$filters_ignored = array();
+				$where = array();
+				$params = array();
+
+				if ( ! empty( $input['form_id'] ) ) {
+					if ( '' !== $form_id_column ) {
+						$where[] = $form_id_column . ' = %s';
+						$params[] = (string) $input['form_id'];
+						$filters_applied[] = 'form_id';
+					} else {
+						$filters_ignored[] = 'form_id';
+					}
+				}
+
+				if ( ! empty( $input['form_name'] ) ) {
+					if ( '' !== $form_name_column ) {
+						$where[] = $form_name_column . ' = %s';
+						$params[] = (string) $input['form_name'];
+						$filters_applied[] = 'form_name';
+					} else {
+						$filters_ignored[] = 'form_name';
+					}
+				}
+
+				if ( ! empty( $input['post_id'] ) ) {
+					if ( '' !== $post_id_column ) {
+						$where[] = $post_id_column . ' = %d';
+						$params[] = (int) $input['post_id'];
+						$filters_applied[] = 'post_id';
+					} else {
+						$filters_ignored[] = 'post_id';
+					}
+				}
+
+				if ( ! empty( $input['user_id'] ) ) {
+					if ( '' !== $user_id_column ) {
+						$where[] = $user_id_column . ' = %d';
+						$params[] = (int) $input['user_id'];
+						$filters_applied[] = 'user_id';
+					} else {
+						$filters_ignored[] = 'user_id';
+					}
+				}
+
+				if ( ! empty( $input['status'] ) ) {
+					if ( '' !== $status_column ) {
+						$where[] = $status_column . ' = %s';
+						$params[] = (string) $input['status'];
+						$filters_applied[] = 'status';
+					} else {
+						$filters_ignored[] = 'status';
+					}
+				}
+
+				$limit  = isset( $input['limit'] ) ? (int) $input['limit'] : 50;
+				$offset = isset( $input['offset'] ) ? (int) $input['offset'] : 0;
+				$limit  = max( 1, min( 200, $limit ) );
+				$offset = max( 0, $offset );
+
+				$sql = 'SELECT * FROM `' . esc_sql( $submissions_table ) . '`';
+				if ( ! empty( $where ) ) {
+					$sql .= ' WHERE ' . implode( ' AND ', $where );
+				}
+				if ( '' !== $order_column ) {
+					$sql .= ' ORDER BY `' . esc_sql( $order_column ) . '` DESC';
+				}
+				$sql .= ' LIMIT %d OFFSET %d';
+				$params[] = $limit;
+				$params[] = $offset;
+
+				$prepared = $wpdb->prepare( $sql, $params );
+				$submissions = $wpdb->get_results( $prepared, ARRAY_A );
+
+				$values_included = false;
+				if ( ! empty( $input['include_values'] ) && ! empty( $submissions ) && '' !== $id_column ) {
+					$values_table = $wpdb->prefix . 'e_submissions_values';
+					if ( mcp_elementor_table_exists( $values_table ) ) {
+						$value_columns = mcp_elementor_table_columns( $values_table );
+						$submission_id_column = mcp_elementor_find_column( $value_columns, array( 'submission_id', 'submissionid', 'submission' ) );
+
+						if ( '' !== $submission_id_column ) {
+							$ids = array();
+							foreach ( $submissions as $row ) {
+								if ( isset( $row[ $id_column ] ) ) {
+									$ids[] = (int) $row[ $id_column ];
+								}
+							}
+
+							if ( ! empty( $ids ) ) {
+								$placeholders = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+								$values_sql = 'SELECT * FROM `' . esc_sql( $values_table ) . '` WHERE `' . esc_sql( $submission_id_column ) . "` IN ({$placeholders})";
+								$values_rows = $wpdb->get_results( $wpdb->prepare( $values_sql, $ids ), ARRAY_A );
+
+								$values_by_submission = array();
+								foreach ( $values_rows as $value_row ) {
+									$submission_id = isset( $value_row[ $submission_id_column ] ) ? (int) $value_row[ $submission_id_column ] : 0;
+									if ( 0 !== $submission_id ) {
+										$values_by_submission[ $submission_id ][] = $value_row;
+									}
+								}
+
+								foreach ( $submissions as $index => $row ) {
+									$submission_id = isset( $row[ $id_column ] ) ? (int) $row[ $id_column ] : 0;
+									$submissions[ $index ]['values'] = $values_by_submission[ $submission_id ] ?? array();
+								}
+
+								$values_included = true;
+							}
+						}
+					}
+				}
+
+				return array(
+					'success'         => true,
+					'submissions'     => $submissions,
+					'total'           => count( $submissions ),
+					'values_included' => $values_included,
+					'filters_applied' => $filters_applied,
+					'filters_ignored' => $filters_ignored,
+					'message'         => 'Form submissions retrieved successfully',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'manage_options' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Get Form Submission
+	// =========================================================================
+	wp_register_ability(
+		'elementor/get-form-submission',
+		array(
+			'label'               => 'Get Elementor Form Submission',
+			'description'         => 'Retrieves a single Elementor form submission (Elementor Pro).',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id' ),
+				'properties'           => array(
+					'id' => array(
+						'type'        => 'integer',
+						'description' => 'Submission ID.',
+					),
+					'include_values' => array(
+						'type'        => 'boolean',
+						'default'     => true,
+						'description' => 'If true, include submission field values.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'         => array( 'type' => 'boolean' ),
+					'submission'      => array( 'type' => 'object' ),
+					'values'          => array( 'type' => 'array' ),
+					'values_included' => array( 'type' => 'boolean' ),
+					'message'         => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				global $wpdb;
+
+				$input = is_array( $input ) ? $input : array();
+
+				if ( empty( $input['id'] ) ) {
+					return array( 'success' => false, 'message' => 'Submission ID is required' );
+				}
+
+				$submissions_table = $wpdb->prefix . 'e_submissions';
+				if ( ! mcp_elementor_table_exists( $submissions_table ) ) {
+					return array( 'success' => false, 'message' => 'Elementor submissions table not found' );
+				}
+
+				$columns = mcp_elementor_table_columns( $submissions_table );
+				$id_column = mcp_elementor_find_column( $columns, array( 'id', 'submission_id', 'submissionid' ) );
+				if ( '' === $id_column ) {
+					return array( 'success' => false, 'message' => 'Submission ID column not found' );
+				}
+
+				$sql = 'SELECT * FROM `' . esc_sql( $submissions_table ) . '` WHERE `' . esc_sql( $id_column ) . '` = %d LIMIT 1';
+				$submission = $wpdb->get_row( $wpdb->prepare( $sql, (int) $input['id'] ), ARRAY_A );
+
+				if ( empty( $submission ) ) {
+					return array( 'success' => false, 'message' => 'Submission not found' );
+				}
+
+				$values = array();
+				$values_included = false;
+
+				if ( ! empty( $input['include_values'] ) ) {
+					$values_table = $wpdb->prefix . 'e_submissions_values';
+					if ( mcp_elementor_table_exists( $values_table ) ) {
+						$value_columns = mcp_elementor_table_columns( $values_table );
+						$submission_id_column = mcp_elementor_find_column( $value_columns, array( 'submission_id', 'submissionid', 'submission' ) );
+
+						if ( '' !== $submission_id_column ) {
+							$values_sql = 'SELECT * FROM `' . esc_sql( $values_table ) . '` WHERE `' . esc_sql( $submission_id_column ) . '` = %d';
+							$values = $wpdb->get_results( $wpdb->prepare( $values_sql, (int) $input['id'] ), ARRAY_A );
+							$values_included = true;
+						}
+					}
+				}
+
+				return array(
+					'success'         => true,
+					'submission'      => $submission,
+					'values'          => $values,
+					'values_included' => $values_included,
+					'message'         => 'Form submission retrieved successfully',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'manage_options' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Delete Form Submission
+	// =========================================================================
+	wp_register_ability(
+		'elementor/delete-form-submission',
+		array(
+			'label'               => 'Delete Elementor Form Submission',
+			'description'         => 'Deletes a form submission from Elementor Pro tables.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id' ),
+				'properties'           => array(
+					'id' => array(
+						'type'        => 'integer',
+						'description' => 'Submission ID.',
+					),
+					'delete_values' => array(
+						'type'        => 'boolean',
+						'default'     => true,
+						'description' => 'If true, delete related field values.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'        => array( 'type' => 'boolean' ),
+					'id'             => array( 'type' => 'integer' ),
+					'deleted'        => array( 'type' => 'integer' ),
+					'values_deleted' => array( 'type' => 'integer' ),
+					'message'        => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				global $wpdb;
+
+				$input = is_array( $input ) ? $input : array();
+
+				if ( empty( $input['id'] ) ) {
+					return array( 'success' => false, 'message' => 'Submission ID is required' );
+				}
+
+				$submissions_table = $wpdb->prefix . 'e_submissions';
+				if ( ! mcp_elementor_table_exists( $submissions_table ) ) {
+					return array( 'success' => false, 'message' => 'Elementor submissions table not found' );
+				}
+
+				$columns = mcp_elementor_table_columns( $submissions_table );
+				$id_column = mcp_elementor_find_column( $columns, array( 'id', 'submission_id', 'submissionid' ) );
+				if ( '' === $id_column ) {
+					return array( 'success' => false, 'message' => 'Submission ID column not found' );
+				}
+
+				$values_deleted = 0;
+				if ( ! empty( $input['delete_values'] ) ) {
+					$values_table = $wpdb->prefix . 'e_submissions_values';
+					if ( mcp_elementor_table_exists( $values_table ) ) {
+						$value_columns = mcp_elementor_table_columns( $values_table );
+						$submission_id_column = mcp_elementor_find_column( $value_columns, array( 'submission_id', 'submissionid', 'submission' ) );
+						if ( '' !== $submission_id_column ) {
+							$values_deleted = $wpdb->delete( $values_table, array( $submission_id_column => (int) $input['id'] ) );
+						}
+					}
+				}
+
+				$deleted = $wpdb->delete( $submissions_table, array( $id_column => (int) $input['id'] ) );
+
+				return array(
+					'success'        => true,
+					'id'             => (int) $input['id'],
+					'deleted'        => (int) $deleted,
+					'values_deleted' => (int) $values_deleted,
+					'message'        => 'Form submission deleted successfully',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'manage_options' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => true,
+					'idempotent'  => false,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
 	// ELEMENTOR - List Global Widgets
 	// =========================================================================
 	wp_register_ability(
@@ -1810,8 +3507,10 @@ function mcp_register_elementor_abilities(): void {
 			'output_schema'       => array(
 				'type'       => 'object',
 				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
 					'widgets' => array( 'type' => 'array' ),
 					'total'   => array( 'type' => 'integer' ),
+					'message' => array( 'type' => 'string' ),
 				),
 			),
 			'execute_callback'    => function ( $input = array() ): array {
@@ -1843,8 +3542,77 @@ function mcp_register_elementor_abilities(): void {
 				}
 
 				return array(
+					'success' => true,
 					'widgets' => $widgets,
 					'total'   => count( $widgets ),
+					'message' => 'Global widgets retrieved successfully',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - List Kits
+	// =========================================================================
+	wp_register_ability(
+		'elementor/list-kits',
+		array(
+			'label'               => 'List Elementor Kits',
+			'description'         => 'List Elementor site kits and identify the active kit.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'kits'    => array( 'type' => 'array' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function (): array {
+				$active_kit = (int) get_option( 'elementor_active_kit', 0 );
+
+				$query = new WP_Query( array(
+					'post_type'      => 'elementor_library',
+					'post_status'    => array( 'publish', 'draft', 'private' ),
+					'posts_per_page' => 200,
+					'meta_query'     => array(
+						array(
+							'key'   => '_elementor_template_type',
+							'value' => 'kit',
+						),
+					),
+				) );
+
+				$kits = array();
+				foreach ( $query->posts as $post ) {
+					$kits[] = array(
+						'id'        => $post->ID,
+						'title'     => $post->post_title,
+						'status'    => $post->post_status,
+						'modified'  => $post->post_modified_gmt,
+						'is_active' => $post->ID === $active_kit,
+					);
+				}
+
+				return array(
+					'success' => true,
+					'kits'    => $kits,
+					'message' => 'Retrieved ' . count( $kits ) . ' kit(s).',
 				);
 			},
 			'permission_callback' => function (): bool {
@@ -2005,6 +3773,492 @@ function mcp_register_elementor_abilities(): void {
 					'readonly'    => false,
 					'destructive' => false,
 					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Set Active Kit
+	// =========================================================================
+	wp_register_ability(
+		'elementor/set-active-kit',
+		array(
+			'label'               => 'Set Active Elementor Kit',
+			'description'         => 'Set the active Elementor site kit.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'kit_id' ),
+				'properties'           => array(
+					'kit_id' => array(
+						'type'        => 'integer',
+						'description' => 'Kit ID (elementor_library post).',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'kit_id'  => array( 'type' => 'integer' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( array $input = array() ): array {
+				$kit_id = (int) ( $input['kit_id'] ?? 0 );
+				if ( $kit_id <= 0 ) {
+					return array( 'success' => false, 'message' => 'kit_id is required.' );
+				}
+
+				$kit = get_post( $kit_id );
+				if ( ! $kit || 'elementor_library' !== $kit->post_type ) {
+					return array( 'success' => false, 'message' => 'Kit not found.' );
+				}
+
+				update_option( 'elementor_active_kit', $kit_id );
+
+				if ( class_exists( '\\Elementor\\Plugin' ) ) {
+					\\Elementor\\Plugin::$instance->files_manager->clear_cache();
+				}
+
+				return array(
+					'success' => true,
+					'kit_id'  => $kit_id,
+					'message' => 'Active kit updated.',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => false,
+					'idempotent'  => false,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Get Maintenance Mode
+	// =========================================================================
+	wp_register_ability(
+		'elementor/get-maintenance-mode',
+		array(
+			'label'               => 'Get Elementor Maintenance Mode',
+			'description'         => 'Retrieves current Elementor maintenance mode settings.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'_' => array(
+						'type'        => 'boolean',
+						'default'     => true,
+						'description' => 'Placeholder (ignored).',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'      => array( 'type' => 'boolean' ),
+					'enabled'      => array( 'type' => 'boolean' ),
+					'mode'         => array( 'type' => 'string' ),
+					'template_id'  => array( 'type' => 'integer' ),
+					'exclude_mode' => array( 'type' => 'string' ),
+					'exclude_roles' => array( 'type' => 'array' ),
+					'message'      => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				if ( ! class_exists( '\Elementor\Maintenance_Mode' ) ) {
+					return array( 'success' => false, 'message' => 'Elementor maintenance mode is not available' );
+				}
+
+				$mode         = \Elementor\Maintenance_Mode::get( 'mode' );
+				$template_id  = (int) \Elementor\Maintenance_Mode::get( 'template_id' );
+				$exclude_mode = \Elementor\Maintenance_Mode::get( 'exclude_mode', '' );
+				$exclude_roles = \Elementor\Maintenance_Mode::get( 'exclude_roles', array() );
+				$exclude_roles = is_array( $exclude_roles ) ? $exclude_roles : array();
+				$enabled      = ! empty( $mode ) && ! empty( $template_id );
+
+				return array(
+					'success'      => true,
+					'enabled'      => $enabled,
+					'mode'         => $mode ?: '',
+					'template_id'  => $template_id,
+					'exclude_mode' => $exclude_mode ?: '',
+					'exclude_roles' => $exclude_roles,
+					'message'      => 'Maintenance mode settings retrieved successfully',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'manage_options' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Update Maintenance Mode
+	// =========================================================================
+	wp_register_ability(
+		'elementor/update-maintenance-mode',
+		array(
+			'label'               => 'Update Elementor Maintenance Mode',
+			'description'         => 'Enables or updates Elementor maintenance mode settings.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'enabled'      => array(
+						'type'        => 'boolean',
+						'default'     => true,
+						'description' => 'Set to false to disable maintenance mode.',
+					),
+					'mode'         => array(
+						'type'        => 'string',
+						'enum'        => array( 'maintenance', 'coming_soon' ),
+						'description' => 'Maintenance mode type.',
+					),
+					'template_id'  => array(
+						'type'        => 'integer',
+						'description' => 'Elementor template ID to display.',
+					),
+					'exclude_mode' => array(
+						'type'        => 'string',
+						'enum'        => array( 'none', 'logged_in', 'custom' ),
+						'description' => 'Exclude visitors by mode (logged_in or custom roles).',
+					),
+					'exclude_roles' => array(
+						'type'        => 'array',
+						'description' => 'Roles to exclude when exclude_mode is custom.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'      => array( 'type' => 'boolean' ),
+					'enabled'      => array( 'type' => 'boolean' ),
+					'mode'         => array( 'type' => 'string' ),
+					'template_id'  => array( 'type' => 'integer' ),
+					'exclude_mode' => array( 'type' => 'string' ),
+					'exclude_roles' => array( 'type' => 'array' ),
+					'message'      => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input = is_array( $input ) ? $input : array();
+
+				if ( ! class_exists( '\Elementor\Maintenance_Mode' ) ) {
+					return array( 'success' => false, 'message' => 'Elementor maintenance mode is not available' );
+				}
+
+				$enabled = array_key_exists( 'enabled', $input ) ? (bool) $input['enabled'] : true;
+
+				if ( ! $enabled ) {
+					\Elementor\Maintenance_Mode::set( 'mode', '' );
+					\Elementor\Maintenance_Mode::set( 'template_id', 0 );
+					\Elementor\Maintenance_Mode::set( 'exclude_mode', '' );
+					\Elementor\Maintenance_Mode::set( 'exclude_roles', array() );
+
+					return array(
+						'success'      => true,
+						'enabled'      => false,
+						'mode'         => '',
+						'template_id'  => 0,
+						'exclude_mode' => '',
+						'exclude_roles' => array(),
+						'message'      => 'Maintenance mode disabled',
+					);
+				}
+
+				$mode = $input['mode'] ?? '';
+				if ( '' === $mode ) {
+					return array( 'success' => false, 'message' => 'Mode is required to enable maintenance mode' );
+				}
+
+				$template_id = (int) ( $input['template_id'] ?? 0 );
+				if ( 0 === $template_id ) {
+					return array( 'success' => false, 'message' => 'Template ID is required to enable maintenance mode' );
+				}
+
+				$template = get_post( $template_id );
+				if ( ! $template ) {
+					return array( 'success' => false, 'message' => 'Template not found' );
+				}
+
+				$exclude_mode = $input['exclude_mode'] ?? '';
+				if ( 'none' === $exclude_mode ) {
+					$exclude_mode = '';
+				}
+
+				$exclude_roles = array();
+				if ( 'custom' === $exclude_mode ) {
+					if ( empty( $input['exclude_roles'] ) || ! is_array( $input['exclude_roles'] ) ) {
+						return array( 'success' => false, 'message' => 'exclude_roles is required when exclude_mode is custom' );
+					}
+					$exclude_roles = array_values( array_map( 'sanitize_text_field', $input['exclude_roles'] ) );
+				}
+
+				\Elementor\Maintenance_Mode::set( 'mode', $mode );
+				\Elementor\Maintenance_Mode::set( 'template_id', $template_id );
+				\Elementor\Maintenance_Mode::set( 'exclude_mode', $exclude_mode );
+				\Elementor\Maintenance_Mode::set( 'exclude_roles', $exclude_roles );
+
+				return array(
+					'success'      => true,
+					'enabled'      => true,
+					'mode'         => $mode,
+					'template_id'  => $template_id,
+					'exclude_mode' => $exclude_mode,
+					'exclude_roles' => $exclude_roles,
+					'message'      => 'Maintenance mode updated successfully',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'manage_options' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - List Experiments
+	// =========================================================================
+	wp_register_ability(
+		'elementor/list-experiments',
+		array(
+			'label'               => 'List Elementor Experiments',
+			'description'         => 'Lists Elementor experiments and their current states.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'_' => array(
+						'type'        => 'boolean',
+						'default'     => true,
+						'description' => 'Placeholder (ignored).',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'     => array( 'type' => 'boolean' ),
+					'experiments' => array( 'type' => 'array' ),
+					'total'       => array( 'type' => 'integer' ),
+					'message'     => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				if ( ! class_exists( '\Elementor\Plugin' ) || ! isset( \Elementor\Plugin::$instance->experiments ) ) {
+					return array( 'success' => false, 'message' => 'Elementor experiments manager is not available' );
+				}
+
+				$manager = \Elementor\Plugin::$instance->experiments;
+				$features = $manager->get_features();
+				$experiments = array();
+
+				foreach ( $features as $feature_name => $feature ) {
+					$option_key   = $manager->get_feature_option_key( $feature_name );
+					$saved_state  = get_option( $option_key );
+					$saved_state  = $saved_state ? $saved_state : 'default';
+					$default_state = $feature['default'] ?? 'default';
+					$effective_state = ( 'default' === $saved_state ) ? $default_state : $saved_state;
+
+					$dependencies = array();
+					if ( ! empty( $feature['dependencies'] ) && is_array( $feature['dependencies'] ) ) {
+						foreach ( $feature['dependencies'] as $dependency ) {
+							if ( is_object( $dependency ) && method_exists( $dependency, 'get_name' ) ) {
+								$dependencies[] = $dependency->get_name();
+							} elseif ( is_string( $dependency ) ) {
+								$dependencies[] = $dependency;
+							}
+						}
+					}
+
+					$experiments[] = array(
+						'name'            => $feature['name'] ?? $feature_name,
+						'title'           => isset( $feature['title'] ) ? wp_strip_all_tags( (string) $feature['title'] ) : '',
+						'description'     => isset( $feature['description'] ) ? wp_strip_all_tags( (string) $feature['description'] ) : '',
+						'tag'             => isset( $feature['tag'] ) ? wp_strip_all_tags( (string) $feature['tag'] ) : '',
+						'release_status'  => $feature['release_status'] ?? '',
+						'mutable'         => ! empty( $feature['mutable'] ),
+						'default_state'   => $default_state,
+						'saved_state'     => $saved_state,
+						'effective_state' => $effective_state,
+						'is_active'       => 'active' === $effective_state,
+						'dependencies'    => $dependencies,
+					);
+				}
+
+				return array(
+					'success'     => true,
+					'experiments' => $experiments,
+					'total'       => count( $experiments ),
+					'message'     => 'Experiments retrieved successfully',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'manage_options' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Update Experiment
+	// =========================================================================
+	wp_register_ability(
+		'elementor/update-experiment',
+		array(
+			'label'               => 'Update Elementor Experiment',
+			'description'         => 'Updates an Elementor experiment state.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'name' ),
+				'properties'           => array(
+					'name'  => array(
+						'type'        => 'string',
+						'description' => 'Experiment name.',
+					),
+					'state' => array(
+						'type'        => 'string',
+						'enum'        => array( 'default', 'active', 'inactive' ),
+						'default'     => 'default',
+						'description' => 'State to set (default, active, inactive).',
+					),
+					'reset' => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'If true, clears the saved state and uses the default.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'         => array( 'type' => 'boolean' ),
+					'name'            => array( 'type' => 'string' ),
+					'saved_state'     => array( 'type' => 'string' ),
+					'effective_state' => array( 'type' => 'string' ),
+					'is_active'       => array( 'type' => 'boolean' ),
+					'message'         => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input = is_array( $input ) ? $input : array();
+
+				if ( empty( $input['name'] ) ) {
+					return array( 'success' => false, 'message' => 'Experiment name is required' );
+				}
+
+				if ( ! class_exists( '\Elementor\Plugin' ) || ! isset( \Elementor\Plugin::$instance->experiments ) ) {
+					return array( 'success' => false, 'message' => 'Elementor experiments manager is not available' );
+				}
+
+				$manager = \Elementor\Plugin::$instance->experiments;
+				$feature = $manager->get_features( $input['name'] );
+
+				if ( empty( $feature ) ) {
+					return array( 'success' => false, 'message' => 'Experiment not found: ' . $input['name'] );
+				}
+
+				if ( empty( $feature['mutable'] ) ) {
+					return array( 'success' => false, 'message' => 'Experiment is not mutable: ' . $input['name'] );
+				}
+
+				$state = $input['state'] ?? 'default';
+				if ( ! in_array( $state, array( 'default', 'active', 'inactive' ), true ) ) {
+					return array( 'success' => false, 'message' => 'Invalid state: ' . $state );
+				}
+
+				if ( 'active' === $state && ! empty( $feature['dependencies'] ) && is_array( $feature['dependencies'] ) ) {
+					foreach ( $feature['dependencies'] as $dependency ) {
+						$dependency_name = is_object( $dependency ) && method_exists( $dependency, 'get_name' )
+							? $dependency->get_name()
+							: ( is_string( $dependency ) ? $dependency : '' );
+
+						if ( '' === $dependency_name ) {
+							continue;
+						}
+
+						$dependency_feature = $manager->get_features( $dependency_name );
+						$dependency_option_key = $manager->get_feature_option_key( $dependency_name );
+						$dependency_saved_state = get_option( $dependency_option_key );
+						$dependency_saved_state = $dependency_saved_state ? $dependency_saved_state : 'default';
+						$dependency_default = $dependency_feature['default'] ?? 'default';
+						$dependency_effective = ( 'default' === $dependency_saved_state ) ? $dependency_default : $dependency_saved_state;
+
+						if ( 'active' !== $dependency_effective ) {
+							return array( 'success' => false, 'message' => 'Dependency not active: ' . $dependency_name );
+						}
+					}
+				}
+
+				$option_key = $manager->get_feature_option_key( $input['name'] );
+				$reset      = ! empty( $input['reset'] );
+				$default_state = $feature['default'] ?? 'default';
+
+				if ( $reset || 'default' === $state ) {
+					delete_option( $option_key );
+					$saved_state     = 'default';
+					$effective_state = $default_state;
+				} else {
+					update_option( $option_key, $state );
+					$saved_state     = $state;
+					$effective_state = $state;
+				}
+
+				if ( class_exists( '\Elementor\Plugin' ) ) {
+					\Elementor\Plugin::$instance->files_manager->clear_cache();
+				}
+
+				return array(
+					'success'         => true,
+					'name'            => $input['name'],
+					'saved_state'     => $saved_state,
+					'effective_state' => $effective_state,
+					'is_active'       => 'active' === $effective_state,
+					'message'         => 'Experiment updated successfully',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'manage_options' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => false,
+					'idempotent'  => false,
 				),
 			),
 		)
