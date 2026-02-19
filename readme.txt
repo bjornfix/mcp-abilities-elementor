@@ -3,7 +3,7 @@ Contributors: devenia
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 6.9
-Stable tag: 2.2.0
+Stable tag: 2.2.1
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -24,6 +24,10 @@ Part of the MCP Expose Abilities ecosystem.
 4. Activate the plugin
 
 == Changelog ==
+
+= 2.2.1 =
+* Fixed: Removed hard plugin header dependency on abilities-api to avoid slug-mismatch activation blocking
+
 
 = 2.2.0 =
 * Added: custom code snippet CRUD abilities (Elementor Pro)
