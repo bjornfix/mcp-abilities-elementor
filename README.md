@@ -6,7 +6,7 @@ Elementor page builder integration for WordPress via MCP.
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 
 **Tested up to:** 6.9
-**Stable tag:** 2.2.0
+**Stable tag:** 2.2.2
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -31,7 +31,7 @@ This add-on plugin exposes Elementor functionality through MCP (Model Context Pr
 3. Upload via WordPress Admin > Plugins > Add New > Upload Plugin
 4. Activate the plugin
 
-## Abilities (36)
+## Abilities (38)
 
 ### Page/Post Data
 | Ability | Description |
@@ -84,8 +84,10 @@ This add-on plugin exposes Elementor functionality through MCP (Model Context Pr
 | Ability | Description |
 |---------|-------------|
 | `elementor/list-global-widgets` | List all global widgets |
+| `elementor/list-kits` | List available Elementor kits |
 | `elementor/get-kit-settings` | Get site-wide Elementor settings |
 | `elementor/update-kit-settings` | Update global colors, typography, etc. |
+| `elementor/set-active-kit` | Set the active Elementor kit |
 | `elementor/clear-cache` | Clear Elementor CSS cache |
 | `elementor/replace-urls` | Replace URLs inside Elementor data |
 | `elementor/get-maintenance-mode` | Get maintenance mode settings |
@@ -210,6 +212,10 @@ This add-on plugin exposes Elementor functionality through MCP (Model Context Pr
 ```
 
 ## Changelog
+
+### 2.2.2
+- Fixed: parse error in `elementor/set-active-kit`
+- Added: README sync for current stable tag and full ability list
 
 ### 2.2.0
 - Added: custom code snippet CRUD abilities (Elementor Pro)

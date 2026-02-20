@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.2.1
+ * Version: 2.2.2
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -24,7 +24,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Check if Abilities API is available.
  */
-function mcp_elementor_check_dependencies(): bool {
+function mcp_abilities_elementor_check_dependencies(): bool {
 	if ( ! function_exists( 'wp_register_ability' ) ) {
 		add_action( 'admin_notices', function () {
 			echo '<div class="notice notice-error"><p><strong>MCP Abilities - Elementor</strong> requires the <a href="https://github.com/WordPress/abilities-api">Abilities API</a> plugin to be installed and activated.</p></div>';
@@ -37,7 +37,7 @@ function mcp_elementor_check_dependencies(): bool {
 /**
  * Check if Elementor is active.
  */
-function mcp_elementor_is_active(): bool {
+function mcp_abilities_elementor_is_active(): bool {
 	return class_exists( '\\Elementor\\Plugin' ) || defined( 'ELEMENTOR_VERSION' );
 }
 
@@ -47,7 +47,7 @@ function mcp_elementor_is_active(): bool {
  * @param array $conditions Raw conditions array.
  * @return array
  */
-function mcp_elementor_normalize_conditions( array $conditions ): array {
+function mcp_abilities_elementor_normalize_conditions( array $conditions ): array {
 	$normalized = array();
 
 	foreach ( $conditions as $condition ) {
@@ -89,7 +89,7 @@ function mcp_elementor_normalize_conditions( array $conditions ): array {
  * @param string $template_type Template type.
  * @param array  $conditions_to_save Normalized conditions.
  */
-function mcp_elementor_save_conditions( int $post_id, string $template_type, array $conditions_to_save ): void {
+function mcp_abilities_elementor_save_conditions( int $post_id, string $template_type, array $conditions_to_save ): void {
 	update_post_meta( $post_id, '_elementor_conditions', $conditions_to_save );
 
 	if ( '' === $template_type ) {
@@ -113,9 +113,10 @@ function mcp_elementor_save_conditions( int $post_id, string $template_type, arr
  * @param string $table_name Table name.
  * @return bool
  */
-function mcp_elementor_table_exists( string $table_name ): bool {
+function mcp_abilities_elementor_table_exists( string $table_name ): bool {
 	global $wpdb;
 
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Schema introspection query against plugin-managed table names.
 	$found = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table_name ) );
 
 	return $found === $table_name;
@@ -127,10 +128,11 @@ function mcp_elementor_table_exists( string $table_name ): bool {
  * @param string $table_name Table name.
  * @return array
  */
-function mcp_elementor_table_columns( string $table_name ): array {
+function mcp_abilities_elementor_table_columns( string $table_name ): array {
 	global $wpdb;
 
 	$columns = array();
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Schema introspection query against plugin-managed table names.
 	$results = $wpdb->get_results( 'SHOW COLUMNS FROM `' . esc_sql( $table_name ) . '`', ARRAY_A );
 
 	if ( empty( $results ) ) {
@@ -153,7 +155,7 @@ function mcp_elementor_table_columns( string $table_name ): array {
  * @param array $candidates Candidate names.
  * @return string
  */
-function mcp_elementor_find_column( array $columns, array $candidates ): string {
+function mcp_abilities_elementor_find_column( array $columns, array $candidates ): string {
 	if ( empty( $columns ) || empty( $candidates ) ) {
 		return '';
 	}
@@ -176,11 +178,11 @@ function mcp_elementor_find_column( array $columns, array $candidates ): string 
 /**
  * Register Elementor abilities.
  */
-function mcp_register_elementor_abilities(): void {
-	if ( ! mcp_elementor_check_dependencies() ) {
+function mcp_abilities_elementor_register_abilities(): void {
+	if ( ! mcp_abilities_elementor_check_dependencies() ) {
 		return;
 	}
-	if ( ! mcp_elementor_is_active() ) {
+	if ( ! mcp_abilities_elementor_is_active() ) {
 		add_action( 'admin_notices', function () {
 			echo '<div class="notice notice-error"><p><strong>MCP Abilities - Elementor</strong> requires the <a href="https://wordpress.org/plugins/elementor/">Elementor</a> plugin to be installed and activated.</p></div>';
 		} );
@@ -1417,8 +1419,8 @@ function mcp_register_elementor_abilities(): void {
 
 				// Set display conditions (for theme builder templates).
 				if ( array_key_exists( 'conditions', $input ) && is_array( $input['conditions'] ) ) {
-					$conditions_to_save = mcp_elementor_normalize_conditions( $input['conditions'] );
-					mcp_elementor_save_conditions( $post_id, $input['type'], $conditions_to_save );
+					$conditions_to_save = mcp_abilities_elementor_normalize_conditions( $input['conditions'] );
+					mcp_abilities_elementor_save_conditions( $post_id, $input['type'], $conditions_to_save );
 				}
 
 				// Set popup display settings (for popups).
@@ -1652,8 +1654,8 @@ function mcp_register_elementor_abilities(): void {
 
 				// Update display conditions if provided.
 				if ( array_key_exists( 'conditions', $input ) && is_array( $input['conditions'] ) ) {
-					$conditions_to_save = mcp_elementor_normalize_conditions( $input['conditions'] );
-					mcp_elementor_save_conditions( $post->ID, $template_type, $conditions_to_save );
+					$conditions_to_save = mcp_abilities_elementor_normalize_conditions( $input['conditions'] );
+					mcp_abilities_elementor_save_conditions( $post->ID, $template_type, $conditions_to_save );
 				}
 
 				// Update popup display settings if provided.
@@ -2077,8 +2079,8 @@ function mcp_register_elementor_abilities(): void {
 					return array( 'success' => false, 'message' => 'Template type is required to update conditions' );
 				}
 
-				$conditions_to_save = mcp_elementor_normalize_conditions( $input['conditions'] );
-				mcp_elementor_save_conditions( $post->ID, $template_type, $conditions_to_save );
+				$conditions_to_save = mcp_abilities_elementor_normalize_conditions( $input['conditions'] );
+				mcp_abilities_elementor_save_conditions( $post->ID, $template_type, $conditions_to_save );
 
 				return array(
 					'success'    => true,
@@ -2228,12 +2230,13 @@ function mcp_register_elementor_abilities(): void {
 					return array( 'success' => false, 'message' => 'You do not have permission to empty trash' );
 				}
 
-				$args = array(
-					'post_type'      => 'elementor_library',
-					'post_status'    => 'trash',
-					'posts_per_page' => -1,
-					'fields'         => 'ids',
-				);
+					$args = array(
+						'post_type'      => 'elementor_library',
+						'post_status'    => 'trash',
+						'posts_per_page' => 200,
+						'paged'          => 1,
+						'fields'         => 'ids',
+					);
 
 				$type_filter = $input['type'] ?? 'all';
 				if ( 'all' !== $type_filter ) {
@@ -2246,14 +2249,16 @@ function mcp_register_elementor_abilities(): void {
 					);
 				}
 
-				$trashed = get_posts( $args );
-				$deleted = 0;
-
-				foreach ( $trashed as $post_id ) {
-					if ( wp_delete_post( $post_id, true ) ) {
-						$deleted++;
-					}
-				}
+					$deleted = 0;
+					do {
+						$trashed = get_posts( $args );
+						foreach ( $trashed as $post_id ) {
+							if ( wp_delete_post( $post_id, true ) ) {
+								$deleted++;
+							}
+						}
+						$args['paged']++;
+					} while ( ! empty( $trashed ) );
 
 				$type_msg = 'all' === $type_filter ? '' : " ({$type_filter} templates)";
 				return array(
@@ -3144,99 +3149,100 @@ function mcp_register_elementor_abilities(): void {
 				$input = is_array( $input ) ? $input : array();
 
 				$submissions_table = $wpdb->prefix . 'e_submissions';
-				if ( ! mcp_elementor_table_exists( $submissions_table ) ) {
+				if ( ! mcp_abilities_elementor_table_exists( $submissions_table ) ) {
 					return array( 'success' => false, 'message' => 'Elementor submissions table not found' );
 				}
 
-				$columns = mcp_elementor_table_columns( $submissions_table );
-				$id_column = mcp_elementor_find_column( $columns, array( 'id', 'submission_id', 'submissionid' ) );
-				$form_id_column = mcp_elementor_find_column( $columns, array( 'form_id', 'formid' ) );
-				$form_name_column = mcp_elementor_find_column( $columns, array( 'form_name', 'formname', 'form_title', 'form' ) );
-				$post_id_column = mcp_elementor_find_column( $columns, array( 'post_id', 'postid', 'page_id', 'pageid' ) );
-				$user_id_column = mcp_elementor_find_column( $columns, array( 'user_id', 'userid', 'author_id' ) );
-				$status_column = mcp_elementor_find_column( $columns, array( 'status', 'state' ) );
-				$order_column = mcp_elementor_find_column( $columns, array( 'created_at', 'created', 'date_created', 'created_time', 'submitted_at', 'submitted', 'date_submitted', 'id' ) );
+				$columns = mcp_abilities_elementor_table_columns( $submissions_table );
+				$id_column = mcp_abilities_elementor_find_column( $columns, array( 'id', 'submission_id', 'submissionid' ) );
+				$form_id_column = mcp_abilities_elementor_find_column( $columns, array( 'form_id', 'formid' ) );
+				$form_name_column = mcp_abilities_elementor_find_column( $columns, array( 'form_name', 'formname', 'form_title', 'form' ) );
+				$post_id_column = mcp_abilities_elementor_find_column( $columns, array( 'post_id', 'postid', 'page_id', 'pageid' ) );
+				$user_id_column = mcp_abilities_elementor_find_column( $columns, array( 'user_id', 'userid', 'author_id' ) );
+				$status_column = mcp_abilities_elementor_find_column( $columns, array( 'status', 'state' ) );
+				$order_column = mcp_abilities_elementor_find_column( $columns, array( 'created_at', 'created', 'date_created', 'created_time', 'submitted_at', 'submitted', 'date_submitted', 'id' ) );
 
-				$filters_applied = array();
-				$filters_ignored = array();
-				$where = array();
-				$params = array();
+					$filters_applied = array();
+					$filters_ignored = array();
+					$where_clauses = array();
+					$fallback_column = '' !== $id_column ? $id_column : ( ! empty( $columns ) ? (string) reset( $columns ) : '' );
 
-				if ( ! empty( $input['form_id'] ) ) {
-					if ( '' !== $form_id_column ) {
-						$where[] = $form_id_column . ' = %s';
-						$params[] = (string) $input['form_id'];
-						$filters_applied[] = 'form_id';
-					} else {
-						$filters_ignored[] = 'form_id';
+					if ( '' === $fallback_column ) {
+						return array( 'success' => false, 'message' => 'Could not determine a safe column for submissions query' );
+					}
+
+					if ( ! empty( $input['form_id'] ) ) {
+						if ( '' !== $form_id_column ) {
+							$where_clauses[] = $wpdb->prepare( '%i = %s', $form_id_column, (string) $input['form_id'] );
+							$filters_applied[] = 'form_id';
+						} else {
+							$filters_ignored[] = 'form_id';
 					}
 				}
 
-				if ( ! empty( $input['form_name'] ) ) {
-					if ( '' !== $form_name_column ) {
-						$where[] = $form_name_column . ' = %s';
-						$params[] = (string) $input['form_name'];
-						$filters_applied[] = 'form_name';
-					} else {
-						$filters_ignored[] = 'form_name';
+					if ( ! empty( $input['form_name'] ) ) {
+						if ( '' !== $form_name_column ) {
+							$where_clauses[] = $wpdb->prepare( '%i = %s', $form_name_column, (string) $input['form_name'] );
+							$filters_applied[] = 'form_name';
+						} else {
+							$filters_ignored[] = 'form_name';
 					}
 				}
 
-				if ( ! empty( $input['post_id'] ) ) {
-					if ( '' !== $post_id_column ) {
-						$where[] = $post_id_column . ' = %d';
-						$params[] = (int) $input['post_id'];
-						$filters_applied[] = 'post_id';
-					} else {
-						$filters_ignored[] = 'post_id';
+					if ( ! empty( $input['post_id'] ) ) {
+						if ( '' !== $post_id_column ) {
+							$where_clauses[] = $wpdb->prepare( '%i = %d', $post_id_column, (int) $input['post_id'] );
+							$filters_applied[] = 'post_id';
+						} else {
+							$filters_ignored[] = 'post_id';
 					}
 				}
 
-				if ( ! empty( $input['user_id'] ) ) {
-					if ( '' !== $user_id_column ) {
-						$where[] = $user_id_column . ' = %d';
-						$params[] = (int) $input['user_id'];
-						$filters_applied[] = 'user_id';
-					} else {
-						$filters_ignored[] = 'user_id';
+					if ( ! empty( $input['user_id'] ) ) {
+						if ( '' !== $user_id_column ) {
+							$where_clauses[] = $wpdb->prepare( '%i = %d', $user_id_column, (int) $input['user_id'] );
+							$filters_applied[] = 'user_id';
+						} else {
+							$filters_ignored[] = 'user_id';
 					}
 				}
 
-				if ( ! empty( $input['status'] ) ) {
-					if ( '' !== $status_column ) {
-						$where[] = $status_column . ' = %s';
-						$params[] = (string) $input['status'];
-						$filters_applied[] = 'status';
-					} else {
-						$filters_ignored[] = 'status';
+					if ( ! empty( $input['status'] ) ) {
+						if ( '' !== $status_column ) {
+							$where_clauses[] = $wpdb->prepare( '%i = %s', $status_column, (string) $input['status'] );
+							$filters_applied[] = 'status';
+						} else {
+							$filters_ignored[] = 'status';
 					}
 				}
 
 				$limit  = isset( $input['limit'] ) ? (int) $input['limit'] : 50;
-				$offset = isset( $input['offset'] ) ? (int) $input['offset'] : 0;
-				$limit  = max( 1, min( 200, $limit ) );
-				$offset = max( 0, $offset );
+					$offset = isset( $input['offset'] ) ? (int) $input['offset'] : 0;
+					$limit  = max( 1, min( 200, $limit ) );
+					$offset = max( 0, $offset );
 
-				$sql = 'SELECT * FROM `' . esc_sql( $submissions_table ) . '`';
-				if ( ! empty( $where ) ) {
-					$sql .= ' WHERE ' . implode( ' AND ', $where );
-				}
-				if ( '' !== $order_column ) {
-					$sql .= ' ORDER BY `' . esc_sql( $order_column ) . '` DESC';
-				}
-				$sql .= ' LIMIT %d OFFSET %d';
-				$params[] = $limit;
-				$params[] = $offset;
+					$order_identifier = '' !== $order_column ? $order_column : $fallback_column;
+						$sql = $wpdb->prepare( 'SELECT * FROM %i', $submissions_table );
+						$count_sql = $wpdb->prepare( 'SELECT COUNT(*) FROM %i', $submissions_table );
+						if ( ! empty( $where_clauses ) ) {
+							$where_sql = ' WHERE ' . implode( ' AND ', $where_clauses );
+							$sql      .= $where_sql;
+							$count_sql .= $where_sql;
+						}
+						$sql .= ' ORDER BY ' . $wpdb->prepare( '%i', $order_identifier ) . ' DESC';
+						$sql .= ' LIMIT ' . (int) $limit . ' OFFSET ' . (int) $offset;
 
-				$prepared = $wpdb->prepare( $sql, $params );
-				$submissions = $wpdb->get_results( $prepared, ARRAY_A );
+							// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Read-only query against Elementor tables; identifier fragments are prepared with %i and limit/offset are integer-cast.
+							$submissions = $wpdb->get_results( $sql, ARRAY_A );
+							// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Read-only count query with prepared identifier fragments.
+							$total_submissions = (int) $wpdb->get_var( $count_sql );
 
 				$values_included = false;
 				if ( ! empty( $input['include_values'] ) && ! empty( $submissions ) && '' !== $id_column ) {
 					$values_table = $wpdb->prefix . 'e_submissions_values';
-					if ( mcp_elementor_table_exists( $values_table ) ) {
-						$value_columns = mcp_elementor_table_columns( $values_table );
-						$submission_id_column = mcp_elementor_find_column( $value_columns, array( 'submission_id', 'submissionid', 'submission' ) );
+					if ( mcp_abilities_elementor_table_exists( $values_table ) ) {
+						$value_columns = mcp_abilities_elementor_table_columns( $values_table );
+						$submission_id_column = mcp_abilities_elementor_find_column( $value_columns, array( 'submission_id', 'submissionid', 'submission' ) );
 
 						if ( '' !== $submission_id_column ) {
 							$ids = array();
@@ -3246,36 +3252,44 @@ function mcp_register_elementor_abilities(): void {
 								}
 							}
 
-							if ( ! empty( $ids ) ) {
-								$placeholders = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
-								$values_sql = 'SELECT * FROM `' . esc_sql( $values_table ) . '` WHERE `' . esc_sql( $submission_id_column ) . "` IN ({$placeholders})";
-								$values_rows = $wpdb->get_results( $wpdb->prepare( $values_sql, $ids ), ARRAY_A );
+									if ( ! empty( $ids ) ) {
+										$values_by_submission = array();
+										$ids = array_values( array_unique( array_map( 'intval', $ids ) ) );
 
-								$values_by_submission = array();
-								foreach ( $values_rows as $value_row ) {
-									$submission_id = isset( $value_row[ $submission_id_column ] ) ? (int) $value_row[ $submission_id_column ] : 0;
-									if ( 0 !== $submission_id ) {
-										$values_by_submission[ $submission_id ][] = $value_row;
-									}
+										foreach ( $ids as $submission_id ) {
+											// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Read-only query scoped to a single submission id.
+											$values_rows = $wpdb->get_results(
+												$wpdb->prepare(
+													'SELECT * FROM %i WHERE %i = %d',
+													$values_table,
+													$submission_id_column,
+													$submission_id
+												),
+												ARRAY_A
+											);
+
+											if ( ! empty( $values_rows ) ) {
+												$values_by_submission[ $submission_id ] = $values_rows;
+											}
+										}
+
+										foreach ( $submissions as $index => $row ) {
+											$submission_id = isset( $row[ $id_column ] ) ? (int) $row[ $id_column ] : 0;
+											$submissions[ $index ]['values'] = $values_by_submission[ $submission_id ] ?? array();
+										}
+
+										$values_included = true;
 								}
-
-								foreach ( $submissions as $index => $row ) {
-									$submission_id = isset( $row[ $id_column ] ) ? (int) $row[ $id_column ] : 0;
-									$submissions[ $index ]['values'] = $values_by_submission[ $submission_id ] ?? array();
-								}
-
-								$values_included = true;
 							}
 						}
 					}
-				}
 
-				return array(
-					'success'         => true,
-					'submissions'     => $submissions,
-					'total'           => count( $submissions ),
-					'values_included' => $values_included,
-					'filters_applied' => $filters_applied,
+					return array(
+						'success'         => true,
+						'submissions'     => $submissions,
+						'total'           => $total_submissions,
+						'values_included' => $values_included,
+						'filters_applied' => $filters_applied,
 					'filters_ignored' => $filters_ignored,
 					'message'         => 'Form submissions retrieved successfully',
 				);
@@ -3338,18 +3352,26 @@ function mcp_register_elementor_abilities(): void {
 				}
 
 				$submissions_table = $wpdb->prefix . 'e_submissions';
-				if ( ! mcp_elementor_table_exists( $submissions_table ) ) {
+				if ( ! mcp_abilities_elementor_table_exists( $submissions_table ) ) {
 					return array( 'success' => false, 'message' => 'Elementor submissions table not found' );
 				}
 
-				$columns = mcp_elementor_table_columns( $submissions_table );
-				$id_column = mcp_elementor_find_column( $columns, array( 'id', 'submission_id', 'submissionid' ) );
+				$columns = mcp_abilities_elementor_table_columns( $submissions_table );
+				$id_column = mcp_abilities_elementor_find_column( $columns, array( 'id', 'submission_id', 'submissionid' ) );
 				if ( '' === $id_column ) {
 					return array( 'success' => false, 'message' => 'Submission ID column not found' );
 				}
 
-				$sql = 'SELECT * FROM `' . esc_sql( $submissions_table ) . '` WHERE `' . esc_sql( $id_column ) . '` = %d LIMIT 1';
-				$submission = $wpdb->get_row( $wpdb->prepare( $sql, (int) $input['id'] ), ARRAY_A );
+						// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Read-only lookup by submission id.
+						$submission = $wpdb->get_row(
+							$wpdb->prepare(
+							'SELECT * FROM %i WHERE %i = %d LIMIT 1',
+							$submissions_table,
+							$id_column,
+							(int) $input['id']
+						),
+						ARRAY_A
+					);
 
 				if ( empty( $submission ) ) {
 					return array( 'success' => false, 'message' => 'Submission not found' );
@@ -3360,13 +3382,21 @@ function mcp_register_elementor_abilities(): void {
 
 				if ( ! empty( $input['include_values'] ) ) {
 					$values_table = $wpdb->prefix . 'e_submissions_values';
-					if ( mcp_elementor_table_exists( $values_table ) ) {
-						$value_columns = mcp_elementor_table_columns( $values_table );
-						$submission_id_column = mcp_elementor_find_column( $value_columns, array( 'submission_id', 'submissionid', 'submission' ) );
+					if ( mcp_abilities_elementor_table_exists( $values_table ) ) {
+						$value_columns = mcp_abilities_elementor_table_columns( $values_table );
+						$submission_id_column = mcp_abilities_elementor_find_column( $value_columns, array( 'submission_id', 'submissionid', 'submission' ) );
 
 						if ( '' !== $submission_id_column ) {
-							$values_sql = 'SELECT * FROM `' . esc_sql( $values_table ) . '` WHERE `' . esc_sql( $submission_id_column ) . '` = %d';
-							$values = $wpdb->get_results( $wpdb->prepare( $values_sql, (int) $input['id'] ), ARRAY_A );
+									// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Read-only lookup by submission id.
+									$values = $wpdb->get_results(
+										$wpdb->prepare(
+										'SELECT * FROM %i WHERE %i = %d',
+										$values_table,
+										$submission_id_column,
+										(int) $input['id']
+									),
+									ARRAY_A
+								);
 							$values_included = true;
 						}
 					}
@@ -3438,12 +3468,12 @@ function mcp_register_elementor_abilities(): void {
 				}
 
 				$submissions_table = $wpdb->prefix . 'e_submissions';
-				if ( ! mcp_elementor_table_exists( $submissions_table ) ) {
+				if ( ! mcp_abilities_elementor_table_exists( $submissions_table ) ) {
 					return array( 'success' => false, 'message' => 'Elementor submissions table not found' );
 				}
 
-				$columns = mcp_elementor_table_columns( $submissions_table );
-				$id_column = mcp_elementor_find_column( $columns, array( 'id', 'submission_id', 'submissionid' ) );
+				$columns = mcp_abilities_elementor_table_columns( $submissions_table );
+				$id_column = mcp_abilities_elementor_find_column( $columns, array( 'id', 'submission_id', 'submissionid' ) );
 				if ( '' === $id_column ) {
 					return array( 'success' => false, 'message' => 'Submission ID column not found' );
 				}
@@ -3451,16 +3481,18 @@ function mcp_register_elementor_abilities(): void {
 				$values_deleted = 0;
 				if ( ! empty( $input['delete_values'] ) ) {
 					$values_table = $wpdb->prefix . 'e_submissions_values';
-					if ( mcp_elementor_table_exists( $values_table ) ) {
-						$value_columns = mcp_elementor_table_columns( $values_table );
-						$submission_id_column = mcp_elementor_find_column( $value_columns, array( 'submission_id', 'submissionid', 'submission' ) );
-						if ( '' !== $submission_id_column ) {
-							$values_deleted = $wpdb->delete( $values_table, array( $submission_id_column => (int) $input['id'] ) );
+					if ( mcp_abilities_elementor_table_exists( $values_table ) ) {
+						$value_columns = mcp_abilities_elementor_table_columns( $values_table );
+							$submission_id_column = mcp_abilities_elementor_find_column( $value_columns, array( 'submission_id', 'submissionid', 'submission' ) );
+							if ( '' !== $submission_id_column ) {
+								// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Direct delete in Elementor-owned values table.
+								$values_deleted = $wpdb->delete( $values_table, array( $submission_id_column => (int) $input['id'] ) );
+							}
 						}
 					}
-				}
 
-				$deleted = $wpdb->delete( $submissions_table, array( $id_column => (int) $input['id'] ) );
+					// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Direct delete in Elementor-owned submissions table.
+					$deleted = $wpdb->delete( $submissions_table, array( $id_column => (int) $input['id'] ) );
 
 				return array(
 					'success'        => true,
@@ -3589,7 +3621,8 @@ function mcp_register_elementor_abilities(): void {
 					'post_type'      => 'elementor_library',
 					'post_status'    => array( 'publish', 'draft', 'private' ),
 					'posts_per_page' => 200,
-					'meta_query'     => array(
+						// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- Elementor stores kit type in post meta; constrained to elementor_library with bounded result set.
+						'meta_query'     => array(
 						array(
 							'key'   => '_elementor_template_type',
 							'value' => 'kit',
@@ -3819,7 +3852,7 @@ function mcp_register_elementor_abilities(): void {
 				update_option( 'elementor_active_kit', $kit_id );
 
 				if ( class_exists( '\\Elementor\\Plugin' ) ) {
-					\\Elementor\\Plugin::$instance->files_manager->clear_cache();
+					\Elementor\Plugin::$instance->files_manager->clear_cache();
 				}
 
 				return array(
@@ -4363,4 +4396,4 @@ function mcp_register_elementor_abilities(): void {
 		)
 	);
 }
-add_action( 'wp_abilities_api_init', 'mcp_register_elementor_abilities' );
+add_action( 'wp_abilities_api_init', 'mcp_abilities_elementor_register_abilities' );
