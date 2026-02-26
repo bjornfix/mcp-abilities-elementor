@@ -6,7 +6,7 @@ Elementor page builder integration for WordPress via MCP.
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 
 **Tested up to:** 6.9
-**Stable tag:** 2.2.2
+**Stable tag:** 2.2.3
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -88,7 +88,7 @@ This add-on plugin exposes Elementor functionality through MCP (Model Context Pr
 | `elementor/get-kit-settings` | Get site-wide Elementor settings |
 | `elementor/update-kit-settings` | Update global colors, typography, etc. |
 | `elementor/set-active-kit` | Set the active Elementor kit |
-| `elementor/clear-cache` | Clear Elementor CSS cache |
+| `elementor/clear-cache` | Clear Elementor cache (post or site scope) |
 | `elementor/replace-urls` | Replace URLs inside Elementor data |
 | `elementor/get-maintenance-mode` | Get maintenance mode settings |
 | `elementor/update-maintenance-mode` | Enable or update maintenance mode |
@@ -202,7 +202,7 @@ This add-on plugin exposes Elementor functionality through MCP (Model Context Pr
 }
 ```
 
-### Clear CSS cache
+### Clear Elementor cache
 
 ```json
 {
@@ -212,6 +212,11 @@ This add-on plugin exposes Elementor functionality through MCP (Model Context Pr
 ```
 
 ## Changelog
+
+### 2.2.3
+- Added: `cache_scope` (`none` / `post` / `site`) to `elementor/update-data`, `elementor/patch-data`, and `elementor/update-element`
+- Improved: stronger cache invalidation after Elementor writes (post cache cleanup, asset meta cleanup, optional site-wide Elementor cache clear)
+- Improved: `elementor/clear-cache` now returns cache details and supports `scope` alias (`post` / `site`)
 
 ### 2.2.2
 - Fixed: parse error in `elementor/set-active-kit`

@@ -3,7 +3,7 @@ Contributors: devenia
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 6.9
-Stable tag: 2.2.2
+Stable tag: 2.2.3
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -24,6 +24,12 @@ Part of the MCP Expose Abilities ecosystem.
 4. Activate the plugin
 
 == Changelog ==
+
+= 2.2.3 =
+* Added: `cache_scope` (`none|post|site`) to `elementor/update-data`, `elementor/patch-data`, and `elementor/update-element`
+* Improved: cache invalidation after Elementor writes (post cache cleanup, asset meta cleanup, optional site-wide Elementor cache clear)
+* Improved: `elementor/clear-cache` responses now include cache details and supports `scope` alias (`post|site`)
+* Fixed: `elementor/clear-cache` post-scope no longer relies on CSS-meta-only clearing
 
 = 2.2.2 =
 * Fixed: parse error in set-active-kit ability

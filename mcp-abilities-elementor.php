@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.2.2
+ * Version: 2.2.3
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -39,6 +39,112 @@ function mcp_abilities_elementor_check_dependencies(): bool {
  */
 function mcp_abilities_elementor_is_active(): bool {
 	return class_exists( '\\Elementor\\Plugin' ) || defined( 'ELEMENTOR_VERSION' );
+}
+
+/**
+ * Normalize cache scope input for write abilities.
+ *
+ * Supported values:
+ * - none: skip cache invalidation (advanced/debug use)
+ * - post: clear post-level caches and touch the post (default)
+ * - site: clear post-level caches + site-wide Elementor cache
+ *
+ * @param mixed  $raw Raw input value.
+ * @param string $default Default scope.
+ * @return string
+ */
+function mcp_abilities_elementor_normalize_cache_scope( $raw, string $default = 'post' ): string {
+	$scope = is_string( $raw ) ? strtolower( trim( $raw ) ) : '';
+
+	if ( in_array( $scope, array( 'none', 'post', 'site' ), true ) ) {
+		return $scope;
+	}
+
+	return $default;
+}
+
+/**
+ * Touch a post to refresh modified timestamps and invalidate core post caches.
+ *
+ * @param int $post_id Post ID.
+ * @return bool True if wp_update_post succeeded.
+ */
+function mcp_abilities_elementor_touch_post( int $post_id ): bool {
+	$local_time = current_time( 'mysql' );
+	$gmt_time   = current_time( 'mysql', true );
+
+	$result = wp_update_post(
+		array(
+			'ID'                => $post_id,
+			'post_modified'     => $local_time,
+			'post_modified_gmt' => $gmt_time,
+			'edit_date'         => true,
+		),
+		true
+	);
+
+	clean_post_cache( $post_id );
+
+	return ! is_wp_error( $result );
+}
+
+/**
+ * Invalidate Elementor + WordPress caches after Elementor data writes.
+ *
+ * @param int    $post_id Post/Page ID.
+ * @param string $cache_scope Cache scope (`none`, `post`, `site`).
+ * @param bool   $touch_post Whether to touch/retimestamp the post after clearing caches.
+ * @return array
+ */
+function mcp_abilities_elementor_invalidate_after_write( int $post_id, string $cache_scope = 'post', bool $touch_post = true ): array {
+	$cache_scope = mcp_abilities_elementor_normalize_cache_scope( $cache_scope, 'post' );
+
+	$details = array(
+		'requested_scope'        => $cache_scope,
+		'effective_scope'        => $cache_scope,
+		'post_id'                => $post_id,
+		'post_meta_css_deleted'  => false,
+		'post_meta_assets_deleted' => false,
+		'post_cache_cleaned'     => false,
+		'post_touched'           => false,
+		'elementor_cache_cleared' => false,
+		'warnings'               => array(),
+	);
+
+	if ( 'none' === $cache_scope ) {
+		return $details;
+	}
+
+	$css_deleted = delete_post_meta( $post_id, '_elementor_css' );
+	$assets_deleted = delete_post_meta( $post_id, '_elementor_page_assets' );
+	$details['post_meta_css_deleted'] = (bool) $css_deleted;
+	$details['post_meta_assets_deleted'] = (bool) $assets_deleted;
+
+	clean_post_cache( $post_id );
+	$details['post_cache_cleaned'] = true;
+	$details['post_touched']       = $touch_post ? mcp_abilities_elementor_touch_post( $post_id ) : false;
+
+	if ( ! class_exists( '\Elementor\Plugin' ) ) {
+		if ( 'site' === $cache_scope ) {
+			$details['warnings'][] = 'Elementor plugin not loaded; site-wide Elementor cache clear skipped';
+		}
+		return $details;
+	}
+
+	if ( 'site' === $cache_scope ) {
+		try {
+			if ( isset( \Elementor\Plugin::$instance->files_manager ) && is_object( \Elementor\Plugin::$instance->files_manager ) ) {
+				\Elementor\Plugin::$instance->files_manager->clear_cache();
+				$details['elementor_cache_cleared'] = true;
+			} else {
+				$details['warnings'][] = 'Elementor files_manager not available';
+			}
+		} catch ( \Throwable $e ) {
+			$details['warnings'][] = 'Elementor cache clear failed: ' . $e->getMessage();
+		}
+	}
+
+	return $details;
 }
 
 /**
@@ -292,7 +398,7 @@ function mcp_abilities_elementor_register_abilities(): void {
 		'elementor/update-data',
 		array(
 			'label'               => 'Update Elementor Data',
-			'description'         => 'Updates the Elementor JSON data for a page or post. Automatically clears Elementor CSS cache. Use with caution - invalid JSON will break the page.',
+			'description'         => 'Updates the Elementor JSON data for a page or post and invalidates caches. Supports cache_scope (`post` default, `site` for stronger invalidation, `none` for debugging). Use with caution - invalid JSON will break the page.',
 			'category'            => 'site',
 			'input_schema'        => array(
 				'type'                 => 'object',
@@ -306,6 +412,12 @@ function mcp_abilities_elementor_register_abilities(): void {
 						'type'        => 'array',
 						'description' => 'Elementor data array (will be JSON encoded).',
 					),
+					'cache_scope' => array(
+						'type'        => 'string',
+						'enum'        => array( 'none', 'post', 'site' ),
+						'default'     => 'post',
+						'description' => 'Cache invalidation scope after write. `post` clears post-level caches and touches the post; `site` also clears Elementor site-wide cache; `none` skips cache invalidation.',
+					),
 				),
 				'additionalProperties' => false,
 			),
@@ -316,6 +428,7 @@ function mcp_abilities_elementor_register_abilities(): void {
 					'id'      => array( 'type' => 'integer' ),
 					'message' => array( 'type' => 'string' ),
 					'link'    => array( 'type' => 'string' ),
+					'cache'   => array( 'type' => 'object' ),
 				),
 			),
 			'execute_callback'    => function ( $input = array() ): array {
@@ -349,20 +462,17 @@ function mcp_abilities_elementor_register_abilities(): void {
 				// Ensure edit mode is set to builder.
 				update_post_meta( $input['id'], '_elementor_edit_mode', 'builder' );
 
-				// Clear Elementor CSS cache for this post.
-				delete_post_meta( $input['id'], '_elementor_css' );
-
-				// Update post modified time to trigger regeneration.
-				wp_update_post( array(
-					'ID'            => $input['id'],
-					'post_modified' => current_time( 'mysql' ),
-				) );
+				$cache_details = mcp_abilities_elementor_invalidate_after_write(
+					(int) $input['id'],
+					mcp_abilities_elementor_normalize_cache_scope( $input['cache_scope'] ?? 'post', 'post' )
+				);
 
 				return array(
 					'success' => true,
 					'id'      => $input['id'],
 					'message' => 'Elementor data updated successfully',
 					'link'    => get_permalink( $input['id'] ),
+					'cache'   => $cache_details,
 				);
 			},
 			'permission_callback' => function (): bool {
@@ -385,7 +495,7 @@ function mcp_abilities_elementor_register_abilities(): void {
 		'elementor/patch-data',
 		array(
 			'label'               => 'Patch Elementor Data',
-			'description'         => 'Performs find-and-replace operations within Elementor JSON data. Works on the raw JSON string, so you can replace text, URLs, settings values, etc.',
+			'description'         => 'Performs find-and-replace operations within Elementor JSON data. Works on the raw JSON string, so you can replace text, URLs, settings values, etc. Supports cache_scope (`post` default, `site` for stronger invalidation, `none` for debugging).',
 			'category'            => 'site',
 			'input_schema'        => array(
 				'type'                 => 'object',
@@ -408,6 +518,12 @@ function mcp_abilities_elementor_register_abilities(): void {
 						'default'     => false,
 						'description' => 'If true, treat "find" as a regex pattern.',
 					),
+					'cache_scope' => array(
+						'type'        => 'string',
+						'enum'        => array( 'none', 'post', 'site' ),
+						'default'     => 'post',
+						'description' => 'Cache invalidation scope after write. `post` clears post-level caches and touches the post; `site` also clears Elementor site-wide cache; `none` skips cache invalidation.',
+					),
 				),
 				'additionalProperties' => false,
 			),
@@ -419,6 +535,7 @@ function mcp_abilities_elementor_register_abilities(): void {
 					'replacements' => array( 'type' => 'integer' ),
 					'message'      => array( 'type' => 'string' ),
 					'link'         => array( 'type' => 'string' ),
+					'cache'        => array( 'type' => 'object' ),
 				),
 			),
 			'execute_callback'    => function ( $input = array() ): array {
@@ -481,14 +598,10 @@ function mcp_abilities_elementor_register_abilities(): void {
 				// Update Elementor data.
 				update_post_meta( $input['id'], '_elementor_data', wp_slash( $new_data ) );
 
-				// Clear Elementor CSS cache.
-				delete_post_meta( $input['id'], '_elementor_css' );
-
-				// Update post modified time.
-				wp_update_post( array(
-					'ID'            => $input['id'],
-					'post_modified' => current_time( 'mysql' ),
-				) );
+				$cache_details = mcp_abilities_elementor_invalidate_after_write(
+					(int) $input['id'],
+					mcp_abilities_elementor_normalize_cache_scope( $input['cache_scope'] ?? 'post', 'post' )
+				);
 
 				return array(
 					'success'      => true,
@@ -496,6 +609,7 @@ function mcp_abilities_elementor_register_abilities(): void {
 					'replacements' => $count,
 					'message'      => "Successfully replaced {$count} occurrence(s) in Elementor data",
 					'link'         => get_permalink( $input['id'] ),
+					'cache'        => $cache_details,
 				);
 			},
 			'permission_callback' => function (): bool {
@@ -518,7 +632,7 @@ function mcp_abilities_elementor_register_abilities(): void {
 		'elementor/update-element',
 		array(
 			'label'               => 'Update Elementor Element',
-			'description'         => 'Replaces a specific element (container or widget) by ID within the Elementor page structure. Useful for targeted updates without re-uploading the entire page.',
+			'description'         => 'Replaces a specific element (container or widget) by ID within the Elementor page structure. Useful for targeted updates without re-uploading the entire page. Supports cache_scope (`post` default, `site` for stronger invalidation, `none` for debugging).',
 			'category'            => 'site',
 			'input_schema'        => array(
 				'type'                 => 'object',
@@ -536,6 +650,12 @@ function mcp_abilities_elementor_register_abilities(): void {
 						'type'        => 'object',
 						'description' => 'The new element data to replace it with. Must include "id", "elType", and other required Elementor fields.',
 					),
+					'cache_scope'  => array(
+						'type'        => 'string',
+						'enum'        => array( 'none', 'post', 'site' ),
+						'default'     => 'post',
+						'description' => 'Cache invalidation scope after write. `post` clears post-level caches and touches the post; `site` also clears Elementor site-wide cache; `none` skips cache invalidation.',
+					),
 				),
 				'additionalProperties' => false,
 			),
@@ -547,6 +667,7 @@ function mcp_abilities_elementor_register_abilities(): void {
 					'element_id' => array( 'type' => 'string' ),
 					'message'    => array( 'type' => 'string' ),
 					'link'       => array( 'type' => 'string' ),
+					'cache'      => array( 'type' => 'object' ),
 				),
 			),
 			'execute_callback'    => function ( $input = array() ): array {
@@ -618,14 +739,10 @@ function mcp_abilities_elementor_register_abilities(): void {
 
 				update_post_meta( $input['id'], '_elementor_data', wp_slash( $json_data ) );
 
-				// Clear Elementor CSS cache.
-				delete_post_meta( $input['id'], '_elementor_css' );
-
-				// Update post modified time.
-				wp_update_post( array(
-					'ID'            => $input['id'],
-					'post_modified' => current_time( 'mysql' ),
-				) );
+				$cache_details = mcp_abilities_elementor_invalidate_after_write(
+					(int) $input['id'],
+					mcp_abilities_elementor_normalize_cache_scope( $input['cache_scope'] ?? 'post', 'post' )
+				);
 
 				return array(
 					'success'    => true,
@@ -633,6 +750,7 @@ function mcp_abilities_elementor_register_abilities(): void {
 					'element_id' => $input['element_id'],
 					'message'    => 'Element "' . $input['element_id'] . '" updated successfully',
 					'link'       => get_permalink( $input['id'] ),
+					'cache'      => $cache_details,
 				);
 			},
 			'permission_callback' => function (): bool {
@@ -1134,7 +1252,7 @@ function mcp_abilities_elementor_register_abilities(): void {
 		'elementor/clear-cache',
 		array(
 			'label'               => 'Clear Elementor Cache',
-			'description'         => 'Clears Elementor CSS cache for a specific post or the entire site.',
+			'description'         => 'Clears Elementor cache for a specific post or the entire site. Post scope clears post-level caches/meta and touches the post; site scope also clears Elementor site-wide cache files.',
 			'category'            => 'site',
 			'input_schema'        => array(
 				'type'                 => 'object',
@@ -1148,6 +1266,11 @@ function mcp_abilities_elementor_register_abilities(): void {
 						'default'     => false,
 						'description' => 'If true, clears all Elementor cache site-wide.',
 					),
+					'scope' => array(
+						'type'        => 'string',
+						'enum'        => array( 'post', 'site' ),
+						'description' => 'Optional alias for cache scope. `site` behaves like `all=true`. `post` requires `id`.',
+					),
 				),
 				'additionalProperties' => false,
 			),
@@ -1156,20 +1279,49 @@ function mcp_abilities_elementor_register_abilities(): void {
 				'properties' => array(
 					'success' => array( 'type' => 'boolean' ),
 					'message' => array( 'type' => 'string' ),
+					'cache'   => array( 'type' => 'object' ),
 				),
 			),
 			'execute_callback'    => function ( $input = array() ): array {
 				$input = is_array( $input ) ? $input : array();
 
-				if ( ! empty( $input['all'] ) ) {
-					// Clear all Elementor CSS files using Elementor's API.
+				$scope = mcp_abilities_elementor_normalize_cache_scope( $input['scope'] ?? '', '' );
+				if ( '' === $scope ) {
+					$scope = ! empty( $input['all'] ) ? 'site' : 'post';
+				}
+
+				if ( 'site' === $scope ) {
+					$cache_details = array(
+						'requested_scope'         => 'site',
+						'effective_scope'         => 'site',
+						'elementor_cache_cleared' => false,
+						'warnings'                => array(),
+					);
+
 					if ( class_exists( '\Elementor\Plugin' ) ) {
-						\Elementor\Plugin::$instance->files_manager->clear_cache();
-						return array( 'success' => true, 'message' => 'All Elementor cache cleared' );
-					} else {
-						// Elementor not loaded - cannot clear cache without it.
-						return array( 'success' => false, 'message' => 'Elementor plugin not loaded. Cannot clear cache.' );
+						try {
+							if ( isset( \Elementor\Plugin::$instance->files_manager ) && is_object( \Elementor\Plugin::$instance->files_manager ) ) {
+								\Elementor\Plugin::$instance->files_manager->clear_cache();
+								$cache_details['elementor_cache_cleared'] = true;
+							} else {
+								$cache_details['warnings'][] = 'Elementor files_manager not available';
+							}
+						} catch ( \Throwable $e ) {
+							$cache_details['warnings'][] = 'Elementor cache clear failed: ' . $e->getMessage();
+						}
+
+						return array(
+							'success' => true,
+							'message' => 'All Elementor cache cleared',
+							'cache'   => $cache_details,
+						);
 					}
+
+					return array(
+						'success' => false,
+						'message' => 'Elementor plugin not loaded. Cannot clear cache.',
+						'cache'   => $cache_details,
+					);
 				}
 
 				if ( ! empty( $input['id'] ) ) {
@@ -1182,11 +1334,16 @@ function mcp_abilities_elementor_register_abilities(): void {
 						return array( 'success' => false, 'message' => 'You do not have permission to clear cache for this post' );
 					}
 
-					delete_post_meta( $input['id'], '_elementor_css' );
-					return array( 'success' => true, 'message' => "Cache cleared for post {$input['id']}" );
+					$cache_details = mcp_abilities_elementor_invalidate_after_write( (int) $input['id'], 'post', false );
+
+					return array(
+						'success' => true,
+						'message' => "Cache cleared for post {$input['id']}",
+						'cache'   => $cache_details,
+					);
 				}
 
-				return array( 'success' => false, 'message' => 'Provide either "id" or set "all" to true' );
+				return array( 'success' => false, 'message' => 'Provide either "id", set "all" to true, or use scope="site"' );
 			},
 			'permission_callback' => function (): bool {
 				return current_user_can( 'edit_posts' );
