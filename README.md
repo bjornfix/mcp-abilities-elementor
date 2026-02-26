@@ -6,7 +6,7 @@ Elementor page builder integration for WordPress via MCP.
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 
 **Tested up to:** 6.9
-**Stable tag:** 2.2.3
+**Stable tag:** 2.2.4
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -212,6 +212,14 @@ This add-on plugin exposes Elementor functionality through MCP (Model Context Pr
 ```
 
 ## Changelog
+
+### 2.2.4
+- Fixed: duplicate `clean_post_cache()` calls on write cache invalidation paths
+- Added: no-op short-circuit for `elementor/update-data` and `elementor/update-element` (skips writes/cache invalidation when no effective change is produced)
+- Improved: `effective_scope` now reflects actual cache invalidation outcome
+- Improved: centralized Elementor site cache clear logic in a shared helper
+- Fixed: `elementor/clear-cache` description to match behavior (post scope does not touch post timestamps)
+- Changed: write abilities (`update-data`, `patch-data`, `update-element`) are now marked non-idempotent in metadata
 
 ### 2.2.3
 - Added: `cache_scope` (`none` / `post` / `site`) to `elementor/update-data`, `elementor/patch-data`, and `elementor/update-element`

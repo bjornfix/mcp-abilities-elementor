@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.2.3
+ * Version: 2.2.4
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -64,7 +64,7 @@ function mcp_abilities_elementor_normalize_cache_scope( $raw, string $default = 
 }
 
 /**
- * Touch a post to refresh modified timestamps and invalidate core post caches.
+ * Touch a post to refresh modified timestamps.
  *
  * @param int $post_id Post ID.
  * @return bool True if wp_update_post succeeded.
@@ -83,9 +83,63 @@ function mcp_abilities_elementor_touch_post( int $post_id ): bool {
 		true
 	);
 
-	clean_post_cache( $post_id );
-
 	return ! is_wp_error( $result );
+}
+
+/**
+ * Clear Elementor site-wide cache via Elementor's files manager.
+ *
+ * @return array
+ */
+function mcp_abilities_elementor_clear_site_cache(): array {
+	$details = array(
+		'elementor_cache_cleared' => false,
+		'warnings'                => array(),
+	);
+
+	if ( ! class_exists( '\Elementor\Plugin' ) ) {
+		$details['warnings'][] = 'Elementor plugin not loaded';
+		return $details;
+	}
+
+	try {
+		$elementor_instance = \Elementor\Plugin::$instance ?? null;
+		if ( ! is_object( $elementor_instance ) ) {
+			$details['warnings'][] = 'Elementor instance not available';
+			return $details;
+		}
+
+		if ( isset( $elementor_instance->files_manager ) && is_object( $elementor_instance->files_manager ) ) {
+			$elementor_instance->files_manager->clear_cache();
+			$details['elementor_cache_cleared'] = true;
+		} else {
+			$details['warnings'][] = 'Elementor files_manager not available';
+		}
+	} catch ( \Throwable $e ) {
+		$details['warnings'][] = 'Elementor cache clear failed: ' . $e->getMessage();
+	}
+
+	return $details;
+}
+
+/**
+ * Build a cache details response for no-op write paths.
+ *
+ * @param string $requested_scope Requested cache scope by caller.
+ * @return array
+ */
+function mcp_abilities_elementor_build_noop_cache_details( string $requested_scope = 'post' ): array {
+	return array(
+		'requested_scope'          => mcp_abilities_elementor_normalize_cache_scope( $requested_scope, 'post' ),
+		'effective_scope'          => 'none',
+		'post_id'                  => 0,
+		'post_meta_css_deleted'    => false,
+		'post_meta_assets_deleted' => false,
+		'post_cache_cleaned'       => false,
+		'post_touched'             => false,
+		'elementor_cache_cleared'  => false,
+		'warnings'                 => array(),
+	);
 }
 
 /**
@@ -100,15 +154,15 @@ function mcp_abilities_elementor_invalidate_after_write( int $post_id, string $c
 	$cache_scope = mcp_abilities_elementor_normalize_cache_scope( $cache_scope, 'post' );
 
 	$details = array(
-		'requested_scope'        => $cache_scope,
-		'effective_scope'        => $cache_scope,
-		'post_id'                => $post_id,
-		'post_meta_css_deleted'  => false,
+		'requested_scope'          => $cache_scope,
+		'effective_scope'          => 'none',
+		'post_id'                  => $post_id,
+		'post_meta_css_deleted'    => false,
 		'post_meta_assets_deleted' => false,
-		'post_cache_cleaned'     => false,
-		'post_touched'           => false,
+		'post_cache_cleaned'       => false,
+		'post_touched'             => false,
 		'elementor_cache_cleared' => false,
-		'warnings'               => array(),
+		'warnings'                 => array(),
 	);
 
 	if ( 'none' === $cache_scope ) {
@@ -120,27 +174,23 @@ function mcp_abilities_elementor_invalidate_after_write( int $post_id, string $c
 	$details['post_meta_css_deleted'] = (bool) $css_deleted;
 	$details['post_meta_assets_deleted'] = (bool) $assets_deleted;
 
-	clean_post_cache( $post_id );
-	$details['post_cache_cleaned'] = true;
-	$details['post_touched']       = $touch_post ? mcp_abilities_elementor_touch_post( $post_id ) : false;
-
-	if ( ! class_exists( '\Elementor\Plugin' ) ) {
-		if ( 'site' === $cache_scope ) {
-			$details['warnings'][] = 'Elementor plugin not loaded; site-wide Elementor cache clear skipped';
-		}
-		return $details;
+	if ( $touch_post ) {
+		$details['post_touched'] = mcp_abilities_elementor_touch_post( $post_id );
+		clean_post_cache( $post_id );
+	} else {
+		clean_post_cache( $post_id );
 	}
+	$details['post_cache_cleaned'] = true;
+	$details['effective_scope']    = 'post';
 
 	if ( 'site' === $cache_scope ) {
-		try {
-			if ( isset( \Elementor\Plugin::$instance->files_manager ) && is_object( \Elementor\Plugin::$instance->files_manager ) ) {
-				\Elementor\Plugin::$instance->files_manager->clear_cache();
-				$details['elementor_cache_cleared'] = true;
-			} else {
-				$details['warnings'][] = 'Elementor files_manager not available';
-			}
-		} catch ( \Throwable $e ) {
-			$details['warnings'][] = 'Elementor cache clear failed: ' . $e->getMessage();
+		$site_cache_details = mcp_abilities_elementor_clear_site_cache();
+		$details['elementor_cache_cleared'] = ! empty( $site_cache_details['elementor_cache_cleared'] );
+		if ( ! empty( $site_cache_details['warnings'] ) && is_array( $site_cache_details['warnings'] ) ) {
+			$details['warnings'] = array_merge( $details['warnings'], $site_cache_details['warnings'] );
+		}
+		if ( $details['elementor_cache_cleared'] ) {
+			$details['effective_scope'] = 'site';
 		}
 	}
 
@@ -428,6 +478,7 @@ function mcp_abilities_elementor_register_abilities(): void {
 					'id'      => array( 'type' => 'integer' ),
 					'message' => array( 'type' => 'string' ),
 					'link'    => array( 'type' => 'string' ),
+					'unchanged' => array( 'type' => 'boolean' ),
 					'cache'   => array( 'type' => 'object' ),
 				),
 			),
@@ -456,6 +507,22 @@ function mcp_abilities_elementor_register_abilities(): void {
 					return array( 'success' => false, 'message' => 'Failed to encode data to JSON' );
 				}
 
+				$existing_data = get_post_meta( $input['id'], '_elementor_data', true );
+				$edit_mode     = get_post_meta( $input['id'], '_elementor_edit_mode', true );
+				$requested_cache_scope = mcp_abilities_elementor_normalize_cache_scope( $input['cache_scope'] ?? 'post', 'post' );
+				if ( is_string( $existing_data ) && $existing_data === $json_data && 'builder' === $edit_mode ) {
+					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
+					$cache_details['post_id'] = (int) $input['id'];
+					return array(
+						'success'   => true,
+						'id'        => $input['id'],
+						'message'   => 'Elementor data unchanged - no write performed',
+						'link'      => get_permalink( $input['id'] ),
+						'unchanged' => true,
+						'cache'     => $cache_details,
+					);
+				}
+
 				// Update Elementor data.
 				update_post_meta( $input['id'], '_elementor_data', wp_slash( $json_data ) );
 
@@ -464,26 +531,27 @@ function mcp_abilities_elementor_register_abilities(): void {
 
 				$cache_details = mcp_abilities_elementor_invalidate_after_write(
 					(int) $input['id'],
-					mcp_abilities_elementor_normalize_cache_scope( $input['cache_scope'] ?? 'post', 'post' )
+					$requested_cache_scope
 				);
 
 				return array(
-					'success' => true,
-					'id'      => $input['id'],
-					'message' => 'Elementor data updated successfully',
-					'link'    => get_permalink( $input['id'] ),
-					'cache'   => $cache_details,
+					'success'   => true,
+					'id'        => $input['id'],
+					'message'   => 'Elementor data updated successfully',
+					'link'      => get_permalink( $input['id'] ),
+					'unchanged' => false,
+					'cache'     => $cache_details,
 				);
 			},
 			'permission_callback' => function (): bool {
 				return current_user_can( 'edit_posts' );
 			},
 			'meta'                => array(
-				'annotations' => array(
-					'readonly'    => false,
-					'destructive' => false,
-					'idempotent'  => true,
-				),
+					'annotations' => array(
+						'readonly'    => false,
+						'destructive' => false,
+						'idempotent'  => false,
+					),
 			),
 		)
 	);
@@ -580,12 +648,16 @@ function mcp_abilities_elementor_register_abilities(): void {
 				}
 
 				if ( 0 === $count ) {
+					$requested_cache_scope = mcp_abilities_elementor_normalize_cache_scope( $input['cache_scope'] ?? 'post', 'post' );
+					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
+					$cache_details['post_id'] = (int) $input['id'];
 					return array(
 						'success'      => true,
 						'id'           => $input['id'],
 						'replacements' => 0,
 						'message'      => 'No matches found - Elementor data unchanged',
 						'link'         => get_permalink( $input['id'] ),
+						'cache'        => $cache_details,
 					);
 				}
 
@@ -616,11 +688,11 @@ function mcp_abilities_elementor_register_abilities(): void {
 				return current_user_can( 'edit_posts' );
 			},
 			'meta'                => array(
-				'annotations' => array(
-					'readonly'    => false,
-					'destructive' => false,
-					'idempotent'  => true,
-				),
+					'annotations' => array(
+						'readonly'    => false,
+						'destructive' => false,
+						'idempotent'  => false,
+					),
 			),
 		)
 	);
@@ -667,6 +739,7 @@ function mcp_abilities_elementor_register_abilities(): void {
 					'element_id' => array( 'type' => 'string' ),
 					'message'    => array( 'type' => 'string' ),
 					'link'       => array( 'type' => 'string' ),
+					'unchanged'  => array( 'type' => 'boolean' ),
 					'cache'      => array( 'type' => 'object' ),
 				),
 			),
@@ -737,11 +810,26 @@ function mcp_abilities_elementor_register_abilities(): void {
 					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
 				}
 
+				$requested_cache_scope = mcp_abilities_elementor_normalize_cache_scope( $input['cache_scope'] ?? 'post', 'post' );
+				if ( is_string( $elementor_data ) && $elementor_data === $json_data ) {
+					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
+					$cache_details['post_id'] = (int) $input['id'];
+					return array(
+						'success'    => true,
+						'id'         => $input['id'],
+						'element_id' => $input['element_id'],
+						'message'    => 'Element update produced no change - no write performed',
+						'link'       => get_permalink( $input['id'] ),
+						'unchanged'  => true,
+						'cache'      => $cache_details,
+					);
+				}
+
 				update_post_meta( $input['id'], '_elementor_data', wp_slash( $json_data ) );
 
 				$cache_details = mcp_abilities_elementor_invalidate_after_write(
 					(int) $input['id'],
-					mcp_abilities_elementor_normalize_cache_scope( $input['cache_scope'] ?? 'post', 'post' )
+					$requested_cache_scope
 				);
 
 				return array(
@@ -750,6 +838,7 @@ function mcp_abilities_elementor_register_abilities(): void {
 					'element_id' => $input['element_id'],
 					'message'    => 'Element "' . $input['element_id'] . '" updated successfully',
 					'link'       => get_permalink( $input['id'] ),
+					'unchanged'  => false,
 					'cache'      => $cache_details,
 				);
 			},
@@ -757,11 +846,11 @@ function mcp_abilities_elementor_register_abilities(): void {
 				return current_user_can( 'edit_posts' );
 			},
 			'meta'                => array(
-				'annotations' => array(
-					'readonly'    => false,
-					'destructive' => false,
-					'idempotent'  => true,
-				),
+					'annotations' => array(
+						'readonly'    => false,
+						'destructive' => false,
+						'idempotent'  => false,
+					),
 			),
 		)
 	);
@@ -1252,7 +1341,7 @@ function mcp_abilities_elementor_register_abilities(): void {
 		'elementor/clear-cache',
 		array(
 			'label'               => 'Clear Elementor Cache',
-			'description'         => 'Clears Elementor cache for a specific post or the entire site. Post scope clears post-level caches/meta and touches the post; site scope also clears Elementor site-wide cache files.',
+			'description'         => 'Clears Elementor cache for a specific post or the entire site. Post scope clears post-level caches/meta without changing post modified timestamps; site scope also clears Elementor site-wide cache files.',
 			'category'            => 'site',
 			'input_schema'        => array(
 				'type'                 => 'object',
@@ -1291,35 +1380,17 @@ function mcp_abilities_elementor_register_abilities(): void {
 				}
 
 				if ( 'site' === $scope ) {
+					$site_cache_result = mcp_abilities_elementor_clear_site_cache();
 					$cache_details = array(
 						'requested_scope'         => 'site',
-						'effective_scope'         => 'site',
-						'elementor_cache_cleared' => false,
-						'warnings'                => array(),
+						'effective_scope'         => ! empty( $site_cache_result['elementor_cache_cleared'] ) ? 'site' : 'none',
+						'elementor_cache_cleared' => ! empty( $site_cache_result['elementor_cache_cleared'] ),
+						'warnings'                => ! empty( $site_cache_result['warnings'] ) && is_array( $site_cache_result['warnings'] ) ? $site_cache_result['warnings'] : array(),
 					);
 
-					if ( class_exists( '\Elementor\Plugin' ) ) {
-						try {
-							if ( isset( \Elementor\Plugin::$instance->files_manager ) && is_object( \Elementor\Plugin::$instance->files_manager ) ) {
-								\Elementor\Plugin::$instance->files_manager->clear_cache();
-								$cache_details['elementor_cache_cleared'] = true;
-							} else {
-								$cache_details['warnings'][] = 'Elementor files_manager not available';
-							}
-						} catch ( \Throwable $e ) {
-							$cache_details['warnings'][] = 'Elementor cache clear failed: ' . $e->getMessage();
-						}
-
-						return array(
-							'success' => true,
-							'message' => 'All Elementor cache cleared',
-							'cache'   => $cache_details,
-						);
-					}
-
 					return array(
-						'success' => false,
-						'message' => 'Elementor plugin not loaded. Cannot clear cache.',
+						'success' => ! empty( $site_cache_result['elementor_cache_cleared'] ),
+						'message' => ! empty( $site_cache_result['elementor_cache_cleared'] ) ? 'All Elementor cache cleared' : 'Failed to clear Elementor site cache',
 						'cache'   => $cache_details,
 					);
 				}
@@ -1349,13 +1420,13 @@ function mcp_abilities_elementor_register_abilities(): void {
 				return current_user_can( 'edit_posts' );
 			},
 			'meta'                => array(
-				'annotations' => array(
-					'readonly'    => false,
-					'destructive' => false,
-					'idempotent'  => true,
+					'annotations' => array(
+						'readonly'    => false,
+						'destructive' => false,
+						'idempotent'  => false,
+					),
 				),
-			),
-		)
+			)
 	);
 
 	// =========================================================================
@@ -1874,13 +1945,13 @@ function mcp_abilities_elementor_register_abilities(): void {
 				return current_user_can( 'edit_posts' );
 			},
 			'meta'                => array(
-				'annotations' => array(
-					'readonly'    => false,
-					'destructive' => false,
-					'idempotent'  => true,
+					'annotations' => array(
+						'readonly'    => false,
+						'destructive' => false,
+						'idempotent'  => false,
+					),
 				),
-			),
-		)
+			)
 	);
 
 	// =========================================================================
@@ -2251,13 +2322,13 @@ function mcp_abilities_elementor_register_abilities(): void {
 				return current_user_can( 'edit_posts' );
 			},
 			'meta'                => array(
-				'annotations' => array(
-					'readonly'    => false,
-					'destructive' => false,
-					'idempotent'  => true,
+					'annotations' => array(
+						'readonly'    => false,
+						'destructive' => false,
+						'idempotent'  => false,
+					),
 				),
-			),
-		)
+			)
 	);
 
 	// =========================================================================
@@ -3942,10 +4013,8 @@ function mcp_abilities_elementor_register_abilities(): void {
 
 				update_post_meta( $kit_id, '_elementor_page_settings', $final );
 
-				// Clear all Elementor CSS cache since kit affects entire site.
-				if ( class_exists( '\Elementor\Plugin' ) ) {
-					\Elementor\Plugin::$instance->files_manager->clear_cache();
-				}
+					// Clear all Elementor CSS cache since kit affects entire site.
+					mcp_abilities_elementor_clear_site_cache();
 
 				return array(
 					'success'  => true,
@@ -4008,9 +4077,7 @@ function mcp_abilities_elementor_register_abilities(): void {
 
 				update_option( 'elementor_active_kit', $kit_id );
 
-				if ( class_exists( '\\Elementor\\Plugin' ) ) {
-					\Elementor\Plugin::$instance->files_manager->clear_cache();
-				}
+					mcp_abilities_elementor_clear_site_cache();
 
 				return array(
 					'success' => true,
@@ -4427,9 +4494,7 @@ function mcp_abilities_elementor_register_abilities(): void {
 					$effective_state = $state;
 				}
 
-				if ( class_exists( '\Elementor\Plugin' ) ) {
-					\Elementor\Plugin::$instance->files_manager->clear_cache();
-				}
+					mcp_abilities_elementor_clear_site_cache();
 
 				return array(
 					'success'         => true,
@@ -4527,11 +4592,11 @@ function mcp_abilities_elementor_register_abilities(): void {
 				// Clear Elementor CSS cache.
 				delete_post_meta( $input['id'], '_elementor_css' );
 
-				// If this is a kit, clear all site CSS.
-				$active_kit = get_option( 'elementor_active_kit' );
-				if ( (int) $active_kit === (int) $input['id'] && class_exists( '\Elementor\Plugin' ) ) {
-					\Elementor\Plugin::$instance->files_manager->clear_cache();
-				}
+					// If this is a kit, clear all site CSS.
+					$active_kit = get_option( 'elementor_active_kit' );
+					if ( (int) $active_kit === (int) $input['id'] ) {
+						mcp_abilities_elementor_clear_site_cache();
+					}
 
 				return array(
 					'success'  => true,

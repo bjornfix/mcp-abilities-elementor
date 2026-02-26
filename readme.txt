@@ -3,7 +3,7 @@ Contributors: devenia
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 6.9
-Stable tag: 2.2.3
+Stable tag: 2.2.4
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -24,6 +24,14 @@ Part of the MCP Expose Abilities ecosystem.
 4. Activate the plugin
 
 == Changelog ==
+
+= 2.2.4 =
+* Fixed: duplicate `clean_post_cache()` calls on write cache invalidation paths
+* Added: no-op short-circuit for `elementor/update-data` and `elementor/update-element` (skips writes/cache invalidation when output is unchanged)
+* Improved: `effective_scope` now reflects actual cache invalidation outcome (`site` falls back to `post`/`none` when applicable)
+* Improved: centralized Elementor site cache clear logic in a shared helper to reduce duplication
+* Fixed: `elementor/clear-cache` description to match behavior (post scope does not touch post timestamps)
+* Changed: marked write abilities (`update-data`, `patch-data`, `update-element`) as non-idempotent in metadata
 
 = 2.2.3 =
 * Added: `cache_scope` (`none|post|site`) to `elementor/update-data`, `elementor/patch-data`, and `elementor/update-element`
