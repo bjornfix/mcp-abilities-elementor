@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.2.4
+ * Version: 2.2.5
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -851,6 +851,163 @@ function mcp_abilities_elementor_register_abilities(): void {
 						'destructive' => false,
 						'idempotent'  => false,
 					),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Get Element
+	// =========================================================================
+	wp_register_ability(
+		'elementor/delete-element',
+		array(
+			'label'               => 'Delete Elementor Element',
+			'description'         => 'Deletes a specific Elementor element (container or widget) by ID from a page/template. Supports cache_scope (`post` default, `site` for stronger invalidation, `none` for debugging).',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id', 'element_id' ),
+				'properties'           => array(
+					'id'         => array(
+						'type'        => 'integer',
+						'description' => 'Post/Page ID containing the element.',
+					),
+					'element_id' => array(
+						'type'        => 'string',
+						'description' => 'Element ID to delete.',
+					),
+					'cache_scope' => array(
+						'type'        => 'string',
+						'enum'        => array( 'none', 'post', 'site' ),
+						'default'     => 'post',
+						'description' => 'Cache invalidation scope after write. `post` clears post-level caches and touches the post; `site` also clears Elementor site-wide cache; `none` skips cache invalidation.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'    => array( 'type' => 'boolean' ),
+					'id'         => array( 'type' => 'integer' ),
+					'element_id' => array( 'type' => 'string' ),
+					'message'    => array( 'type' => 'string' ),
+					'link'       => array( 'type' => 'string' ),
+					'deleted'    => array( 'type' => 'boolean' ),
+					'cache'      => array( 'type' => 'object' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input = is_array( $input ) ? $input : array();
+
+				if ( empty( $input['id'] ) ) {
+					return array( 'success' => false, 'message' => 'Post/Page ID is required' );
+				}
+				if ( empty( $input['element_id'] ) ) {
+					return array( 'success' => false, 'message' => 'Element ID is required' );
+				}
+
+				$post = get_post( $input['id'] );
+				if ( ! $post ) {
+					return array( 'success' => false, 'message' => 'Post not found' );
+				}
+
+				if ( ! current_user_can( 'edit_post', $post->ID ) ) {
+					return array( 'success' => false, 'message' => 'You do not have permission to update this post' );
+				}
+
+				$elementor_data = get_post_meta( $input['id'], '_elementor_data', true );
+				if ( empty( $elementor_data ) ) {
+					return array( 'success' => false, 'message' => 'No Elementor data found for this post' );
+				}
+
+				$data = json_decode( $elementor_data, true );
+				if ( null === $data && JSON_ERROR_NONE !== json_last_error() ) {
+					return array( 'success' => false, 'message' => 'Failed to parse existing Elementor data' );
+				}
+
+				$deleted = false;
+				$delete_element = function ( &$elements, string $target_id ) use ( &$delete_element, &$deleted ): bool {
+					if ( ! is_array( $elements ) ) {
+						return false;
+					}
+
+					foreach ( $elements as $index => &$element ) {
+						if ( isset( $element['id'] ) && $element['id'] === $target_id ) {
+							unset( $elements[ $index ] );
+							$elements = array_values( $elements );
+							$deleted  = true;
+							return true;
+						}
+
+						if ( ! empty( $element['elements'] ) && is_array( $element['elements'] ) ) {
+							if ( $delete_element( $element['elements'], $target_id ) ) {
+								return true;
+							}
+						}
+					}
+
+					return false;
+				};
+
+				$delete_element( $data, (string) $input['element_id'] );
+
+				if ( ! $deleted ) {
+					return array(
+						'success'    => false,
+						'id'         => (int) $input['id'],
+						'element_id' => (string) $input['element_id'],
+						'deleted'    => false,
+						'message'    => 'Element with ID "' . $input['element_id'] . '" not found in page structure',
+					);
+				}
+
+				$json_data = wp_json_encode( $data );
+				if ( false === $json_data ) {
+					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
+				}
+
+				$requested_cache_scope = mcp_abilities_elementor_normalize_cache_scope( $input['cache_scope'] ?? 'post', 'post' );
+				if ( is_string( $elementor_data ) && $elementor_data === $json_data ) {
+					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
+					$cache_details['post_id'] = (int) $input['id'];
+					return array(
+						'success'    => true,
+						'id'         => (int) $input['id'],
+						'element_id' => (string) $input['element_id'],
+						'message'    => 'Element deletion produced no change - no write performed',
+						'link'       => get_permalink( $input['id'] ),
+						'deleted'    => false,
+						'cache'      => $cache_details,
+					);
+				}
+
+				update_post_meta( $input['id'], '_elementor_data', wp_slash( $json_data ) );
+
+				$cache_details = mcp_abilities_elementor_invalidate_after_write(
+					(int) $input['id'],
+					$requested_cache_scope
+				);
+
+				return array(
+					'success'    => true,
+					'id'         => (int) $input['id'],
+					'element_id' => (string) $input['element_id'],
+					'message'    => 'Element "' . $input['element_id'] . '" deleted successfully',
+					'link'       => get_permalink( $input['id'] ),
+					'deleted'    => true,
+					'cache'      => $cache_details,
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => false,
+					'idempotent'  => false,
+				),
 			),
 		)
 	);

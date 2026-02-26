@@ -6,7 +6,7 @@ Elementor page builder integration for WordPress via MCP.
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 
 **Tested up to:** 6.9
-**Stable tag:** 2.2.4
+**Stable tag:** 2.2.5
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -31,7 +31,7 @@ This add-on plugin exposes Elementor functionality through MCP (Model Context Pr
 3. Upload via WordPress Admin > Plugins > Add New > Upload Plugin
 4. Activate the plugin
 
-## Abilities (38)
+## Abilities (39)
 
 ### Page/Post Data
 | Ability | Description |
@@ -40,6 +40,7 @@ This add-on plugin exposes Elementor functionality through MCP (Model Context Pr
 | `elementor/get-element` | Get a specific element by ID |
 | `elementor/find-elements` | Find elements by type, widget, or text |
 | `elementor/update-element` | Update a specific element by ID |
+| `elementor/delete-element` | Delete a specific element by ID |
 | `elementor/update-data` | Replace entire Elementor JSON for a page |
 | `elementor/patch-data` | Find/replace text within Elementor JSON |
 | `elementor/update-page-settings` | Update Elementor page settings |
@@ -212,6 +213,10 @@ This add-on plugin exposes Elementor functionality through MCP (Model Context Pr
 ```
 
 ## Changelog
+
+### 2.2.5
+- Added: `elementor/delete-element` for targeted deletion of widgets/containers by element ID
+- Added: `cache_scope` support and cache details in `elementor/delete-element` responses
 
 ### 2.2.4
 - Fixed: duplicate `clean_post_cache()` calls on write cache invalidation paths

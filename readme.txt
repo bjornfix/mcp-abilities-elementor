@@ -3,7 +3,7 @@ Contributors: devenia
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 6.9
-Stable tag: 2.2.4
+Stable tag: 2.2.5
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -24,6 +24,10 @@ Part of the MCP Expose Abilities ecosystem.
 4. Activate the plugin
 
 == Changelog ==
+
+= 2.2.5 =
+* Added: `elementor/delete-element` ability for targeted deletion of Elementor widgets/containers by element ID
+* Added: `cache_scope` support and cache details response on `elementor/delete-element`
 
 = 2.2.4 =
 * Fixed: duplicate `clean_post_cache()` calls on write cache invalidation paths
