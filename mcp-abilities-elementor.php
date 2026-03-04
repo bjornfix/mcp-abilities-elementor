@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.2.5
+ * Version: 2.2.6
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -61,6 +61,90 @@ function mcp_abilities_elementor_normalize_cache_scope( $raw, string $default = 
 	}
 
 	return $default;
+}
+
+/**
+ * Get Elementor raw data meta normalized as a JSON string.
+ *
+ * Older/broken writes can leave the meta in unexpected shapes. This helper
+ * normalizes the value so read abilities can remain schema-safe.
+ *
+ * @param int $post_id Post ID.
+ * @return string
+ */
+function mcp_abilities_elementor_get_raw_data_meta( int $post_id ): string {
+	$value = get_post_meta( $post_id, '_elementor_data', true );
+
+	if ( is_string( $value ) ) {
+		return $value;
+	}
+
+	if ( is_array( $value ) ) {
+		$json = wp_json_encode( $value );
+		return is_string( $json ) ? $json : '';
+	}
+
+	return '';
+}
+
+/**
+ * Decode Elementor JSON into a schema-safe array.
+ *
+ * @param mixed       $raw Raw Elementor data value.
+ * @param string|null $error Optional decode error output.
+ * @return array
+ */
+function mcp_abilities_elementor_decode_data_meta( $raw, ?string &$error = null ): array {
+	$error = null;
+
+	if ( is_array( $raw ) ) {
+		return $raw;
+	}
+
+	if ( ! is_string( $raw ) || '' === $raw ) {
+		return array();
+	}
+
+	$decoded = json_decode( $raw, true );
+	if ( JSON_ERROR_NONE !== json_last_error() ) {
+		$error = json_last_error_msg();
+		return array();
+	}
+
+	return is_array( $decoded ) ? $decoded : array();
+}
+
+/**
+ * Prepare Elementor template meta for safe duplication.
+ *
+ * JSON-backed meta values must be slashed before saving through post meta APIs
+ * or WordPress will strip escape characters and corrupt the JSON payload.
+ *
+ * @param string $meta_key Meta key.
+ * @param mixed  $value Raw meta value from the original template.
+ * @return mixed
+ */
+function mcp_abilities_elementor_prepare_duplicated_meta_value( string $meta_key, $value ) {
+	$json_meta_keys = array(
+		'_elementor_data',
+		'_elementor_page_settings',
+		'_elementor_popup_display_settings',
+		'_elementor_conditions',
+	);
+
+	if ( ! in_array( $meta_key, $json_meta_keys, true ) ) {
+		return $value;
+	}
+
+	if ( is_array( $value ) ) {
+		return wp_slash( wp_json_encode( $value ) );
+	}
+
+	if ( is_string( $value ) ) {
+		return wp_slash( $value );
+	}
+
+	return $value;
 }
 
 /**
@@ -402,7 +486,7 @@ function mcp_abilities_elementor_register_abilities(): void {
 					return array( 'success' => false, 'message' => 'You do not have permission to access this post' );
 				}
 
-				$elementor_data = get_post_meta( $input['id'], '_elementor_data', true );
+				$elementor_data = mcp_abilities_elementor_get_raw_data_meta( (int) $input['id'] );
 				$edit_mode      = get_post_meta( $input['id'], '_elementor_edit_mode', true );
 				$page_settings  = get_post_meta( $input['id'], '_elementor_page_settings', true );
 
@@ -416,7 +500,12 @@ function mcp_abilities_elementor_register_abilities(): void {
 				}
 
 				$format = $input['format'] ?? 'array';
-				$data   = ( 'json' === $format ) ? $elementor_data : json_decode( $elementor_data, true );
+				$decode_error = null;
+				$data         = ( 'json' === $format ) ? $elementor_data : mcp_abilities_elementor_decode_data_meta( $elementor_data, $decode_error );
+				$message      = 'Elementor data retrieved successfully';
+				if ( null !== $decode_error ) {
+					$message .= ' (data was invalid JSON and was normalized to an empty array)';
+				}
 
 				return array(
 					'success'       => true,
@@ -425,7 +514,7 @@ function mcp_abilities_elementor_register_abilities(): void {
 					'edit_mode'     => $edit_mode ?: 'not set',
 					'data'          => $data,
 					'page_settings' => $page_settings ?: array(),
-					'message'       => 'Elementor data retrieved successfully',
+					'message'       => $message,
 				);
 			},
 			'permission_callback' => function (): bool {
@@ -2271,10 +2360,16 @@ function mcp_abilities_elementor_register_abilities(): void {
 
 				$template_type  = get_post_meta( $post->ID, '_elementor_template_type', true );
 				$template_sub_type = get_post_meta( $post->ID, '_elementor_template_sub_type', true );
-				$elementor_data = get_post_meta( $post->ID, '_elementor_data', true );
+				$elementor_data = mcp_abilities_elementor_get_raw_data_meta( $post->ID );
 				$page_settings  = get_post_meta( $post->ID, '_elementor_page_settings', true );
 				$conditions     = get_post_meta( $post->ID, '_elementor_conditions', true );
 				$popup_settings = get_post_meta( $post->ID, '_elementor_popup_display_settings', true );
+				$decode_error   = null;
+				$data           = mcp_abilities_elementor_decode_data_meta( $elementor_data, $decode_error );
+				$message        = 'Template retrieved successfully';
+				if ( null !== $decode_error ) {
+					$message .= ' (template data was invalid JSON and was normalized to an empty array)';
+				}
 
 				return array(
 					'success'        => true,
@@ -2283,13 +2378,13 @@ function mcp_abilities_elementor_register_abilities(): void {
 					'type'           => $template_type ?: 'unknown',
 					'sub_type'       => $template_sub_type ?: '',
 					'status'         => $post->post_status,
-					'data'           => $elementor_data ? json_decode( $elementor_data, true ) : array(),
+					'data'           => $data,
 					'page_settings'  => $page_settings ?: array(),
 					'conditions'     => $conditions ?: array(),
 					'popup_settings' => $popup_settings ?: array(),
 					'link'           => get_permalink( $post->ID ),
 					'edit'           => admin_url( 'post.php?post=' . $post->ID . '&action=elementor' ),
-					'message'        => 'Template retrieved successfully',
+					'message'        => $message,
 				);
 			},
 			'permission_callback' => function (): bool {
@@ -2737,16 +2832,18 @@ function mcp_abilities_elementor_register_abilities(): void {
 				// Copy all meta.
 				$meta_keys = array(
 					'_elementor_template_type',
+					'_elementor_template_sub_type',
 					'_elementor_edit_mode',
 					'_elementor_data',
 					'_elementor_page_settings',
+					'_elementor_conditions',
 					'_elementor_popup_display_settings',
 				);
 
 				foreach ( $meta_keys as $key ) {
 					$value = get_post_meta( $original->ID, $key, true );
-					if ( $value ) {
-						update_post_meta( $new_post_id, $key, $value );
+					if ( '' !== $value && array() !== $value ) {
+						update_post_meta( $new_post_id, $key, mcp_abilities_elementor_prepare_duplicated_meta_value( $key, $value ) );
 					}
 				}
 
@@ -2833,14 +2930,15 @@ function mcp_abilities_elementor_register_abilities(): void {
 				}
 
 				$template_type  = get_post_meta( $post->ID, '_elementor_template_type', true );
-				$elementor_data = get_post_meta( $post->ID, '_elementor_data', true );
+				$elementor_data = mcp_abilities_elementor_get_raw_data_meta( $post->ID );
 				$page_settings  = get_post_meta( $post->ID, '_elementor_page_settings', true );
+				$decode_error   = null;
 
 				$export_data = array(
 					'version'       => '1.0',
 					'title'         => $post->post_title,
 					'type'          => $template_type ?: 'page',
-					'content'       => $elementor_data ? json_decode( $elementor_data, true ) : array(),
+					'content'       => mcp_abilities_elementor_decode_data_meta( $elementor_data, $decode_error ),
 					'page_settings' => $page_settings ?: array(),
 				);
 
