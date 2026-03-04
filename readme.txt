@@ -3,7 +3,7 @@ Contributors: devenia
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 6.9
-Stable tag: 2.2.6
+Stable tag: 2.2.7
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -24,6 +24,9 @@ Part of the MCP Expose Abilities ecosystem.
 4. Activate the plugin
 
 == Changelog ==
+
+= 2.2.7 =
+* Added: `elementor/clone-data` to clone native Elementor data and page settings from an existing page/template into a target page
 
 = 2.2.6 =
 * Fixed: `elementor/duplicate-template` now preserves JSON-backed Elementor meta correctly when duplicating templates

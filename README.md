@@ -6,7 +6,7 @@ Elementor page builder integration for WordPress via MCP.
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 
 **Tested up to:** 6.9
-**Stable tag:** 2.2.6
+**Stable tag:** 2.2.7
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -213,6 +213,9 @@ This add-on plugin exposes Elementor functionality through MCP (Model Context Pr
 ```
 
 ## Changelog
+
+### 2.2.7
+- Added: `elementor/clone-data` to clone native Elementor data and page settings from an existing page/template into a target page
 
 ### 2.2.6
 - Fixed: `elementor/duplicate-template` now preserves JSON-backed Elementor meta correctly when duplicating templates

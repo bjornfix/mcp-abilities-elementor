@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.2.6
+ * Version: 2.2.7
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -641,6 +641,161 @@ function mcp_abilities_elementor_register_abilities(): void {
 						'destructive' => false,
 						'idempotent'  => false,
 					),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Clone Data
+	// =========================================================================
+	wp_register_ability(
+		'elementor/clone-data',
+		array(
+			'label'               => 'Clone Elementor Data',
+			'description'         => 'Clones Elementor data and page settings from a source page/template/post to a target page/post. Useful for reusing native Elementor structures without exporting/importing manually. Supports cache_scope (`post` default, `site` for stronger invalidation, `none` for debugging).',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'source_id', 'target_id' ),
+				'properties'           => array(
+					'source_id' => array(
+						'type'        => 'integer',
+						'description' => 'Source post/page/template ID to clone Elementor data from.',
+					),
+					'target_id' => array(
+						'type'        => 'integer',
+						'description' => 'Target post/page ID to clone Elementor data to.',
+					),
+					'include_page_settings' => array(
+						'type'        => 'boolean',
+						'default'     => true,
+						'description' => 'Also copy Elementor page settings from source to target.',
+					),
+					'cache_scope' => array(
+						'type'        => 'string',
+						'enum'        => array( 'none', 'post', 'site' ),
+						'default'     => 'post',
+						'description' => 'Cache invalidation scope after write. `post` clears post-level caches and touches the post; `site` also clears Elementor site-wide cache; `none` skips cache invalidation.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'   => array( 'type' => 'boolean' ),
+					'source_id' => array( 'type' => 'integer' ),
+					'target_id' => array( 'type' => 'integer' ),
+					'message'   => array( 'type' => 'string' ),
+					'link'      => array( 'type' => 'string' ),
+					'unchanged' => array( 'type' => 'boolean' ),
+					'cache'     => array( 'type' => 'object' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input = is_array( $input ) ? $input : array();
+
+				if ( empty( $input['source_id'] ) || empty( $input['target_id'] ) ) {
+					return array( 'success' => false, 'message' => 'Source ID and target ID are required' );
+				}
+
+				$source = get_post( (int) $input['source_id'] );
+				$target = get_post( (int) $input['target_id'] );
+				if ( ! $source || ! $target ) {
+					return array( 'success' => false, 'message' => 'Source or target post not found' );
+				}
+
+				if ( ! current_user_can( 'edit_post', $source->ID ) || ! current_user_can( 'edit_post', $target->ID ) ) {
+					return array( 'success' => false, 'message' => 'You do not have permission to clone Elementor data between these posts' );
+				}
+
+				$source_data_raw = mcp_abilities_elementor_get_raw_data_meta( $source->ID );
+				if ( '' === $source_data_raw ) {
+					return array(
+						'success'   => false,
+						'source_id' => $source->ID,
+						'target_id' => $target->ID,
+						'message'   => 'No Elementor data found on source post',
+					);
+				}
+
+				$decode_error = null;
+				$source_data  = mcp_abilities_elementor_decode_data_meta( $source_data_raw, $decode_error );
+				if ( null !== $decode_error ) {
+					return array(
+						'success'   => false,
+						'source_id' => $source->ID,
+						'target_id' => $target->ID,
+						'message'   => 'Source Elementor data is invalid JSON: ' . $decode_error,
+					);
+				}
+
+				$json_data = wp_json_encode( $source_data );
+				if ( false === $json_data ) {
+					return array(
+						'success'   => false,
+						'source_id' => $source->ID,
+						'target_id' => $target->ID,
+						'message'   => 'Failed to encode source Elementor data to JSON',
+					);
+				}
+
+				$requested_cache_scope = mcp_abilities_elementor_normalize_cache_scope( $input['cache_scope'] ?? 'post', 'post' );
+				$existing_target_data  = mcp_abilities_elementor_get_raw_data_meta( $target->ID );
+				$include_page_settings = ! array_key_exists( 'include_page_settings', $input ) || ! empty( $input['include_page_settings'] );
+				$source_page_settings  = get_post_meta( $source->ID, '_elementor_page_settings', true );
+				$target_page_settings  = get_post_meta( $target->ID, '_elementor_page_settings', true );
+
+				$page_settings_match = true;
+				if ( $include_page_settings ) {
+					$page_settings_match = $source_page_settings == $target_page_settings;
+				}
+
+				if ( is_string( $existing_target_data ) && $existing_target_data === $json_data && $page_settings_match ) {
+					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
+					$cache_details['post_id'] = (int) $target->ID;
+					return array(
+						'success'   => true,
+						'source_id' => $source->ID,
+						'target_id' => $target->ID,
+						'message'   => 'Target already matches source Elementor data - no write performed',
+						'link'      => get_permalink( $target->ID ),
+						'unchanged' => true,
+						'cache'     => $cache_details,
+					);
+				}
+
+				update_post_meta( $target->ID, '_elementor_data', wp_slash( $json_data ) );
+				update_post_meta( $target->ID, '_elementor_edit_mode', 'builder' );
+
+				if ( $include_page_settings ) {
+					update_post_meta( $target->ID, '_elementor_page_settings', $source_page_settings ?: array() );
+				}
+
+				$cache_details = mcp_abilities_elementor_invalidate_after_write(
+					(int) $target->ID,
+					$requested_cache_scope
+				);
+
+				return array(
+					'success'   => true,
+					'source_id' => $source->ID,
+					'target_id' => $target->ID,
+					'message'   => 'Elementor data cloned successfully',
+					'link'      => get_permalink( $target->ID ),
+					'unchanged' => false,
+					'cache'     => $cache_details,
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => false,
+					'idempotent'  => false,
+				),
 			),
 		)
 	);
