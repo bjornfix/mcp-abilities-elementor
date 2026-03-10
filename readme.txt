@@ -3,7 +3,7 @@ Contributors: devenia
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 6.9
-Stable tag: 2.2.7
+Stable tag: 2.2.8
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -14,16 +14,50 @@ Elementor page builder integration for WordPress via MCP.
 
 This add-on plugin exposes Elementor functionality through MCP (Model Context Protocol). Your AI assistant can read Elementor page structures, locate and update elements, manage templates and conditions, and run Elementor tools like maintenance mode, experiments, and URL replacement.
 
-Part of the MCP Expose Abilities ecosystem.
+Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilities/) ecosystem.
+
+= Requirements =
+
+* [MCP Expose Abilities](https://github.com/bjornfix/mcp-expose-abilities) (core plugin)
+* [Elementor](https://wordpress.org/plugins/elementor/) plugin
+* Elementor Pro is optional for the Pro-specific abilities
+
+= Abilities Included =
+
+**Page/Post data** - Get, patch, update, delete, and clone Elementor JSON and page settings.
+
+**Templates** - List, create, update, duplicate, delete, export, and import Elementor templates.
+
+**Theme Builder** - Read and update Elementor theme-builder display conditions.
+
+**Custom code and forms** - Manage Elementor Pro custom code and form submissions when Pro is active.
+
+= Use Cases =
+
+* Update text or layout inside Elementor pages without opening the editor
+* Duplicate proven template setups across pages or sites
+* Audit template conditions and maintenance-mode settings
+* Export/import Elementor templates through MCP workflows
+* Clear Elementor cache safely after AI-assisted changes
 
 == Installation ==
 
-1. Install the required plugins (Abilities API, MCP Adapter, Elementor)
+1. Install the required plugins (Abilities API, MCP Adapter, MCP Expose Abilities, Elementor)
 2. Download the latest release
 3. Upload via WordPress Admin → Plugins → Add New → Upload Plugin
 4. Activate the plugin
+5. The abilities are now available via the MCP endpoint
+
+= Links =
+
+* [Plugin Page](https://devenia.com/plugins/mcp-expose-abilities/)
+* [Core Plugin (MCP Expose Abilities)](https://github.com/bjornfix/mcp-expose-abilities)
+* [All Add-on Plugins](https://devenia.com/plugins/mcp-expose-abilities/#add-ons)
 
 == Changelog ==
+
+= 2.2.8 =
+* Docs: expanded the WordPress-standard `readme.txt` so the published ZIP now includes fuller requirements, abilities, setup guidance, and Devenia ecosystem links
 
 = 2.2.7 =
 * Added: `elementor/clone-data` to clone native Elementor data and page settings from an existing page/template into a target page
