@@ -123,6 +123,9 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 - Maintenance mode uses Elementor templates; you must provide a template ID to enable it.
 - Experiments map to Elementor's experiments manager; reset to default clears the saved option.
 - Prefer `get-element`/`find-elements` + `update-element` for targeted edits, and use `update-data` only when replacing full JSON.
+- `elementor/update-element` is a full element replacement, not a deep merge. It now refuses shape-changing replacements by default (for example changing `elType`/`widgetType` or replacing a populated container with empty children) unless `force_replace=true`.
+- `elementor/update-data` now refuses obviously destructive full-document replacements by default (for example replacing a populated page with empty or drastically smaller top-level data) unless `force_replace=true`.
+- `elementor/delete-element` now refuses deleting top-level or populated elements by default unless `force_delete=true`.
 
 ## Usage Examples
 
@@ -235,6 +238,11 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 
 ### 2.2.8
 - Docs: expanded the WordPress-standard `readme.txt` so the published ZIP now includes fuller requirements, abilities, setup guidance, and Devenia ecosystem links
+
+### Unreleased
+- Added: guardrails to `elementor/update-element` so incomplete replacement payloads do not silently wipe populated Elementor containers/widgets unless `force_replace=true`
+- Added: guardrails to `elementor/update-data` so destructive full-document replacements require `force_replace=true`
+- Added: guardrails to `elementor/delete-element` so top-level/populated element deletions require `force_delete=true`
 
 ### 2.2.7
 - Added: `elementor/clone-data` to clone native Elementor data and page settings from an existing page/template into a target page

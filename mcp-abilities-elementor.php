@@ -551,6 +551,11 @@ function mcp_abilities_elementor_register_abilities(): void {
 						'type'        => 'array',
 						'description' => 'Elementor data array (will be JSON encoded).',
 					),
+					'force_replace' => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'Allow destructive full-document replacement when the new page structure is empty or drastically smaller than the current one.',
+					),
 					'cache_scope' => array(
 						'type'        => 'string',
 						'enum'        => array( 'none', 'post', 'site' ),
@@ -590,13 +595,32 @@ function mcp_abilities_elementor_register_abilities(): void {
 					return array( 'success' => false, 'message' => 'You do not have permission to update this post' );
 				}
 
+				$force_replace = ! empty( $input['force_replace'] );
+				$existing_data = get_post_meta( $input['id'], '_elementor_data', true );
+				$existing_tree = json_decode( $existing_data, true );
+				if ( null === $existing_tree && JSON_ERROR_NONE !== json_last_error() ) {
+					return array( 'success' => false, 'message' => 'Failed to parse existing Elementor data' );
+				}
+
+				if ( ! $force_replace ) {
+					$existing_top_level = is_array( $existing_tree ) ? count( $existing_tree ) : 0;
+					$new_top_level      = count( $input['data'] );
+
+					if ( $existing_top_level > 0 && 0 === $new_top_level ) {
+						return array( 'success' => false, 'message' => 'Refusing to replace populated Elementor document with empty data without force_replace=true' );
+					}
+
+					if ( $existing_top_level > 1 && $new_top_level < (int) ceil( $existing_top_level / 2 ) ) {
+						return array( 'success' => false, 'message' => 'Refusing to drastically shrink Elementor document structure without force_replace=true' );
+					}
+				}
+
 				// Encode data to JSON.
 				$json_data = wp_json_encode( $input['data'] );
 				if ( false === $json_data ) {
 					return array( 'success' => false, 'message' => 'Failed to encode data to JSON' );
 				}
 
-				$existing_data = get_post_meta( $input['id'], '_elementor_data', true );
 				$edit_mode     = get_post_meta( $input['id'], '_elementor_edit_mode', true );
 				$requested_cache_scope = mcp_abilities_elementor_normalize_cache_scope( $input['cache_scope'] ?? 'post', 'post' );
 				if ( is_string( $existing_data ) && $existing_data === $json_data && 'builder' === $edit_mode ) {
@@ -972,6 +996,11 @@ function mcp_abilities_elementor_register_abilities(): void {
 						'default'     => 'post',
 						'description' => 'Cache invalidation scope after write. `post` clears post-level caches and touches the post; `site` also clears Elementor site-wide cache; `none` skips cache invalidation.',
 					),
+					'force_replace' => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'Allow destructive full replacement when the new payload changes element shape (for example container/widget type changes or replacing a populated container with an empty one).',
+					),
 				),
 				'additionalProperties' => false,
 			),
@@ -999,6 +1028,15 @@ function mcp_abilities_elementor_register_abilities(): void {
 				if ( ! isset( $input['element_data'] ) || ! is_array( $input['element_data'] ) ) {
 					return array( 'success' => false, 'message' => 'Element data object is required' );
 				}
+				if ( empty( $input['element_data']['id'] ) || ! is_string( $input['element_data']['id'] ) ) {
+					return array( 'success' => false, 'message' => 'Element data must include a string "id"' );
+				}
+				if ( empty( $input['element_data']['elType'] ) || ! is_string( $input['element_data']['elType'] ) ) {
+					return array( 'success' => false, 'message' => 'Element data must include a string "elType"' );
+				}
+				if ( $input['element_data']['id'] !== $input['element_id'] ) {
+					return array( 'success' => false, 'message' => 'Element data "id" must match the target element_id' );
+				}
 
 				$post = get_post( $input['id'] );
 				if ( ! $post ) {
@@ -1017,6 +1055,75 @@ function mcp_abilities_elementor_register_abilities(): void {
 				$data = json_decode( $elementor_data, true );
 				if ( null === $data ) {
 					return array( 'success' => false, 'message' => 'Failed to parse existing Elementor data' );
+				}
+
+				$force_replace = ! empty( $input['force_replace'] );
+
+				// Recursive function to find an element by ID.
+				$original_element = null;
+				$find_element     = function ( $elements, $target_id ) use ( &$find_element, &$original_element ) {
+					if ( ! is_array( $elements ) ) {
+						return false;
+					}
+					foreach ( $elements as $element ) {
+						if ( isset( $element['id'] ) && $element['id'] === $target_id ) {
+							$original_element = $element;
+							return true;
+						}
+						if ( ! empty( $element['elements'] ) && is_array( $element['elements'] ) ) {
+							if ( $find_element( $element['elements'], $target_id ) ) {
+								return true;
+							}
+						}
+					}
+					return false;
+				};
+
+				$find_element( $data, $input['element_id'] );
+
+				if ( ! is_array( $original_element ) ) {
+					return array(
+						'success'    => false,
+						'id'         => $input['id'],
+						'element_id' => $input['element_id'],
+						'message'    => 'Element with ID "' . $input['element_id'] . '" not found in page structure',
+					);
+				}
+
+				if ( ! $force_replace ) {
+					if ( ( $original_element['elType'] ?? null ) !== $input['element_data']['elType'] ) {
+						return array(
+							'success'    => false,
+							'id'         => $input['id'],
+							'element_id' => $input['element_id'],
+							'message'    => 'Refusing to replace element with different elType without force_replace=true',
+						);
+					}
+
+					if ( 'widget' === ( $original_element['elType'] ?? null ) ) {
+						$original_widget_type = $original_element['widgetType'] ?? null;
+						$new_widget_type      = $input['element_data']['widgetType'] ?? null;
+						if ( empty( $new_widget_type ) || $original_widget_type !== $new_widget_type ) {
+							return array(
+								'success'    => false,
+								'id'         => $input['id'],
+								'element_id' => $input['element_id'],
+								'message'    => 'Refusing to replace widget with different or missing widgetType without force_replace=true',
+							);
+						}
+					}
+
+					$original_children = isset( $original_element['elements'] ) && is_array( $original_element['elements'] ) ? $original_element['elements'] : array();
+					$new_has_elements  = array_key_exists( 'elements', $input['element_data'] );
+					$new_children      = $new_has_elements && is_array( $input['element_data']['elements'] ) ? $input['element_data']['elements'] : null;
+					if ( ! empty( $original_children ) && ( ! $new_has_elements || ! is_array( $new_children ) || 0 === count( $new_children ) ) ) {
+						return array(
+							'success'    => false,
+							'id'         => $input['id'],
+							'element_id' => $input['element_id'],
+							'message'    => 'Refusing to replace populated container/element with empty or missing children without force_replace=true',
+						);
+					}
 				}
 
 				// Recursive function to find and replace element by ID.
@@ -1120,6 +1227,11 @@ function mcp_abilities_elementor_register_abilities(): void {
 						'type'        => 'string',
 						'description' => 'Element ID to delete.',
 					),
+					'force_delete' => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'Allow deletion of top-level elements or populated containers/widgets that would otherwise be blocked as a safety guard.',
+					),
 					'cache_scope' => array(
 						'type'        => 'string',
 						'enum'        => array( 'none', 'post', 'site' ),
@@ -1168,6 +1280,72 @@ function mcp_abilities_elementor_register_abilities(): void {
 				$data = json_decode( $elementor_data, true );
 				if ( null === $data && JSON_ERROR_NONE !== json_last_error() ) {
 					return array( 'success' => false, 'message' => 'Failed to parse existing Elementor data' );
+				}
+
+				$force_delete = ! empty( $input['force_delete'] );
+
+				$target_meta  = null;
+				$find_element = function ( $elements, string $target_id, int $depth = 0 ) use ( &$find_element, &$target_meta ): bool {
+					if ( ! is_array( $elements ) ) {
+						return false;
+					}
+
+					foreach ( $elements as $element ) {
+						if ( isset( $element['id'] ) && $element['id'] === $target_id ) {
+							$target_meta = array(
+								'element' => $element,
+								'depth'   => $depth,
+							);
+							return true;
+						}
+
+						if ( ! empty( $element['elements'] ) && is_array( $element['elements'] ) ) {
+							if ( $find_element( $element['elements'], $target_id, $depth + 1 ) ) {
+								return true;
+							}
+						}
+					}
+
+					return false;
+				};
+
+				$find_element( $data, (string) $input['element_id'] );
+
+				if ( ! is_array( $target_meta ) ) {
+					return array(
+						'success'    => false,
+						'id'         => (int) $input['id'],
+						'element_id' => (string) $input['element_id'],
+						'deleted'    => false,
+						'message'    => 'Element with ID "' . $input['element_id'] . '" not found in page structure',
+					);
+				}
+
+				if ( ! $force_delete ) {
+					$target_element   = is_array( $target_meta['element'] ?? null ) ? $target_meta['element'] : array();
+					$target_depth     = (int) ( $target_meta['depth'] ?? 0 );
+					$target_children  = isset( $target_element['elements'] ) && is_array( $target_element['elements'] ) ? $target_element['elements'] : array();
+					$has_children     = ! empty( $target_children );
+
+					if ( 0 === $target_depth ) {
+						return array(
+							'success'    => false,
+							'id'         => (int) $input['id'],
+							'element_id' => (string) $input['element_id'],
+							'deleted'    => false,
+							'message'    => 'Refusing to delete a top-level Elementor element without force_delete=true',
+						);
+					}
+
+					if ( $has_children ) {
+						return array(
+							'success'    => false,
+							'id'         => (int) $input['id'],
+							'element_id' => (string) $input['element_id'],
+							'deleted'    => false,
+							'message'    => 'Refusing to delete a populated Elementor element without force_delete=true',
+						);
+					}
 				}
 
 				$deleted = false;
