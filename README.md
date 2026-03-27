@@ -125,6 +125,7 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 - Prefer `get-element`/`find-elements` + `update-element` for targeted edits, and use `update-data` only when replacing full JSON.
 - `elementor/update-element` is a full element replacement, not a deep merge. It now refuses shape-changing replacements by default (for example changing `elType`/`widgetType` or replacing a populated container with empty children) unless `force_replace=true`.
 - `elementor/update-element` now also normalizes background-image container replacements by inheriting compiler-relevant layout settings from the original container when the incoming payload omits them. This is meant to prevent Elementor from silently dropping generated background CSS on thin hand-authored payloads.
+- All Elementor data write paths now normalize top-level background-image subtrees too. When a top-level container subtree contains a native background-image container, the root container is automatically marked with `e-no-lazyload` so Elementor's lazyload descendant resets do not blank the generated background on the frontend.
 - `elementor/update-data` now refuses obviously destructive full-document replacements by default (for example replacing a populated page with empty or drastically smaller top-level data) unless `force_replace=true`.
 - `elementor/delete-element` now refuses deleting top-level or populated elements by default unless `force_delete=true`.
 

@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.2.9
+ * Version: 2.2.10
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -227,6 +227,88 @@ function mcp_abilities_elementor_normalize_background_container_element( array $
 	$new_element['settings'] = $settings;
 
 	return $new_element;
+}
+
+/**
+ * Append a CSS class to Elementor settings without duplicating tokens.
+ *
+ * @param array  $settings Elementor settings array.
+ * @param string $class_name CSS class to ensure on the element.
+ * @return array
+ */
+function mcp_abilities_elementor_append_css_class( array $settings, string $class_name ): array {
+	$class_name = trim( $class_name );
+	if ( '' === $class_name ) {
+		return $settings;
+	}
+
+	$existing = isset( $settings['css_classes'] ) && is_string( $settings['css_classes'] ) ? $settings['css_classes'] : '';
+	$tokens   = preg_split( '/\s+/', trim( $existing ) );
+	$tokens   = is_array( $tokens ) ? array_values( array_filter( $tokens, 'strlen' ) ) : array();
+
+	if ( ! in_array( $class_name, $tokens, true ) ) {
+		$tokens[] = $class_name;
+	}
+
+	$settings['css_classes'] = implode( ' ', $tokens );
+
+	return $settings;
+}
+
+/**
+ * Determine whether an Elementor subtree contains a background-image container.
+ *
+ * @param array $element Elementor element data.
+ * @return bool
+ */
+function mcp_abilities_elementor_subtree_has_background_image_container( array $element ): bool {
+	if ( mcp_abilities_elementor_is_background_image_container( $element ) ) {
+		return true;
+	}
+
+	$children = $element['elements'] ?? null;
+	if ( ! is_array( $children ) ) {
+		return false;
+	}
+
+	foreach ( $children as $child ) {
+		if ( is_array( $child ) && mcp_abilities_elementor_subtree_has_background_image_container( $child ) ) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/**
+ * Normalize a full Elementor tree for background-image subtree safety.
+ *
+ * Elementor can apply lazyload descendant resets from top-level parent
+ * containers. When a top-level subtree contains a native background-image
+ * container, append `e-no-lazyload` to that subtree root so generated
+ * background CSS can actually paint on the frontend.
+ *
+ * @param array $elements Top-level Elementor data array.
+ * @return array
+ */
+function mcp_abilities_elementor_normalize_background_container_subtrees( array $elements ): array {
+	foreach ( $elements as $index => $element ) {
+		if ( ! is_array( $element ) ) {
+			continue;
+		}
+
+		if (
+			'container' === ( $element['elType'] ?? '' ) &&
+			mcp_abilities_elementor_subtree_has_background_image_container( $element )
+		) {
+			$settings = is_array( $element['settings'] ?? null ) ? $element['settings'] : array();
+			$element['settings'] = mcp_abilities_elementor_append_css_class( $settings, 'e-no-lazyload' );
+		}
+
+		$elements[ $index ] = $element;
+	}
+
+	return $elements;
 }
 
 /**
@@ -730,8 +812,10 @@ function mcp_abilities_elementor_register_abilities(): void {
 					}
 				}
 
+				$normalized_data = mcp_abilities_elementor_normalize_background_container_subtrees( $input['data'] );
+
 				// Encode data to JSON.
-				$json_data = wp_json_encode( $input['data'] );
+				$json_data = wp_json_encode( $normalized_data );
 				if ( false === $json_data ) {
 					return array( 'success' => false, 'message' => 'Failed to encode data to JSON' );
 				}
@@ -869,7 +953,8 @@ function mcp_abilities_elementor_register_abilities(): void {
 					);
 				}
 
-				$json_data = wp_json_encode( $source_data );
+				$normalized_source_data = mcp_abilities_elementor_normalize_background_container_subtrees( $source_data );
+				$json_data              = wp_json_encode( $normalized_source_data );
 				if ( false === $json_data ) {
 					return array(
 						'success'   => false,
@@ -1050,8 +1135,14 @@ function mcp_abilities_elementor_register_abilities(): void {
 					return array( 'success' => false, 'message' => 'Replacement would result in invalid JSON - aborted' );
 				}
 
+				$normalized_data = mcp_abilities_elementor_normalize_background_container_subtrees( $test_decode );
+				$normalized_json = wp_json_encode( $normalized_data );
+				if ( false === $normalized_json ) {
+					return array( 'success' => false, 'message' => 'Replacement produced valid JSON but failed to re-encode after normalization' );
+				}
+
 				// Update Elementor data.
-				update_post_meta( $input['id'], '_elementor_data', wp_slash( $new_data ) );
+				update_post_meta( $input['id'], '_elementor_data', wp_slash( $normalized_json ) );
 
 				$cache_details = mcp_abilities_elementor_invalidate_after_write(
 					(int) $input['id'],
@@ -1274,6 +1365,8 @@ function mcp_abilities_elementor_register_abilities(): void {
 						'message'    => 'Element with ID "' . $input['element_id'] . '" not found in page structure',
 					);
 				}
+
+				$data = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
 
 				// Encode and save.
 				$json_data = wp_json_encode( $data );
@@ -1504,6 +1597,7 @@ function mcp_abilities_elementor_register_abilities(): void {
 					);
 				}
 
+				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
 				$json_data = wp_json_encode( $data );
 				if ( false === $json_data ) {
 					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
@@ -2322,6 +2416,7 @@ function mcp_abilities_elementor_register_abilities(): void {
 
 				// Set Elementor data.
 				$elementor_data = $input['data'] ?? array();
+				$elementor_data = mcp_abilities_elementor_normalize_background_container_subtrees( $elementor_data );
 				if ( ! empty( $elementor_data ) ) {
 					update_post_meta( $post_id, '_elementor_data', wp_slash( wp_json_encode( $elementor_data ) ) );
 				} else {
@@ -2552,7 +2647,8 @@ function mcp_abilities_elementor_register_abilities(): void {
 
 				// Update Elementor data if provided.
 				if ( isset( $input['data'] ) && is_array( $input['data'] ) ) {
-					update_post_meta( $post->ID, '_elementor_data', wp_slash( wp_json_encode( $input['data'] ) ) );
+					$normalized_data = mcp_abilities_elementor_normalize_background_container_subtrees( $input['data'] );
+					update_post_meta( $post->ID, '_elementor_data', wp_slash( wp_json_encode( $normalized_data ) ) );
 					delete_post_meta( $post->ID, '_elementor_css' );
 				}
 
@@ -3486,9 +3582,10 @@ function mcp_abilities_elementor_register_abilities(): void {
 				}
 
 				// Set meta.
+				$normalized_content = mcp_abilities_elementor_normalize_background_container_subtrees( $data['content'] );
 				update_post_meta( $post_id, '_elementor_template_type', $template_type );
 				update_post_meta( $post_id, '_elementor_edit_mode', 'builder' );
-				update_post_meta( $post_id, '_elementor_data', wp_slash( wp_json_encode( $data['content'] ) ) );
+				update_post_meta( $post_id, '_elementor_data', wp_slash( wp_json_encode( $normalized_content ) ) );
 
 				if ( ! empty( $data['page_settings'] ) ) {
 					update_post_meta( $post_id, '_elementor_page_settings', $data['page_settings'] );

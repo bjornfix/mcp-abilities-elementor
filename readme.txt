@@ -3,7 +3,7 @@ Contributors: devenia
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 6.9
-Stable tag: 2.2.9
+Stable tag: 2.2.10
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -55,6 +55,9 @@ Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilit
 * [All Add-on Plugins](https://devenia.com/plugins/mcp-expose-abilities/#add-ons)
 
 == Changelog ==
+
+= 2.2.10 =
+* Fixed: all Elementor data write paths now normalize top-level background-image subtrees so parent containers get `e-no-lazyload` automatically when needed
 
 = 2.2.9 =
 * Fixed: `elementor/update-element` now normalizes background-image container replacements so missing layout settings inherit from the original container before save
