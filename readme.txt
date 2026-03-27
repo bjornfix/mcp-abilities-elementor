@@ -3,7 +3,7 @@ Contributors: devenia
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 6.9
-Stable tag: 2.2.11
+Stable tag: 2.2.12
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -55,6 +55,9 @@ Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilit
 * [All Add-on Plugins](https://devenia.com/plugins/mcp-expose-abilities/#add-ons)
 
 == Changelog ==
+
+= 2.2.12 =
+* Added: `elementor/copy-row-balance` to copy row gap plus direct-child width/flex/padding settings from one row to another for more consistent visual balance
 
 = 2.2.11 =
 * Added: `elementor/merge-element-settings` for targeted settings-only updates without full element replacement payloads

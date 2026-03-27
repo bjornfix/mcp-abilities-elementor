@@ -6,7 +6,7 @@ Elementor page builder integration for WordPress via MCP.
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 
 **Tested up to:** 6.9
-**Stable tag:** 2.2.11
+**Stable tag:** 2.2.12
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -50,7 +50,7 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 3. Upload via WordPress Admin > Plugins > Add New > Upload Plugin
 4. Activate the plugin
 
-## Abilities (43)
+## Abilities (44)
 
 ### Page/Post Data
 | Ability | Description |
@@ -62,6 +62,7 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 | `elementor/merge-element-settings` | Deep-merge settings into one element |
 | `elementor/zero-container-padding-subtree` | Zero container padding in a subtree |
 | `elementor/copy-lane-settings` | Copy width/gap lane settings between elements |
+| `elementor/copy-row-balance` | Copy row rhythm and child column balance between rows |
 | `elementor/reset-negative-margins-subtree` | Clamp negative margins in a subtree |
 | `elementor/delete-element` | Delete a specific element by ID |
 | `elementor/update-data` | Replace entire Elementor JSON for a page |
@@ -128,7 +129,7 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 - Experiments map to Elementor's experiments manager; reset to default clears the saved option.
 - Prefer `get-element`/`find-elements` + `update-element` for targeted edits, and use `update-data` only when replacing full JSON.
 - Prefer `merge-element-settings` for small spacing/width/layout adjustments when you do not need to replace an entire element payload.
-- Use `zero-container-padding-subtree`, `copy-lane-settings`, and `reset-negative-margins-subtree` when tracking Elementor lane drift, hidden inner padding, or negative offset cleanup across a migrated section.
+- Use `zero-container-padding-subtree`, `copy-lane-settings`, `copy-row-balance`, and `reset-negative-margins-subtree` when tracking Elementor lane drift, hidden inner padding, row-balance mismatch, or negative offset cleanup across a migrated section.
 - `elementor/update-element` is a full element replacement, not a deep merge. It now refuses shape-changing replacements by default (for example changing `elType`/`widgetType` or replacing a populated container with empty children) unless `force_replace=true`.
 - `elementor/update-element` now also normalizes background-image container replacements by inheriting compiler-relevant layout settings from the original container when the incoming payload omits them. This is meant to prevent Elementor from silently dropping generated background CSS on thin hand-authored payloads.
 - All Elementor data write paths now normalize top-level background-image subtrees too. When a top-level container subtree contains a native background-image container, the root container is automatically marked with `e-no-lazyload` so Elementor's lazyload descendant resets do not blank the generated background on the frontend.
@@ -243,6 +244,9 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 ```
 
 ## Changelog
+
+### 2.2.12
+- Added: `elementor/copy-row-balance` to copy row gap plus direct-child width/flex/padding settings from one row to another for consistent visual balance
 
 ### 2.2.11
 - Added: `elementor/merge-element-settings` for targeted settings-only updates without full element replacement payloads

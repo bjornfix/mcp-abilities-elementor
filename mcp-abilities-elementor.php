@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.2.11
+ * Version: 2.2.12
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -563,6 +563,76 @@ function mcp_abilities_elementor_copy_lane_settings( array $target_element, arra
 	$target_element['settings'] = $target_settings;
 
 	return $target_element;
+}
+
+/**
+ * Copy a set of settings keys from one Elementor element to another.
+ *
+ * @param array $target_element Target element.
+ * @param array $source_element Source element.
+ * @param array $setting_keys Keys to copy.
+ * @return array
+ */
+function mcp_abilities_elementor_copy_element_settings_keys( array $target_element, array $source_element, array $setting_keys ): array {
+	return mcp_abilities_elementor_copy_lane_settings( $target_element, $source_element, $setting_keys );
+}
+
+/**
+ * Copy row-balance settings from one direct-child row to another.
+ *
+ * Copies the row's own spacing settings and mirrors width/flex/padding
+ * settings from each direct child onto the matching child in the target row.
+ *
+ * @param array $target_row Target row/container.
+ * @param array $source_row Source row/container.
+ * @param array $row_setting_keys Keys to copy on the row itself.
+ * @param array $child_setting_keys Keys to copy on each direct child.
+ * @param bool  $allow_partial Whether to allow differing child counts.
+ * @param array $changed_child_ids Collect target child IDs that changed.
+ * @return array
+ */
+function mcp_abilities_elementor_copy_row_balance(
+	array $target_row,
+	array $source_row,
+	array $row_setting_keys,
+	array $child_setting_keys,
+	bool $allow_partial,
+	array &$changed_child_ids
+): array {
+	$target_row = mcp_abilities_elementor_copy_element_settings_keys( $target_row, $source_row, $row_setting_keys );
+
+	$source_children = is_array( $source_row['elements'] ?? null ) ? array_values( $source_row['elements'] ) : array();
+	$target_children = is_array( $target_row['elements'] ?? null ) ? array_values( $target_row['elements'] ) : array();
+
+	$source_count = count( $source_children );
+	$target_count = count( $target_children );
+
+	if ( $source_count !== $target_count && ! $allow_partial ) {
+		return $target_row;
+	}
+
+	$pair_count = min( $source_count, $target_count );
+	for ( $index = 0; $index < $pair_count; $index++ ) {
+		if ( ! is_array( $source_children[ $index ] ) || ! is_array( $target_children[ $index ] ) ) {
+			continue;
+		}
+
+		$updated_child = mcp_abilities_elementor_copy_element_settings_keys(
+			$target_children[ $index ],
+			$source_children[ $index ],
+			$child_setting_keys
+		);
+
+		if ( $updated_child !== $target_children[ $index ] && ! empty( $updated_child['id'] ) && is_string( $updated_child['id'] ) ) {
+			$changed_child_ids[] = $updated_child['id'];
+		}
+
+		$target_children[ $index ] = $updated_child;
+	}
+
+	$target_row['elements'] = $target_children;
+
+	return $target_row;
 }
 
 /**
@@ -2187,6 +2257,229 @@ function mcp_abilities_elementor_register_abilities(): void {
 					'dry_run'           => false,
 					'unchanged'         => false,
 					'setting_keys'      => $setting_keys,
+					'target_settings'   => $target_element['settings'] ?? array(),
+					'cache'             => $cache_details,
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => false,
+					'idempotent'  => false,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Copy Row Balance
+	// =========================================================================
+	wp_register_ability(
+		'elementor/copy-row-balance',
+		array(
+			'label'               => 'Copy Elementor Row Balance',
+			'description'         => 'Copies balance-defining settings from one Elementor row/container to another. Copies row gap settings and mirrors direct-child width/flex/padding settings by index so image/card rows keep the same visual rhythm. Supports `dry_run`.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id', 'source_element_id', 'target_element_id' ),
+				'properties'           => array(
+					'id'                => array(
+						'type'        => 'integer',
+						'description' => 'Post/Page ID containing both rows.',
+					),
+					'source_element_id' => array(
+						'type'        => 'string',
+						'description' => 'Row/container ID to copy the visual balance from.',
+					),
+					'target_element_id' => array(
+						'type'        => 'string',
+						'description' => 'Row/container ID to copy the visual balance to.',
+					),
+					'row_setting_keys'  => array(
+						'type'        => 'array',
+						'description' => 'Optional row-level keys to copy. Defaults to flex_gap.',
+						'items'       => array( 'type' => 'string' ),
+					),
+					'child_setting_keys' => array(
+						'type'        => 'array',
+						'description' => 'Optional direct-child keys to copy. Defaults to width/flex-basis/padding for balanced columns.',
+						'items'       => array( 'type' => 'string' ),
+					),
+					'allow_partial'     => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'If true, copy only across the overlapping direct-child count when the rows have different child counts.',
+					),
+					'dry_run'           => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'If true, return the prepared balance changes without writing.',
+					),
+					'cache_scope'       => array(
+						'type'        => 'string',
+						'enum'        => array( 'none', 'post', 'site' ),
+						'default'     => 'post',
+						'description' => 'Cache invalidation scope after write. Ignored when dry_run=true.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'           => array( 'type' => 'boolean' ),
+					'id'                => array( 'type' => 'integer' ),
+					'source_element_id' => array( 'type' => 'string' ),
+					'target_element_id' => array( 'type' => 'string' ),
+					'message'           => array( 'type' => 'string' ),
+					'link'              => array( 'type' => 'string' ),
+					'dry_run'           => array( 'type' => 'boolean' ),
+					'unchanged'         => array( 'type' => 'boolean' ),
+					'row_setting_keys'  => array( 'type' => 'array', 'items' => array( 'type' => 'string' ) ),
+					'child_setting_keys'=> array( 'type' => 'array', 'items' => array( 'type' => 'string' ) ),
+					'changed_child_ids' => array( 'type' => 'array', 'items' => array( 'type' => 'string' ) ),
+					'target_settings'   => array( 'type' => 'object' ),
+					'cache'             => array( 'type' => 'object' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input = is_array( $input ) ? $input : array();
+
+				if ( empty( $input['id'] ) ) {
+					return array( 'success' => false, 'message' => 'Post/Page ID is required' );
+				}
+				if ( empty( $input['source_element_id'] ) || empty( $input['target_element_id'] ) ) {
+					return array( 'success' => false, 'message' => 'Both source_element_id and target_element_id are required' );
+				}
+
+				$post = get_post( (int) $input['id'] );
+				if ( ! $post ) {
+					return array( 'success' => false, 'message' => 'Post not found' );
+				}
+				if ( ! current_user_can( 'edit_post', $post->ID ) ) {
+					return array( 'success' => false, 'message' => 'You do not have permission to update this post' );
+				}
+
+				$elementor_data = get_post_meta( (int) $input['id'], '_elementor_data', true );
+				if ( empty( $elementor_data ) ) {
+					return array( 'success' => false, 'message' => 'No Elementor data found for this post' );
+				}
+
+				$data = json_decode( $elementor_data, true );
+				if ( null === $data && JSON_ERROR_NONE !== json_last_error() ) {
+					return array( 'success' => false, 'message' => 'Failed to parse existing Elementor data' );
+				}
+
+				$source_meta = mcp_abilities_elementor_find_element_meta( $data, (string) $input['source_element_id'] );
+				$target_meta = mcp_abilities_elementor_find_element_meta( $data, (string) $input['target_element_id'] );
+
+				if ( ! is_array( $source_meta ) || ! is_array( $source_meta['element'] ?? null ) ) {
+					return array( 'success' => false, 'message' => 'Source element not found' );
+				}
+				if ( ! is_array( $target_meta ) || ! is_array( $target_meta['element'] ?? null ) ) {
+					return array( 'success' => false, 'message' => 'Target element not found' );
+				}
+
+				$row_setting_keys = isset( $input['row_setting_keys'] ) && is_array( $input['row_setting_keys'] ) && ! empty( $input['row_setting_keys'] )
+					? array_values( array_filter( $input['row_setting_keys'], 'is_string' ) )
+					: array( 'flex_gap' );
+				$child_setting_keys = isset( $input['child_setting_keys'] ) && is_array( $input['child_setting_keys'] ) && ! empty( $input['child_setting_keys'] )
+					? array_values( array_filter( $input['child_setting_keys'], 'is_string' ) )
+					: array( 'width', 'width_tablet', 'width_mobile', 'flex_basis', 'flex_basis_tablet', 'flex_basis_mobile', 'padding', 'padding_tablet', 'padding_mobile' );
+				$allow_partial       = ! empty( $input['allow_partial'] );
+				$dry_run             = ! empty( $input['dry_run'] );
+				$requested_cache_scope = mcp_abilities_elementor_normalize_cache_scope( $input['cache_scope'] ?? 'post', 'post' );
+
+				$source_children = is_array( $source_meta['element']['elements'] ?? null ) ? array_values( $source_meta['element']['elements'] ) : array();
+				$target_children = is_array( $target_meta['element']['elements'] ?? null ) ? array_values( $target_meta['element']['elements'] ) : array();
+
+				if ( count( $source_children ) !== count( $target_children ) && ! $allow_partial ) {
+					return array(
+						'success'           => false,
+						'id'                => (int) $input['id'],
+						'source_element_id' => (string) $input['source_element_id'],
+						'target_element_id' => (string) $input['target_element_id'],
+						'message'           => 'Source and target rows have different direct-child counts; set allow_partial=true to copy only the overlapping children',
+					);
+				}
+
+				$changed_child_ids = array();
+				$target_element    = mcp_abilities_elementor_copy_row_balance(
+					$target_meta['element'],
+					$source_meta['element'],
+					$row_setting_keys,
+					$child_setting_keys,
+					$allow_partial,
+					$changed_child_ids
+				);
+				$target_element = mcp_abilities_elementor_normalize_background_container_element( $target_element, $target_meta['element'] );
+
+				if ( $target_element === $target_meta['element'] ) {
+					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
+					$cache_details['post_id'] = (int) $input['id'];
+					return array(
+						'success'           => true,
+						'id'                => (int) $input['id'],
+						'source_element_id' => (string) $input['source_element_id'],
+						'target_element_id' => (string) $input['target_element_id'],
+						'message'           => 'Row balance copy produced no change',
+						'link'              => get_permalink( (int) $input['id'] ),
+						'dry_run'           => $dry_run,
+						'unchanged'         => true,
+						'row_setting_keys'  => $row_setting_keys,
+						'child_setting_keys'=> $child_setting_keys,
+						'changed_child_ids' => array_values( array_unique( array_filter( $changed_child_ids ) ) ),
+						'target_settings'   => $target_element['settings'] ?? array(),
+						'cache'             => $cache_details,
+					);
+				}
+
+				if ( $dry_run ) {
+					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
+					$cache_details['post_id'] = (int) $input['id'];
+					return array(
+						'success'           => true,
+						'id'                => (int) $input['id'],
+						'source_element_id' => (string) $input['source_element_id'],
+						'target_element_id' => (string) $input['target_element_id'],
+						'message'           => 'Dry run: row balance copied successfully',
+						'link'              => get_permalink( (int) $input['id'] ),
+						'dry_run'           => true,
+						'unchanged'         => false,
+						'row_setting_keys'  => $row_setting_keys,
+						'child_setting_keys'=> $child_setting_keys,
+						'changed_child_ids' => array_values( array_unique( array_filter( $changed_child_ids ) ) ),
+						'target_settings'   => $target_element['settings'] ?? array(),
+						'cache'             => $cache_details,
+					);
+				}
+
+				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['target_element_id'], $target_element );
+				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
+				$json_data = wp_json_encode( $data );
+				if ( false === $json_data ) {
+					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
+				}
+
+				update_post_meta( (int) $input['id'], '_elementor_data', wp_slash( $json_data ) );
+				$cache_details = mcp_abilities_elementor_invalidate_after_write( (int) $input['id'], $requested_cache_scope );
+
+				return array(
+					'success'           => true,
+					'id'                => (int) $input['id'],
+					'source_element_id' => (string) $input['source_element_id'],
+					'target_element_id' => (string) $input['target_element_id'],
+					'message'           => 'Row balance copied successfully',
+					'link'              => get_permalink( (int) $input['id'] ),
+					'dry_run'           => false,
+					'unchanged'         => false,
+					'row_setting_keys'  => $row_setting_keys,
+					'child_setting_keys'=> $child_setting_keys,
+					'changed_child_ids' => array_values( array_unique( array_filter( $changed_child_ids ) ) ),
 					'target_settings'   => $target_element['settings'] ?? array(),
 					'cache'             => $cache_details,
 				);
