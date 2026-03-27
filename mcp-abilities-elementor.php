@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.2.10
+ * Version: 2.2.11
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -309,6 +309,260 @@ function mcp_abilities_elementor_normalize_background_container_subtrees( array 
 	}
 
 	return $elements;
+}
+
+/**
+ * Deep-merge Elementor settings arrays.
+ *
+ * Scalar values from $overrides replace values in $base. Nested arrays are
+ * merged recursively unless either side is a numerically indexed list, in
+ * which case the override replaces the base.
+ *
+ * @param array $base Existing settings.
+ * @param array $overrides Incoming overrides.
+ * @return array
+ */
+function mcp_abilities_elementor_merge_settings( array $base, array $overrides ): array {
+	foreach ( $overrides as $key => $value ) {
+		if ( is_array( $value ) && isset( $base[ $key ] ) && is_array( $base[ $key ] ) ) {
+			$base_is_list     = array_values( $base[ $key ] ) === $base[ $key ];
+			$override_is_list = array_values( $value ) === $value;
+
+			if ( $base_is_list || $override_is_list ) {
+				$base[ $key ] = $value;
+				continue;
+			}
+
+			$base[ $key ] = mcp_abilities_elementor_merge_settings( $base[ $key ], $value );
+			continue;
+		}
+
+		$base[ $key ] = $value;
+	}
+
+	return $base;
+}
+
+/**
+ * Find an Elementor element by ID with depth/path metadata.
+ *
+ * @param array  $elements Elementor tree.
+ * @param string $target_id Target element ID.
+ * @param int    $depth Current recursion depth.
+ * @param array  $path Current ID path.
+ * @return array|null
+ */
+function mcp_abilities_elementor_find_element_meta( array $elements, string $target_id, int $depth = 0, array $path = array() ): ?array {
+	foreach ( $elements as $index => $element ) {
+		if ( ! is_array( $element ) ) {
+			continue;
+		}
+
+		$current_path = $path;
+		if ( isset( $element['id'] ) && is_string( $element['id'] ) ) {
+			$current_path[] = $element['id'];
+		}
+
+		if ( ( $element['id'] ?? null ) === $target_id ) {
+			return array(
+				'element' => $element,
+				'depth'   => $depth,
+				'index'   => $index,
+				'path'    => $current_path,
+			);
+		}
+
+		if ( ! empty( $element['elements'] ) && is_array( $element['elements'] ) ) {
+			$child_meta = mcp_abilities_elementor_find_element_meta( $element['elements'], $target_id, $depth + 1, $current_path );
+			if ( is_array( $child_meta ) ) {
+				return $child_meta;
+			}
+		}
+	}
+
+	return null;
+}
+
+/**
+ * Replace an Elementor element in a tree by ID.
+ *
+ * @param array  $elements Elementor tree.
+ * @param string $target_id Target element ID.
+ * @param array  $new_element Replacement element.
+ * @return bool True when replaced.
+ */
+function mcp_abilities_elementor_replace_element_in_tree( array &$elements, string $target_id, array $new_element ): bool {
+	foreach ( $elements as $index => &$element ) {
+		if ( ! is_array( $element ) ) {
+			continue;
+		}
+
+		if ( ( $element['id'] ?? null ) === $target_id ) {
+			$elements[ $index ] = $new_element;
+			return true;
+		}
+
+		if ( ! empty( $element['elements'] ) && is_array( $element['elements'] ) ) {
+			if ( mcp_abilities_elementor_replace_element_in_tree( $element['elements'], $target_id, $new_element ) ) {
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
+/**
+ * Normalize a spacing box array to explicit zero values.
+ *
+ * @param mixed $existing Existing spacing value.
+ * @return array
+ */
+function mcp_abilities_elementor_zero_spacing_box( $existing = null ): array {
+	$box = is_array( $existing ) ? $existing : array();
+
+	$box['unit']     = isset( $box['unit'] ) && is_string( $box['unit'] ) ? $box['unit'] : 'px';
+	$box['top']      = '0';
+	$box['right']    = '0';
+	$box['bottom']   = '0';
+	$box['left']     = '0';
+	$box['isLinked'] = false;
+
+	return $box;
+}
+
+/**
+ * Set negative values in an Elementor spacing box to zero.
+ *
+ * @param mixed $spacing Existing spacing structure.
+ * @return array|null
+ */
+function mcp_abilities_elementor_clamp_negative_spacing_box( $spacing ): ?array {
+	if ( ! is_array( $spacing ) ) {
+		return null;
+	}
+
+	$updated = $spacing;
+	$changed = false;
+
+	foreach ( array( 'top', 'right', 'bottom', 'left' ) as $side ) {
+		if ( ! array_key_exists( $side, $updated ) ) {
+			continue;
+		}
+
+		$value = $updated[ $side ];
+		if ( is_numeric( $value ) && (float) $value < 0 ) {
+			$updated[ $side ] = '0';
+			$changed          = true;
+		}
+	}
+
+	return $changed ? $updated : $spacing;
+}
+
+/**
+ * Recursively zero container padding in an Elementor subtree.
+ *
+ * @param array $element Elementor element.
+ * @param bool  $include_root Whether to include the root element.
+ * @param int   $max_depth Maximum descendant depth, -1 for unlimited.
+ * @param int   $depth Current depth.
+ * @param array $changed_ids Changed element IDs.
+ * @return array
+ */
+function mcp_abilities_elementor_zero_container_padding_subtree( array $element, bool $include_root, int $max_depth, int $depth, array &$changed_ids ): array {
+	$should_touch = ( 0 === $depth && $include_root ) || ( $depth > 0 );
+	$within_depth = $max_depth < 0 || $depth <= $max_depth;
+
+	if ( $should_touch && $within_depth && 'container' === ( $element['elType'] ?? '' ) ) {
+		$settings            = is_array( $element['settings'] ?? null ) ? $element['settings'] : array();
+		$settings['padding'] = mcp_abilities_elementor_zero_spacing_box( $settings['padding'] ?? null );
+		$element['settings'] = $settings;
+		$changed_ids[]       = (string) ( $element['id'] ?? '' );
+	}
+
+	if ( ! empty( $element['elements'] ) && is_array( $element['elements'] ) ) {
+		foreach ( $element['elements'] as $index => $child ) {
+			if ( ! is_array( $child ) ) {
+				continue;
+			}
+			$element['elements'][ $index ] = mcp_abilities_elementor_zero_container_padding_subtree( $child, true, $max_depth, $depth + 1, $changed_ids );
+		}
+	}
+
+	return $element;
+}
+
+/**
+ * Recursively clamp negative widget margins in an Elementor subtree.
+ *
+ * @param array $element Elementor element.
+ * @param bool  $include_root Whether to include the root element.
+ * @param bool  $widgets_only Whether to only touch widgets.
+ * @param array $changed_ids Changed element IDs.
+ * @return array
+ */
+function mcp_abilities_elementor_reset_negative_margins_subtree( array $element, bool $include_root, bool $widgets_only, array &$changed_ids ): array {
+	$should_touch = $include_root;
+	$is_widget    = 'widget' === ( $element['elType'] ?? '' );
+	$is_container = 'container' === ( $element['elType'] ?? '' );
+
+	if ( $should_touch && ( $is_widget || ( ! $widgets_only && $is_container ) ) ) {
+		$settings = is_array( $element['settings'] ?? null ) ? $element['settings'] : array();
+		$changed  = false;
+
+		foreach ( array( '_margin', '_margin_mobile', '_margin_tablet' ) as $key ) {
+			if ( ! array_key_exists( $key, $settings ) ) {
+				continue;
+			}
+
+			$normalized = mcp_abilities_elementor_clamp_negative_spacing_box( $settings[ $key ] );
+			if ( is_array( $normalized ) && $normalized !== $settings[ $key ] ) {
+				$settings[ $key ] = $normalized;
+				$changed          = true;
+			}
+		}
+
+		if ( $changed ) {
+			$element['settings'] = $settings;
+			$changed_ids[]       = (string) ( $element['id'] ?? '' );
+		}
+	}
+
+	if ( ! empty( $element['elements'] ) && is_array( $element['elements'] ) ) {
+		foreach ( $element['elements'] as $index => $child ) {
+			if ( ! is_array( $child ) ) {
+				continue;
+			}
+			$element['elements'][ $index ] = mcp_abilities_elementor_reset_negative_margins_subtree( $child, true, $widgets_only, $changed_ids );
+		}
+	}
+
+	return $element;
+}
+
+/**
+ * Copy lane-defining settings from one Elementor element to another.
+ *
+ * @param array $target_element Target element.
+ * @param array $source_element Source element.
+ * @param array $setting_keys Keys to copy.
+ * @return array
+ */
+function mcp_abilities_elementor_copy_lane_settings( array $target_element, array $source_element, array $setting_keys ): array {
+	$target_settings = is_array( $target_element['settings'] ?? null ) ? $target_element['settings'] : array();
+	$source_settings = is_array( $source_element['settings'] ?? null ) ? $source_element['settings'] : array();
+
+	foreach ( $setting_keys as $key ) {
+		if ( ! is_string( $key ) || '' === $key || ! array_key_exists( $key, $source_settings ) ) {
+			continue;
+		}
+		$target_settings[ $key ] = $source_settings[ $key ];
+	}
+
+	$target_element['settings'] = $target_settings;
+
+	return $target_element;
 }
 
 /**
@@ -1415,6 +1669,714 @@ function mcp_abilities_elementor_register_abilities(): void {
 						'destructive' => false,
 						'idempotent'  => false,
 					),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Merge Element Settings
+	// =========================================================================
+	wp_register_ability(
+		'elementor/merge-element-settings',
+		array(
+			'label'               => 'Merge Elementor Element Settings',
+			'description'         => 'Deep-merges one or more settings into an existing Elementor element without requiring a full element replacement payload. Supports cache_scope (`post` default, `site` for stronger invalidation, `none` for debugging) and `dry_run`.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id', 'element_id', 'settings' ),
+				'properties'           => array(
+					'id'         => array(
+						'type'        => 'integer',
+						'description' => 'Post/Page ID containing the element.',
+					),
+					'element_id' => array(
+						'type'        => 'string',
+						'description' => 'Element ID to update.',
+					),
+					'settings'   => array(
+						'type'        => 'object',
+						'description' => 'Settings to merge into the element settings array.',
+					),
+					'dry_run'    => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'If true, return the merged result without writing to the database.',
+					),
+					'cache_scope' => array(
+						'type'        => 'string',
+						'enum'        => array( 'none', 'post', 'site' ),
+						'default'     => 'post',
+						'description' => 'Cache invalidation scope after write. Ignored when dry_run=true.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'     => array( 'type' => 'boolean' ),
+					'id'          => array( 'type' => 'integer' ),
+					'element_id'  => array( 'type' => 'string' ),
+					'message'     => array( 'type' => 'string' ),
+					'link'        => array( 'type' => 'string' ),
+					'dry_run'     => array( 'type' => 'boolean' ),
+					'unchanged'   => array( 'type' => 'boolean' ),
+					'settings'    => array( 'type' => 'object' ),
+					'cache'       => array( 'type' => 'object' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input = is_array( $input ) ? $input : array();
+
+				if ( empty( $input['id'] ) ) {
+					return array( 'success' => false, 'message' => 'Post/Page ID is required' );
+				}
+				if ( empty( $input['element_id'] ) ) {
+					return array( 'success' => false, 'message' => 'Element ID is required' );
+				}
+				if ( ! isset( $input['settings'] ) || ! is_array( $input['settings'] ) ) {
+					return array( 'success' => false, 'message' => 'Settings object is required' );
+				}
+
+				$post = get_post( (int) $input['id'] );
+				if ( ! $post ) {
+					return array( 'success' => false, 'message' => 'Post not found' );
+				}
+				if ( ! current_user_can( 'edit_post', $post->ID ) ) {
+					return array( 'success' => false, 'message' => 'You do not have permission to update this post' );
+				}
+
+				$elementor_data = get_post_meta( (int) $input['id'], '_elementor_data', true );
+				if ( empty( $elementor_data ) ) {
+					return array( 'success' => false, 'message' => 'No Elementor data found for this post' );
+				}
+
+				$data = json_decode( $elementor_data, true );
+				if ( null === $data && JSON_ERROR_NONE !== json_last_error() ) {
+					return array( 'success' => false, 'message' => 'Failed to parse existing Elementor data' );
+				}
+
+				$element_meta = mcp_abilities_elementor_find_element_meta( $data, (string) $input['element_id'] );
+				if ( ! is_array( $element_meta ) || ! is_array( $element_meta['element'] ?? null ) ) {
+					return array(
+						'success'    => false,
+						'id'         => (int) $input['id'],
+						'element_id' => (string) $input['element_id'],
+						'message'    => 'Element with ID "' . $input['element_id'] . '" not found in page structure',
+					);
+				}
+
+				$original_element            = $element_meta['element'];
+				$merged_element              = $original_element;
+				$existing_settings           = is_array( $original_element['settings'] ?? null ) ? $original_element['settings'] : array();
+				$merged_element['settings']  = mcp_abilities_elementor_merge_settings( $existing_settings, $input['settings'] );
+				$merged_element              = mcp_abilities_elementor_normalize_background_container_element( $merged_element, $original_element );
+				$requested_cache_scope       = mcp_abilities_elementor_normalize_cache_scope( $input['cache_scope'] ?? 'post', 'post' );
+				$dry_run                     = ! empty( $input['dry_run'] );
+
+				if ( $merged_element === $original_element ) {
+					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
+					$cache_details['post_id'] = (int) $input['id'];
+					return array(
+						'success'    => true,
+						'id'         => (int) $input['id'],
+						'element_id' => (string) $input['element_id'],
+						'message'    => 'Settings merge produced no change',
+						'link'       => get_permalink( (int) $input['id'] ),
+						'dry_run'    => $dry_run,
+						'unchanged'  => true,
+						'settings'   => $merged_element['settings'],
+						'cache'      => $cache_details,
+					);
+				}
+
+				if ( $dry_run ) {
+					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
+					$cache_details['post_id'] = (int) $input['id'];
+					return array(
+						'success'    => true,
+						'id'         => (int) $input['id'],
+						'element_id' => (string) $input['element_id'],
+						'message'    => 'Dry run: settings merged successfully',
+						'link'       => get_permalink( (int) $input['id'] ),
+						'dry_run'    => true,
+						'unchanged'  => false,
+						'settings'   => $merged_element['settings'],
+						'cache'      => $cache_details,
+					);
+				}
+
+				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['element_id'], $merged_element );
+				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
+				$json_data = wp_json_encode( $data );
+				if ( false === $json_data ) {
+					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
+				}
+
+				update_post_meta( (int) $input['id'], '_elementor_data', wp_slash( $json_data ) );
+				$cache_details = mcp_abilities_elementor_invalidate_after_write( (int) $input['id'], $requested_cache_scope );
+
+				return array(
+					'success'    => true,
+					'id'         => (int) $input['id'],
+					'element_id' => (string) $input['element_id'],
+					'message'    => 'Element settings merged successfully',
+					'link'       => get_permalink( (int) $input['id'] ),
+					'dry_run'    => false,
+					'unchanged'  => false,
+					'settings'   => $merged_element['settings'],
+					'cache'      => $cache_details,
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => false,
+					'idempotent'  => false,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Zero Container Padding In Subtree
+	// =========================================================================
+	wp_register_ability(
+		'elementor/zero-container-padding-subtree',
+		array(
+			'label'               => 'Zero Container Padding In Subtree',
+			'description'         => 'Recursively sets container padding to zero in an Elementor subtree. Useful when hidden default padding is causing lane and width drift. Supports `dry_run`.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id', 'element_id' ),
+				'properties'           => array(
+					'id'           => array(
+						'type'        => 'integer',
+						'description' => 'Post/Page ID containing the root element.',
+					),
+					'element_id'   => array(
+						'type'        => 'string',
+						'description' => 'Root element ID for the subtree.',
+					),
+					'include_root' => array(
+						'type'        => 'boolean',
+						'default'     => true,
+						'description' => 'If true, zero padding on the root container too.',
+					),
+					'max_depth'    => array(
+						'type'        => 'integer',
+						'default'     => -1,
+						'description' => 'Maximum descendant depth to touch. Use -1 for unlimited.',
+					),
+					'dry_run'      => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'If true, return the would-change IDs without writing.',
+					),
+					'cache_scope'  => array(
+						'type'        => 'string',
+						'enum'        => array( 'none', 'post', 'site' ),
+						'default'     => 'post',
+						'description' => 'Cache invalidation scope after write. Ignored when dry_run=true.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'         => array( 'type' => 'boolean' ),
+					'id'              => array( 'type' => 'integer' ),
+					'element_id'      => array( 'type' => 'string' ),
+					'message'         => array( 'type' => 'string' ),
+					'link'            => array( 'type' => 'string' ),
+					'dry_run'         => array( 'type' => 'boolean' ),
+					'changed_count'   => array( 'type' => 'integer' ),
+					'changed_ids'     => array( 'type' => 'array', 'items' => array( 'type' => 'string' ) ),
+					'cache'           => array( 'type' => 'object' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input = is_array( $input ) ? $input : array();
+
+				if ( empty( $input['id'] ) ) {
+					return array( 'success' => false, 'message' => 'Post/Page ID is required' );
+				}
+				if ( empty( $input['element_id'] ) ) {
+					return array( 'success' => false, 'message' => 'Element ID is required' );
+				}
+
+				$post = get_post( (int) $input['id'] );
+				if ( ! $post ) {
+					return array( 'success' => false, 'message' => 'Post not found' );
+				}
+				if ( ! current_user_can( 'edit_post', $post->ID ) ) {
+					return array( 'success' => false, 'message' => 'You do not have permission to update this post' );
+				}
+
+				$elementor_data = get_post_meta( (int) $input['id'], '_elementor_data', true );
+				if ( empty( $elementor_data ) ) {
+					return array( 'success' => false, 'message' => 'No Elementor data found for this post' );
+				}
+
+				$data = json_decode( $elementor_data, true );
+				if ( null === $data && JSON_ERROR_NONE !== json_last_error() ) {
+					return array( 'success' => false, 'message' => 'Failed to parse existing Elementor data' );
+				}
+
+				$element_meta = mcp_abilities_elementor_find_element_meta( $data, (string) $input['element_id'] );
+				if ( ! is_array( $element_meta ) || ! is_array( $element_meta['element'] ?? null ) ) {
+					return array(
+						'success'    => false,
+						'id'         => (int) $input['id'],
+						'element_id' => (string) $input['element_id'],
+						'message'    => 'Element with ID "' . $input['element_id'] . '" not found in page structure',
+					);
+				}
+
+				$changed_ids    = array();
+				$max_depth      = isset( $input['max_depth'] ) ? (int) $input['max_depth'] : -1;
+				$include_root   = ! array_key_exists( 'include_root', $input ) || ! empty( $input['include_root'] );
+				$updated_element = mcp_abilities_elementor_zero_container_padding_subtree(
+					$element_meta['element'],
+					$include_root,
+					$max_depth,
+					0,
+					$changed_ids
+				);
+				$changed_ids = array_values( array_unique( array_filter( $changed_ids ) ) );
+				$dry_run     = ! empty( $input['dry_run'] );
+				$requested_cache_scope = mcp_abilities_elementor_normalize_cache_scope( $input['cache_scope'] ?? 'post', 'post' );
+
+				if ( empty( $changed_ids ) ) {
+					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
+					$cache_details['post_id'] = (int) $input['id'];
+					return array(
+						'success'       => true,
+						'id'            => (int) $input['id'],
+						'element_id'    => (string) $input['element_id'],
+						'message'       => 'No container padding changes were needed',
+						'link'          => get_permalink( (int) $input['id'] ),
+						'dry_run'       => $dry_run,
+						'changed_count' => 0,
+						'changed_ids'   => array(),
+						'cache'         => $cache_details,
+					);
+				}
+
+				if ( $dry_run ) {
+					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
+					$cache_details['post_id'] = (int) $input['id'];
+					return array(
+						'success'       => true,
+						'id'            => (int) $input['id'],
+						'element_id'    => (string) $input['element_id'],
+						'message'       => 'Dry run: container padding normalization prepared',
+						'link'          => get_permalink( (int) $input['id'] ),
+						'dry_run'       => true,
+						'changed_count' => count( $changed_ids ),
+						'changed_ids'   => $changed_ids,
+						'cache'         => $cache_details,
+					);
+				}
+
+				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['element_id'], $updated_element );
+				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
+				$json_data = wp_json_encode( $data );
+				if ( false === $json_data ) {
+					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
+				}
+
+				update_post_meta( (int) $input['id'], '_elementor_data', wp_slash( $json_data ) );
+				$cache_details = mcp_abilities_elementor_invalidate_after_write( (int) $input['id'], $requested_cache_scope );
+
+				return array(
+					'success'       => true,
+					'id'            => (int) $input['id'],
+					'element_id'    => (string) $input['element_id'],
+					'message'       => 'Container padding normalized successfully',
+					'link'          => get_permalink( (int) $input['id'] ),
+					'dry_run'       => false,
+					'changed_count' => count( $changed_ids ),
+					'changed_ids'   => $changed_ids,
+					'cache'         => $cache_details,
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => false,
+					'idempotent'  => false,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Copy Lane Settings
+	// =========================================================================
+	wp_register_ability(
+		'elementor/copy-lane-settings',
+		array(
+			'label'               => 'Copy Elementor Lane Settings',
+			'description'         => 'Copies lane-defining layout settings from one Elementor element to another. Default keys are `content_width`, `boxed_width`, and `flex_gap`. Supports `dry_run`.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id', 'source_element_id', 'target_element_id' ),
+				'properties'           => array(
+					'id'                => array(
+						'type'        => 'integer',
+						'description' => 'Post/Page ID containing both elements.',
+					),
+					'source_element_id' => array(
+						'type'        => 'string',
+						'description' => 'Element ID to copy lane settings from.',
+					),
+					'target_element_id' => array(
+						'type'        => 'string',
+						'description' => 'Element ID to copy lane settings to.',
+					),
+					'setting_keys'      => array(
+						'type'        => 'array',
+						'description' => 'Optional list of setting keys to copy. Defaults to content_width, boxed_width, flex_gap.',
+						'items'       => array( 'type' => 'string' ),
+					),
+					'dry_run'           => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'If true, return the copied settings without writing.',
+					),
+					'cache_scope'       => array(
+						'type'        => 'string',
+						'enum'        => array( 'none', 'post', 'site' ),
+						'default'     => 'post',
+						'description' => 'Cache invalidation scope after write. Ignored when dry_run=true.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'           => array( 'type' => 'boolean' ),
+					'id'                => array( 'type' => 'integer' ),
+					'source_element_id' => array( 'type' => 'string' ),
+					'target_element_id' => array( 'type' => 'string' ),
+					'message'           => array( 'type' => 'string' ),
+					'link'              => array( 'type' => 'string' ),
+					'dry_run'           => array( 'type' => 'boolean' ),
+					'unchanged'         => array( 'type' => 'boolean' ),
+					'setting_keys'      => array( 'type' => 'array', 'items' => array( 'type' => 'string' ) ),
+					'target_settings'   => array( 'type' => 'object' ),
+					'cache'             => array( 'type' => 'object' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input = is_array( $input ) ? $input : array();
+
+				if ( empty( $input['id'] ) ) {
+					return array( 'success' => false, 'message' => 'Post/Page ID is required' );
+				}
+				if ( empty( $input['source_element_id'] ) || empty( $input['target_element_id'] ) ) {
+					return array( 'success' => false, 'message' => 'Both source_element_id and target_element_id are required' );
+				}
+
+				$post = get_post( (int) $input['id'] );
+				if ( ! $post ) {
+					return array( 'success' => false, 'message' => 'Post not found' );
+				}
+				if ( ! current_user_can( 'edit_post', $post->ID ) ) {
+					return array( 'success' => false, 'message' => 'You do not have permission to update this post' );
+				}
+
+				$elementor_data = get_post_meta( (int) $input['id'], '_elementor_data', true );
+				if ( empty( $elementor_data ) ) {
+					return array( 'success' => false, 'message' => 'No Elementor data found for this post' );
+				}
+
+				$data = json_decode( $elementor_data, true );
+				if ( null === $data && JSON_ERROR_NONE !== json_last_error() ) {
+					return array( 'success' => false, 'message' => 'Failed to parse existing Elementor data' );
+				}
+
+				$source_meta = mcp_abilities_elementor_find_element_meta( $data, (string) $input['source_element_id'] );
+				$target_meta = mcp_abilities_elementor_find_element_meta( $data, (string) $input['target_element_id'] );
+
+				if ( ! is_array( $source_meta ) || ! is_array( $source_meta['element'] ?? null ) ) {
+					return array( 'success' => false, 'message' => 'Source element not found' );
+				}
+				if ( ! is_array( $target_meta ) || ! is_array( $target_meta['element'] ?? null ) ) {
+					return array( 'success' => false, 'message' => 'Target element not found' );
+				}
+
+				$setting_keys = isset( $input['setting_keys'] ) && is_array( $input['setting_keys'] ) && ! empty( $input['setting_keys'] )
+					? array_values( array_filter( $input['setting_keys'], 'is_string' ) )
+					: array( 'content_width', 'boxed_width', 'flex_gap' );
+
+				$target_element = mcp_abilities_elementor_copy_lane_settings(
+					$target_meta['element'],
+					$source_meta['element'],
+					$setting_keys
+				);
+				$target_element = mcp_abilities_elementor_normalize_background_container_element( $target_element, $target_meta['element'] );
+				$requested_cache_scope = mcp_abilities_elementor_normalize_cache_scope( $input['cache_scope'] ?? 'post', 'post' );
+				$dry_run = ! empty( $input['dry_run'] );
+
+				if ( $target_element === $target_meta['element'] ) {
+					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
+					$cache_details['post_id'] = (int) $input['id'];
+					return array(
+						'success'           => true,
+						'id'                => (int) $input['id'],
+						'source_element_id' => (string) $input['source_element_id'],
+						'target_element_id' => (string) $input['target_element_id'],
+						'message'           => 'Lane copy produced no change',
+						'link'              => get_permalink( (int) $input['id'] ),
+						'dry_run'           => $dry_run,
+						'unchanged'         => true,
+						'setting_keys'      => $setting_keys,
+						'target_settings'   => $target_element['settings'] ?? array(),
+						'cache'             => $cache_details,
+					);
+				}
+
+				if ( $dry_run ) {
+					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
+					$cache_details['post_id'] = (int) $input['id'];
+					return array(
+						'success'           => true,
+						'id'                => (int) $input['id'],
+						'source_element_id' => (string) $input['source_element_id'],
+						'target_element_id' => (string) $input['target_element_id'],
+						'message'           => 'Dry run: lane settings copied successfully',
+						'link'              => get_permalink( (int) $input['id'] ),
+						'dry_run'           => true,
+						'unchanged'         => false,
+						'setting_keys'      => $setting_keys,
+						'target_settings'   => $target_element['settings'] ?? array(),
+						'cache'             => $cache_details,
+					);
+				}
+
+				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['target_element_id'], $target_element );
+				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
+				$json_data = wp_json_encode( $data );
+				if ( false === $json_data ) {
+					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
+				}
+
+				update_post_meta( (int) $input['id'], '_elementor_data', wp_slash( $json_data ) );
+				$cache_details = mcp_abilities_elementor_invalidate_after_write( (int) $input['id'], $requested_cache_scope );
+
+				return array(
+					'success'           => true,
+					'id'                => (int) $input['id'],
+					'source_element_id' => (string) $input['source_element_id'],
+					'target_element_id' => (string) $input['target_element_id'],
+					'message'           => 'Lane settings copied successfully',
+					'link'              => get_permalink( (int) $input['id'] ),
+					'dry_run'           => false,
+					'unchanged'         => false,
+					'setting_keys'      => $setting_keys,
+					'target_settings'   => $target_element['settings'] ?? array(),
+					'cache'             => $cache_details,
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => false,
+					'idempotent'  => false,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Reset Negative Margins In Subtree
+	// =========================================================================
+	wp_register_ability(
+		'elementor/reset-negative-margins-subtree',
+		array(
+			'label'               => 'Reset Negative Margins In Subtree',
+			'description'         => 'Recursively clamps negative Elementor widget margins to zero inside a subtree. Useful when hidden negative offsets cancel intended spacing. Supports `dry_run`.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id', 'element_id' ),
+				'properties'           => array(
+					'id'           => array(
+						'type'        => 'integer',
+						'description' => 'Post/Page ID containing the root element.',
+					),
+					'element_id'   => array(
+						'type'        => 'string',
+						'description' => 'Root element ID for the subtree.',
+					),
+					'include_root' => array(
+						'type'        => 'boolean',
+						'default'     => true,
+						'description' => 'If true, inspect the root element too.',
+					),
+					'widgets_only' => array(
+						'type'        => 'boolean',
+						'default'     => true,
+						'description' => 'If true, only inspect widgets. If false, inspect containers too.',
+					),
+					'dry_run'      => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'If true, return the would-change IDs without writing.',
+					),
+					'cache_scope'  => array(
+						'type'        => 'string',
+						'enum'        => array( 'none', 'post', 'site' ),
+						'default'     => 'post',
+						'description' => 'Cache invalidation scope after write. Ignored when dry_run=true.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'       => array( 'type' => 'boolean' ),
+					'id'            => array( 'type' => 'integer' ),
+					'element_id'    => array( 'type' => 'string' ),
+					'message'       => array( 'type' => 'string' ),
+					'link'          => array( 'type' => 'string' ),
+					'dry_run'       => array( 'type' => 'boolean' ),
+					'changed_count' => array( 'type' => 'integer' ),
+					'changed_ids'   => array( 'type' => 'array', 'items' => array( 'type' => 'string' ) ),
+					'cache'         => array( 'type' => 'object' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input = is_array( $input ) ? $input : array();
+
+				if ( empty( $input['id'] ) ) {
+					return array( 'success' => false, 'message' => 'Post/Page ID is required' );
+				}
+				if ( empty( $input['element_id'] ) ) {
+					return array( 'success' => false, 'message' => 'Element ID is required' );
+				}
+
+				$post = get_post( (int) $input['id'] );
+				if ( ! $post ) {
+					return array( 'success' => false, 'message' => 'Post not found' );
+				}
+				if ( ! current_user_can( 'edit_post', $post->ID ) ) {
+					return array( 'success' => false, 'message' => 'You do not have permission to update this post' );
+				}
+
+				$elementor_data = get_post_meta( (int) $input['id'], '_elementor_data', true );
+				if ( empty( $elementor_data ) ) {
+					return array( 'success' => false, 'message' => 'No Elementor data found for this post' );
+				}
+
+				$data = json_decode( $elementor_data, true );
+				if ( null === $data && JSON_ERROR_NONE !== json_last_error() ) {
+					return array( 'success' => false, 'message' => 'Failed to parse existing Elementor data' );
+				}
+
+				$element_meta = mcp_abilities_elementor_find_element_meta( $data, (string) $input['element_id'] );
+				if ( ! is_array( $element_meta ) || ! is_array( $element_meta['element'] ?? null ) ) {
+					return array(
+						'success'    => false,
+						'id'         => (int) $input['id'],
+						'element_id' => (string) $input['element_id'],
+						'message'    => 'Element with ID "' . $input['element_id'] . '" not found in page structure',
+					);
+				}
+
+				$changed_ids    = array();
+				$include_root   = ! array_key_exists( 'include_root', $input ) || ! empty( $input['include_root'] );
+				$widgets_only   = ! array_key_exists( 'widgets_only', $input ) || ! empty( $input['widgets_only'] );
+				$updated_element = mcp_abilities_elementor_reset_negative_margins_subtree(
+					$element_meta['element'],
+					$include_root,
+					$widgets_only,
+					$changed_ids
+				);
+				$changed_ids = array_values( array_unique( array_filter( $changed_ids ) ) );
+				$dry_run     = ! empty( $input['dry_run'] );
+				$requested_cache_scope = mcp_abilities_elementor_normalize_cache_scope( $input['cache_scope'] ?? 'post', 'post' );
+
+				if ( empty( $changed_ids ) ) {
+					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
+					$cache_details['post_id'] = (int) $input['id'];
+					return array(
+						'success'       => true,
+						'id'            => (int) $input['id'],
+						'element_id'    => (string) $input['element_id'],
+						'message'       => 'No negative margins were found',
+						'link'          => get_permalink( (int) $input['id'] ),
+						'dry_run'       => $dry_run,
+						'changed_count' => 0,
+						'changed_ids'   => array(),
+						'cache'         => $cache_details,
+					);
+				}
+
+				if ( $dry_run ) {
+					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
+					$cache_details['post_id'] = (int) $input['id'];
+					return array(
+						'success'       => true,
+						'id'            => (int) $input['id'],
+						'element_id'    => (string) $input['element_id'],
+						'message'       => 'Dry run: negative margins would be reset',
+						'link'          => get_permalink( (int) $input['id'] ),
+						'dry_run'       => true,
+						'changed_count' => count( $changed_ids ),
+						'changed_ids'   => $changed_ids,
+						'cache'         => $cache_details,
+					);
+				}
+
+				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['element_id'], $updated_element );
+				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
+				$json_data = wp_json_encode( $data );
+				if ( false === $json_data ) {
+					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
+				}
+
+				update_post_meta( (int) $input['id'], '_elementor_data', wp_slash( $json_data ) );
+				$cache_details = mcp_abilities_elementor_invalidate_after_write( (int) $input['id'], $requested_cache_scope );
+
+				return array(
+					'success'       => true,
+					'id'            => (int) $input['id'],
+					'element_id'    => (string) $input['element_id'],
+					'message'       => 'Negative margins reset successfully',
+					'link'          => get_permalink( (int) $input['id'] ),
+					'dry_run'       => false,
+					'changed_count' => count( $changed_ids ),
+					'changed_ids'   => $changed_ids,
+					'cache'         => $cache_details,
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => false,
+					'idempotent'  => false,
+				),
 			),
 		)
 	);

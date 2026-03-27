@@ -3,7 +3,7 @@ Contributors: devenia
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 6.9
-Stable tag: 2.2.10
+Stable tag: 2.2.11
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -55,6 +55,12 @@ Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilit
 * [All Add-on Plugins](https://devenia.com/plugins/mcp-expose-abilities/#add-ons)
 
 == Changelog ==
+
+= 2.2.11 =
+* Added: `elementor/merge-element-settings` for targeted settings-only updates without full element replacement payloads
+* Added: `elementor/zero-container-padding-subtree` to normalize hidden container padding inside a section/subtree
+* Added: `elementor/copy-lane-settings` to copy standard width/gap lane settings from one element to another
+* Added: `elementor/reset-negative-margins-subtree` to clamp negative Elementor margins that cancel intended spacing
 
 = 2.2.10 =
 * Fixed: all Elementor data write paths now normalize top-level background-image subtrees so parent containers get `e-no-lazyload` automatically when needed

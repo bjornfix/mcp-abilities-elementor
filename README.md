@@ -6,7 +6,7 @@ Elementor page builder integration for WordPress via MCP.
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 
 **Tested up to:** 6.9
-**Stable tag:** 2.2.9
+**Stable tag:** 2.2.11
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -50,7 +50,7 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 3. Upload via WordPress Admin > Plugins > Add New > Upload Plugin
 4. Activate the plugin
 
-## Abilities (39)
+## Abilities (43)
 
 ### Page/Post Data
 | Ability | Description |
@@ -59,6 +59,10 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 | `elementor/get-element` | Get a specific element by ID |
 | `elementor/find-elements` | Find elements by type, widget, or text |
 | `elementor/update-element` | Update a specific element by ID |
+| `elementor/merge-element-settings` | Deep-merge settings into one element |
+| `elementor/zero-container-padding-subtree` | Zero container padding in a subtree |
+| `elementor/copy-lane-settings` | Copy width/gap lane settings between elements |
+| `elementor/reset-negative-margins-subtree` | Clamp negative margins in a subtree |
 | `elementor/delete-element` | Delete a specific element by ID |
 | `elementor/update-data` | Replace entire Elementor JSON for a page |
 | `elementor/patch-data` | Find/replace text within Elementor JSON |
@@ -123,6 +127,8 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 - Maintenance mode uses Elementor templates; you must provide a template ID to enable it.
 - Experiments map to Elementor's experiments manager; reset to default clears the saved option.
 - Prefer `get-element`/`find-elements` + `update-element` for targeted edits, and use `update-data` only when replacing full JSON.
+- Prefer `merge-element-settings` for small spacing/width/layout adjustments when you do not need to replace an entire element payload.
+- Use `zero-container-padding-subtree`, `copy-lane-settings`, and `reset-negative-margins-subtree` when tracking Elementor lane drift, hidden inner padding, or negative offset cleanup across a migrated section.
 - `elementor/update-element` is a full element replacement, not a deep merge. It now refuses shape-changing replacements by default (for example changing `elType`/`widgetType` or replacing a populated container with empty children) unless `force_replace=true`.
 - `elementor/update-element` now also normalizes background-image container replacements by inheriting compiler-relevant layout settings from the original container when the incoming payload omits them. This is meant to prevent Elementor from silently dropping generated background CSS on thin hand-authored payloads.
 - All Elementor data write paths now normalize top-level background-image subtrees too. When a top-level container subtree contains a native background-image container, the root container is automatically marked with `e-no-lazyload` so Elementor's lazyload descendant resets do not blank the generated background on the frontend.
@@ -238,16 +244,23 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 
 ## Changelog
 
+### 2.2.11
+- Added: `elementor/merge-element-settings` for targeted settings-only updates without full element replacement payloads
+- Added: `elementor/zero-container-padding-subtree` to normalize hidden container padding inside a section/subtree
+- Added: `elementor/copy-lane-settings` to copy standard width/gap lane settings from one element to another
+- Added: `elementor/reset-negative-margins-subtree` to clamp negative Elementor margins that cancel intended spacing
+
+### 2.2.10
+- Fixed: all Elementor data write paths now normalize top-level background-image subtrees so parent containers get `e-no-lazyload` automatically when needed
+
 ### 2.2.9
+- Added: guardrails to `elementor/update-element` so incomplete replacement payloads do not silently wipe populated Elementor containers/widgets unless `force_replace=true`
+- Added: guardrails to `elementor/update-data` so destructive full-document replacements require `force_replace=true`
+- Added: guardrails to `elementor/delete-element` so top-level/populated element deletions require `force_delete=true`
 - Fixed: `elementor/update-element` now normalizes background-image container replacements so missing layout settings inherit from the original container before save
 
 ### 2.2.8
 - Docs: expanded the WordPress-standard `readme.txt` so the published ZIP now includes fuller requirements, abilities, setup guidance, and Devenia ecosystem links
-
-### Unreleased
-- Added: guardrails to `elementor/update-element` so incomplete replacement payloads do not silently wipe populated Elementor containers/widgets unless `force_replace=true`
-- Added: guardrails to `elementor/update-data` so destructive full-document replacements require `force_replace=true`
-- Added: guardrails to `elementor/delete-element` so top-level/populated element deletions require `force_delete=true`
 
 ### 2.2.7
 - Added: `elementor/clone-data` to clone native Elementor data and page settings from an existing page/template into a target page
