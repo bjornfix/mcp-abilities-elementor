@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.2.12
+ * Version: 2.2.13
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -633,6 +633,115 @@ function mcp_abilities_elementor_copy_row_balance(
 	$target_row['elements'] = $target_children;
 
 	return $target_row;
+}
+
+/**
+ * Recursively find the first image widget inside an Elementor subtree.
+ *
+ * @param array $element Elementor element/subtree.
+ * @return array|null
+ */
+function mcp_abilities_elementor_find_first_image_widget( array $element ): ?array {
+	if ( 'widget' === ( $element['elType'] ?? '' ) && 'image' === ( $element['widgetType'] ?? '' ) ) {
+		return $element;
+	}
+
+	$children = $element['elements'] ?? null;
+	if ( ! is_array( $children ) ) {
+		return null;
+	}
+
+	foreach ( $children as $child ) {
+		if ( ! is_array( $child ) ) {
+			continue;
+		}
+
+		$match = mcp_abilities_elementor_find_first_image_widget( $child );
+		if ( is_array( $match ) ) {
+			return $match;
+		}
+	}
+
+	return null;
+}
+
+/**
+ * Resolve a media payload from an Elementor image widget settings array.
+ *
+ * @param array $widget Elementor image widget.
+ * @return array|null
+ */
+function mcp_abilities_elementor_extract_widget_image_media( array $widget ): ?array {
+	if ( 'widget' !== ( $widget['elType'] ?? '' ) || 'image' !== ( $widget['widgetType'] ?? '' ) ) {
+		return null;
+	}
+
+	$settings = is_array( $widget['settings'] ?? null ) ? $widget['settings'] : array();
+	$image    = is_array( $settings['image'] ?? null ) ? $settings['image'] : array();
+	$media_id = isset( $image['id'] ) ? (int) $image['id'] : 0;
+	$url      = '';
+
+	if ( ! empty( $image['url'] ) && is_string( $image['url'] ) ) {
+		$url = trim( $image['url'] );
+	}
+
+	if ( '' === $url && $media_id > 0 ) {
+		$attachment_url = wp_get_attachment_url( $media_id );
+		if ( is_string( $attachment_url ) ) {
+			$url = $attachment_url;
+		}
+	}
+
+	if ( '' === $url && empty( $media_id ) ) {
+		return null;
+	}
+
+	return array(
+		'id'  => $media_id,
+		'url' => $url,
+		'alt' => is_string( $settings['image_alt'] ?? null ) ? $settings['image_alt'] : '',
+	);
+}
+
+/**
+ * Merge settings into a specific element inside an Elementor data tree.
+ *
+ * @param array  $data Elementor data tree.
+ * @param string $element_id Element ID.
+ * @param array  $settings Settings to deep-merge.
+ * @return array
+ */
+function mcp_abilities_elementor_merge_settings_into_tree( array $data, string $element_id, array $settings ): array {
+	$element_meta = mcp_abilities_elementor_find_element_meta( $data, $element_id );
+	if ( ! is_array( $element_meta ) || ! is_array( $element_meta['element'] ?? null ) ) {
+		return $data;
+	}
+
+	$original_element           = $element_meta['element'];
+	$updated_element            = $original_element;
+	$existing_settings          = is_array( $original_element['settings'] ?? null ) ? $original_element['settings'] : array();
+	$updated_element['settings'] = mcp_abilities_elementor_merge_settings( $existing_settings, $settings );
+	$updated_element            = mcp_abilities_elementor_normalize_background_container_element( $updated_element, $original_element );
+
+	mcp_abilities_elementor_replace_element_in_tree( $data, $element_id, $updated_element );
+
+	return $data;
+}
+
+/**
+ * Force the top value of a spacing box to zero.
+ *
+ * @param mixed $spacing Existing spacing structure.
+ * @return array
+ */
+function mcp_abilities_elementor_zero_top_spacing_box( $spacing ): array {
+	$box = is_array( $spacing ) ? $spacing : array();
+
+	$box['unit']     = isset( $box['unit'] ) && is_string( $box['unit'] ) ? $box['unit'] : 'px';
+	$box['top']      = '0';
+	$box['isLinked'] = false;
+
+	return $box;
 }
 
 /**
@@ -2482,6 +2591,810 @@ function mcp_abilities_elementor_register_abilities(): void {
 					'changed_child_ids' => array_values( array_unique( array_filter( $changed_child_ids ) ) ),
 					'target_settings'   => $target_element['settings'] ?? array(),
 					'cache'             => $cache_details,
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => false,
+					'idempotent'  => false,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Normalize Campaign Detail Page
+	// =========================================================================
+	wp_register_ability(
+		'elementor/normalize-campaign-detail-page',
+		array(
+			'label'               => 'Normalize Elementor Campaign Detail Page',
+			'description'         => 'Applies the standard migrated campaign-detail layout recipe to a page: `1140px` lane, zero hidden left/right gutters, `18px` row rhythm, full-width feature image, and a widened `OM GARDEROBEMEKKA` block. Use on price-example/campaign-detail pages after the page structure already exists. Supports `dry_run`.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id', 'elements' ),
+				'properties'           => array(
+					'id'              => array(
+						'type'        => 'integer',
+						'description' => 'Post/Page ID to normalize.',
+					),
+					'elements'        => array(
+						'type'                 => 'object',
+						'description'          => 'Element IDs for the standard campaign-detail layout zones.',
+						'properties'           => array(
+							'hero_inner'      => array( 'type' => 'string' ),
+							'offer'           => array( 'type' => 'string' ),
+							'body'            => array( 'type' => 'string' ),
+							'body_inner'      => array( 'type' => 'string' ),
+							'cta_wrap'        => array( 'type' => 'string' ),
+							'gallery'         => array( 'type' => 'string' ),
+							'gallery_row'     => array( 'type' => 'string' ),
+							'gallery_columns' => array(
+								'type'  => 'array',
+								'items' => array( 'type' => 'string' ),
+							),
+							'feature_wrap'    => array( 'type' => 'string' ),
+							'feature_image'   => array( 'type' => 'string' ),
+							'about'           => array( 'type' => 'string' ),
+							'about_text_wrap' => array( 'type' => 'string' ),
+						),
+						'additionalProperties' => false,
+					),
+					'lane_width'      => array(
+						'type'        => 'integer',
+						'default'     => 1140,
+						'description' => 'Standard boxed lane width.',
+					),
+					'rhythm_gap'      => array(
+						'type'        => 'integer',
+						'default'     => 18,
+						'description' => 'Standard row rhythm in pixels.',
+					),
+					'about_padding'   => array(
+						'type'        => 'integer',
+						'default'     => 64,
+						'description' => 'Left/right inner padding for the about block in pixels.',
+					),
+					'dry_run'         => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'If true, return the elements that would change without writing.',
+					),
+					'cache_scope'     => array(
+						'type'        => 'string',
+						'enum'        => array( 'none', 'post', 'site' ),
+						'default'     => 'post',
+						'description' => 'Cache invalidation scope after write. Ignored when dry_run=true.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'       => array( 'type' => 'boolean' ),
+					'id'            => array( 'type' => 'integer' ),
+					'message'       => array( 'type' => 'string' ),
+					'link'          => array( 'type' => 'string' ),
+					'dry_run'       => array( 'type' => 'boolean' ),
+					'changed_count' => array( 'type' => 'integer' ),
+					'changed_ids'   => array( 'type' => 'array', 'items' => array( 'type' => 'string' ) ),
+					'skipped_ids'   => array( 'type' => 'array', 'items' => array( 'type' => 'string' ) ),
+					'cache'         => array( 'type' => 'object' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input = is_array( $input ) ? $input : array();
+
+				if ( empty( $input['id'] ) ) {
+					return array( 'success' => false, 'message' => 'Post/Page ID is required' );
+				}
+				if ( empty( $input['elements'] ) || ! is_array( $input['elements'] ) ) {
+					return array( 'success' => false, 'message' => 'elements object is required' );
+				}
+
+				$post = get_post( (int) $input['id'] );
+				if ( ! $post ) {
+					return array( 'success' => false, 'message' => 'Post not found' );
+				}
+				if ( ! current_user_can( 'edit_post', $post->ID ) ) {
+					return array( 'success' => false, 'message' => 'You do not have permission to update this post' );
+				}
+
+				$elementor_data = get_post_meta( (int) $input['id'], '_elementor_data', true );
+				if ( empty( $elementor_data ) ) {
+					return array( 'success' => false, 'message' => 'No Elementor data found for this post' );
+				}
+
+				$data = json_decode( $elementor_data, true );
+				if ( null === $data && JSON_ERROR_NONE !== json_last_error() ) {
+					return array( 'success' => false, 'message' => 'Failed to parse existing Elementor data' );
+				}
+
+				$lane_width      = isset( $input['lane_width'] ) ? (int) $input['lane_width'] : 1140;
+				$rhythm_gap      = isset( $input['rhythm_gap'] ) ? (int) $input['rhythm_gap'] : 18;
+				$about_padding   = isset( $input['about_padding'] ) ? (int) $input['about_padding'] : 64;
+				$requested_cache_scope = mcp_abilities_elementor_normalize_cache_scope( $input['cache_scope'] ?? 'post', 'post' );
+				$dry_run         = ! empty( $input['dry_run'] );
+				$changed_ids     = array();
+				$skipped_ids     = array();
+				$elements        = $input['elements'];
+
+				$apply_merge = function ( string $element_id, array $settings ) use ( &$data, &$changed_ids, &$skipped_ids ): void {
+					if ( '' === $element_id ) {
+						return;
+					}
+
+					$element_meta = mcp_abilities_elementor_find_element_meta( $data, $element_id );
+					if ( ! is_array( $element_meta ) || ! is_array( $element_meta['element'] ?? null ) ) {
+						$skipped_ids[] = $element_id;
+						return;
+					}
+
+					$original_data = $data;
+					$data          = mcp_abilities_elementor_merge_settings_into_tree( $data, $element_id, $settings );
+
+					if ( $data !== $original_data ) {
+						$changed_ids[] = $element_id;
+					}
+				};
+
+				$zero_padding = array(
+					'unit'     => 'px',
+					'top'      => '0',
+					'right'    => '0',
+					'bottom'   => '0',
+					'left'     => '0',
+					'isLinked' => false,
+				);
+				$rhythm_box = array(
+					'unit'   => 'px',
+					'column' => (string) $rhythm_gap,
+					'row'    => (string) $rhythm_gap,
+					'size'   => $rhythm_gap,
+				);
+
+				$apply_merge(
+					(string) ( $elements['hero_inner'] ?? '' ),
+					array(
+						'boxed_width' => array(
+							'unit' => 'px',
+							'size' => $lane_width,
+						),
+						'padding'     => $zero_padding,
+					)
+				);
+				$apply_merge(
+					(string) ( $elements['offer'] ?? '' ),
+					array(
+						'boxed_width' => array(
+							'unit' => 'px',
+							'size' => $lane_width,
+						),
+						'padding'     => array(
+							'unit'     => 'px',
+							'top'      => '60',
+							'right'    => '0',
+							'bottom'   => '60',
+							'left'     => '0',
+							'isLinked' => false,
+						),
+						'flex_gap'    => $rhythm_box,
+						'css_classes' => 'e-no-lazyload',
+					)
+				);
+				$apply_merge( (string) ( $elements['body'] ?? '' ), array( 'padding' => array_merge( $zero_padding, array( 'bottom' => '30' ) ) ) );
+				$apply_merge(
+					(string) ( $elements['body_inner'] ?? '' ),
+					array(
+						'boxed_width' => array(
+							'unit' => 'px',
+							'size' => $lane_width,
+						),
+						'padding'     => $zero_padding,
+					)
+				);
+				$apply_merge( (string) ( $elements['cta_wrap'] ?? '' ), array( 'flex_gap' => $rhythm_box ) );
+				$apply_merge(
+					(string) ( $elements['gallery'] ?? '' ),
+					array(
+						'boxed_width' => array(
+							'unit' => 'px',
+							'size' => $lane_width,
+						),
+						'padding'     => array_merge( $zero_padding, array( 'bottom' => '50' ) ),
+						'flex_gap'    => $rhythm_box,
+					)
+				);
+				$apply_merge( (string) ( $elements['gallery_row'] ?? '' ), array( 'padding' => $zero_padding, 'flex_gap' => $rhythm_box ) );
+
+				if ( ! empty( $elements['gallery_columns'] ) && is_array( $elements['gallery_columns'] ) ) {
+					foreach ( $elements['gallery_columns'] as $gallery_column_id ) {
+						if ( is_string( $gallery_column_id ) ) {
+							$apply_merge( $gallery_column_id, array( 'padding' => $zero_padding ) );
+						}
+					}
+				}
+
+				$apply_merge( (string) ( $elements['feature_wrap'] ?? '' ), array( 'padding' => $zero_padding ) );
+				$apply_merge(
+					(string) ( $elements['feature_image'] ?? '' ),
+					array(
+						'width' => array(
+							'unit' => '%',
+							'size' => 100,
+						),
+						'align' => 'stretch',
+					)
+				);
+				$apply_merge( (string) ( $elements['about'] ?? '' ), array( 'padding' => array_merge( $zero_padding, array( 'bottom' => '80' ) ) ) );
+				$apply_merge(
+					(string) ( $elements['about_text_wrap'] ?? '' ),
+					array(
+						'boxed_width'           => array(
+							'unit' => 'px',
+							'size' => $lane_width,
+						),
+						'width'                 => array(
+							'unit' => '%',
+							'size' => 100,
+						),
+						'width_mobile'          => array(
+							'unit' => '%',
+							'size' => 100,
+						),
+						'padding'               => array(
+							'unit'     => 'px',
+							'top'      => '60',
+							'right'    => (string) $about_padding,
+							'bottom'   => '60',
+							'left'     => (string) $about_padding,
+							'isLinked' => false,
+						),
+						'background_background' => 'classic',
+						'background_color'      => '#F5F5F5',
+					)
+				);
+
+				$changed_ids = array_values( array_unique( array_filter( $changed_ids ) ) );
+				$skipped_ids = array_values( array_unique( array_filter( $skipped_ids ) ) );
+
+				if ( empty( $changed_ids ) ) {
+					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
+					$cache_details['post_id'] = (int) $input['id'];
+					return array(
+						'success'       => true,
+						'id'            => (int) $input['id'],
+						'message'       => 'Campaign-detail normalization produced no change',
+						'link'          => get_permalink( (int) $input['id'] ),
+						'dry_run'       => $dry_run,
+						'changed_count' => 0,
+						'changed_ids'   => array(),
+						'skipped_ids'   => $skipped_ids,
+						'cache'         => $cache_details,
+					);
+				}
+
+				if ( $dry_run ) {
+					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
+					$cache_details['post_id'] = (int) $input['id'];
+					return array(
+						'success'       => true,
+						'id'            => (int) $input['id'],
+						'message'       => 'Dry run: campaign-detail normalization prepared successfully',
+						'link'          => get_permalink( (int) $input['id'] ),
+						'dry_run'       => true,
+						'changed_count' => count( $changed_ids ),
+						'changed_ids'   => $changed_ids,
+						'skipped_ids'   => $skipped_ids,
+						'cache'         => $cache_details,
+					);
+				}
+
+				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
+				$json_data = wp_json_encode( $data );
+				if ( false === $json_data ) {
+					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
+				}
+
+				update_post_meta( (int) $input['id'], '_elementor_data', wp_slash( $json_data ) );
+				$cache_details = mcp_abilities_elementor_invalidate_after_write( (int) $input['id'], $requested_cache_scope );
+
+				return array(
+					'success'       => true,
+					'id'            => (int) $input['id'],
+					'message'       => 'Campaign-detail layout normalized successfully',
+					'link'          => get_permalink( (int) $input['id'] ),
+					'dry_run'       => false,
+					'changed_count' => count( $changed_ids ),
+					'changed_ids'   => $changed_ids,
+					'skipped_ids'   => $skipped_ids,
+					'cache'         => $cache_details,
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => false,
+					'idempotent'  => false,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Convert Image Widget To Background Container
+	// =========================================================================
+	wp_register_ability(
+		'elementor/image-widget-to-background-container',
+		array(
+			'label'               => 'Convert Elementor Image Widget To Background Container',
+			'description'         => 'Replaces a container subtree that currently holds an image widget with a native background-image container using the same media. Useful for 50/50 offer rows where the image needs to stretch to the full height of the sibling content block. Supports `dry_run`.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id', 'container_element_id' ),
+				'properties'           => array(
+					'id'                    => array(
+						'type'        => 'integer',
+						'description' => 'Post/Page ID containing the container.',
+					),
+					'container_element_id'  => array(
+						'type'        => 'string',
+						'description' => 'Container element ID to convert.',
+					),
+					'image_widget_id'       => array(
+						'type'        => 'string',
+						'description' => 'Optional image widget ID to use as the media source. If omitted, the first image widget in the container subtree is used.',
+					),
+					'background_size'       => array(
+						'type'        => 'string',
+						'default'     => 'cover',
+						'description' => 'Background-size value to apply.',
+					),
+					'background_position'   => array(
+						'type'        => 'string',
+						'default'     => 'center center',
+						'description' => 'Background-position value to apply.',
+					),
+					'background_repeat'     => array(
+						'type'        => 'string',
+						'default'     => 'no-repeat',
+						'description' => 'Background-repeat value to apply.',
+					),
+					'zero_padding'          => array(
+						'type'        => 'boolean',
+						'default'     => true,
+						'description' => 'If true, zero the container padding in the replacement payload.',
+					),
+					'spacer_size'           => array(
+						'type'        => 'integer',
+						'default'     => 1,
+						'description' => 'Spacer widget size to keep the container rendering reliably on the frontend.',
+					),
+					'dry_run'               => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'If true, return the prepared replacement without writing.',
+					),
+					'cache_scope'           => array(
+						'type'        => 'string',
+						'enum'        => array( 'none', 'post', 'site' ),
+						'default'     => 'post',
+						'description' => 'Cache invalidation scope after write. Ignored when dry_run=true.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'              => array( 'type' => 'boolean' ),
+					'id'                   => array( 'type' => 'integer' ),
+					'container_element_id' => array( 'type' => 'string' ),
+					'image_widget_id'      => array( 'type' => 'string' ),
+					'message'              => array( 'type' => 'string' ),
+					'link'                 => array( 'type' => 'string' ),
+					'dry_run'              => array( 'type' => 'boolean' ),
+					'unchanged'            => array( 'type' => 'boolean' ),
+					'media'                => array( 'type' => 'object' ),
+					'cache'                => array( 'type' => 'object' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input = is_array( $input ) ? $input : array();
+
+				if ( empty( $input['id'] ) ) {
+					return array( 'success' => false, 'message' => 'Post/Page ID is required' );
+				}
+				if ( empty( $input['container_element_id'] ) ) {
+					return array( 'success' => false, 'message' => 'container_element_id is required' );
+				}
+
+				$post = get_post( (int) $input['id'] );
+				if ( ! $post ) {
+					return array( 'success' => false, 'message' => 'Post not found' );
+				}
+				if ( ! current_user_can( 'edit_post', $post->ID ) ) {
+					return array( 'success' => false, 'message' => 'You do not have permission to update this post' );
+				}
+
+				$elementor_data = get_post_meta( (int) $input['id'], '_elementor_data', true );
+				if ( empty( $elementor_data ) ) {
+					return array( 'success' => false, 'message' => 'No Elementor data found for this post' );
+				}
+
+				$data = json_decode( $elementor_data, true );
+				if ( null === $data && JSON_ERROR_NONE !== json_last_error() ) {
+					return array( 'success' => false, 'message' => 'Failed to parse existing Elementor data' );
+				}
+
+				$container_id   = (string) $input['container_element_id'];
+				$container_meta = mcp_abilities_elementor_find_element_meta( $data, $container_id );
+				if ( ! is_array( $container_meta ) || ! is_array( $container_meta['element'] ?? null ) ) {
+					return array( 'success' => false, 'message' => 'Container element not found' );
+				}
+				if ( 'container' !== ( $container_meta['element']['elType'] ?? '' ) ) {
+					return array( 'success' => false, 'message' => 'Target element is not a container' );
+				}
+
+				$image_widget = null;
+				if ( ! empty( $input['image_widget_id'] ) && is_string( $input['image_widget_id'] ) ) {
+					$image_meta = mcp_abilities_elementor_find_element_meta( array( $container_meta['element'] ), (string) $input['image_widget_id'] );
+					if ( is_array( $image_meta ) && is_array( $image_meta['element'] ?? null ) ) {
+						$image_widget = $image_meta['element'];
+					}
+				}
+				if ( ! is_array( $image_widget ) ) {
+					$image_widget = mcp_abilities_elementor_find_first_image_widget( $container_meta['element'] );
+				}
+				if ( ! is_array( $image_widget ) ) {
+					return array( 'success' => false, 'message' => 'No image widget found inside the container subtree' );
+				}
+
+				$media = mcp_abilities_elementor_extract_widget_image_media( $image_widget );
+				if ( ! is_array( $media ) || empty( $media['url'] ) ) {
+					return array( 'success' => false, 'message' => 'Failed to resolve media URL from the image widget' );
+				}
+
+				$original_element  = $container_meta['element'];
+				$original_settings = is_array( $original_element['settings'] ?? null ) ? $original_element['settings'] : array();
+				$zero_padding      = ! array_key_exists( 'zero_padding', $input ) || ! empty( $input['zero_padding'] );
+				$spacer_size       = isset( $input['spacer_size'] ) ? max( 1, (int) $input['spacer_size'] ) : 1;
+				$requested_cache_scope = mcp_abilities_elementor_normalize_cache_scope( $input['cache_scope'] ?? 'post', 'post' );
+				$dry_run          = ! empty( $input['dry_run'] );
+
+				$replacement_settings = $original_settings;
+				$replacement_settings['_title']                 = is_string( $replacement_settings['_title'] ?? null ) ? $replacement_settings['_title'] : 'background image';
+				$replacement_settings['content_width']          = $replacement_settings['content_width'] ?? 'full';
+				$replacement_settings['flex_direction']         = $replacement_settings['flex_direction'] ?? 'column';
+				$replacement_settings['flex_justify_content']   = $replacement_settings['flex_justify_content'] ?? 'center';
+				$replacement_settings['flex_align_items']       = $replacement_settings['flex_align_items'] ?? 'center';
+				$replacement_settings['background_background']  = 'classic';
+				$replacement_settings['background_image']       = array(
+					'url' => $media['url'],
+					'id'  => (int) $media['id'],
+				);
+				$replacement_settings['background_position']    = is_string( $input['background_position'] ?? null ) ? $input['background_position'] : 'center center';
+				$replacement_settings['background_size']        = is_string( $input['background_size'] ?? null ) ? $input['background_size'] : 'cover';
+				$replacement_settings['background_repeat']      = is_string( $input['background_repeat'] ?? null ) ? $input['background_repeat'] : 'no-repeat';
+				$replacement_settings['_flex_size']             = $replacement_settings['_flex_size'] ?? 'none';
+				$replacement_settings['_element_width']         = $replacement_settings['_element_width'] ?? 'initial';
+
+				if ( $zero_padding ) {
+					$replacement_settings['padding'] = mcp_abilities_elementor_zero_spacing_box( $replacement_settings['padding'] ?? null );
+				}
+
+				$replacement_element = array(
+					'id'      => $container_id,
+					'elType'  => 'container',
+					'isInner' => ! empty( $original_element['isInner'] ),
+					'settings'=> $replacement_settings,
+					'elements'=> array(
+						array(
+							'id'         => $container_id . '_bg_spacer',
+							'elType'     => 'widget',
+							'widgetType' => 'spacer',
+							'settings'   => array(
+								'space' => array(
+									'unit' => 'px',
+									'size' => $spacer_size,
+								),
+							),
+							'elements'   => array(),
+						),
+					),
+				);
+				$replacement_element = mcp_abilities_elementor_normalize_background_container_element( $replacement_element, $original_element );
+
+				if ( $replacement_element === $original_element ) {
+					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
+					$cache_details['post_id'] = (int) $input['id'];
+					return array(
+						'success'              => true,
+						'id'                   => (int) $input['id'],
+						'container_element_id' => $container_id,
+						'image_widget_id'      => (string) ( $image_widget['id'] ?? '' ),
+						'message'              => 'Container conversion produced no change',
+						'link'                 => get_permalink( (int) $input['id'] ),
+						'dry_run'              => $dry_run,
+						'unchanged'            => true,
+						'media'                => $media,
+						'cache'                => $cache_details,
+					);
+				}
+
+				if ( $dry_run ) {
+					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
+					$cache_details['post_id'] = (int) $input['id'];
+					return array(
+						'success'              => true,
+						'id'                   => (int) $input['id'],
+						'container_element_id' => $container_id,
+						'image_widget_id'      => (string) ( $image_widget['id'] ?? '' ),
+						'message'              => 'Dry run: background-container conversion prepared successfully',
+						'link'                 => get_permalink( (int) $input['id'] ),
+						'dry_run'              => true,
+						'unchanged'            => false,
+						'media'                => $media,
+						'cache'                => $cache_details,
+					);
+				}
+
+				mcp_abilities_elementor_replace_element_in_tree( $data, $container_id, $replacement_element );
+				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
+				$json_data = wp_json_encode( $data );
+				if ( false === $json_data ) {
+					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
+				}
+
+				update_post_meta( (int) $input['id'], '_elementor_data', wp_slash( $json_data ) );
+				$cache_details = mcp_abilities_elementor_invalidate_after_write( (int) $input['id'], $requested_cache_scope );
+
+				return array(
+					'success'              => true,
+					'id'                   => (int) $input['id'],
+					'container_element_id' => $container_id,
+					'image_widget_id'      => (string) ( $image_widget['id'] ?? '' ),
+					'message'              => 'Image widget converted to background container successfully',
+					'link'                 => get_permalink( (int) $input['id'] ),
+					'dry_run'              => false,
+					'unchanged'            => false,
+					'media'                => $media,
+					'cache'                => $cache_details,
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => false,
+					'idempotent'  => false,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Fix Visible Gap Rhythm
+	// =========================================================================
+	wp_register_ability(
+		'elementor/fix-visible-gap-rhythm',
+		array(
+			'label'               => 'Fix Elementor Visible Gap Rhythm',
+			'description'         => 'Normalizes hidden leading-edge spacing that makes the visible gap look larger than the intended row rhythm. By default it zeroes the target container top padding and the first child top margin so wrapper-gap math and visible content spacing line up. Supports `dry_run`.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id', 'target_container_id' ),
+				'properties'           => array(
+					'id'                         => array(
+						'type'        => 'integer',
+						'description' => 'Post/Page ID containing the target block.',
+					),
+					'target_container_id'        => array(
+						'type'        => 'string',
+						'description' => 'Container ID whose leading visible edge should be normalized.',
+					),
+					'first_child_id'             => array(
+						'type'        => 'string',
+						'description' => 'Optional explicit first visual child ID. Defaults to the first direct child inside the container.',
+					),
+					'zero_root_top_padding'      => array(
+						'type'        => 'boolean',
+						'default'     => true,
+						'description' => 'If true, zero the target container top padding.',
+					),
+					'zero_first_child_margin_top'=> array(
+						'type'        => 'boolean',
+						'default'     => true,
+						'description' => 'If true, zero the first child top margin values.',
+					),
+					'zero_first_child_padding_top'=> array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'If true, zero the first child top padding too.',
+					),
+					'dry_run'                    => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'If true, return the elements that would change without writing.',
+					),
+					'cache_scope'                => array(
+						'type'        => 'string',
+						'enum'        => array( 'none', 'post', 'site' ),
+						'default'     => 'post',
+						'description' => 'Cache invalidation scope after write. Ignored when dry_run=true.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'       => array( 'type' => 'boolean' ),
+					'id'            => array( 'type' => 'integer' ),
+					'message'       => array( 'type' => 'string' ),
+					'link'          => array( 'type' => 'string' ),
+					'dry_run'       => array( 'type' => 'boolean' ),
+					'changed_count' => array( 'type' => 'integer' ),
+					'changed_ids'   => array( 'type' => 'array', 'items' => array( 'type' => 'string' ) ),
+					'cache'         => array( 'type' => 'object' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input = is_array( $input ) ? $input : array();
+
+				if ( empty( $input['id'] ) ) {
+					return array( 'success' => false, 'message' => 'Post/Page ID is required' );
+				}
+				if ( empty( $input['target_container_id'] ) ) {
+					return array( 'success' => false, 'message' => 'target_container_id is required' );
+				}
+
+				$post = get_post( (int) $input['id'] );
+				if ( ! $post ) {
+					return array( 'success' => false, 'message' => 'Post not found' );
+				}
+				if ( ! current_user_can( 'edit_post', $post->ID ) ) {
+					return array( 'success' => false, 'message' => 'You do not have permission to update this post' );
+				}
+
+				$elementor_data = get_post_meta( (int) $input['id'], '_elementor_data', true );
+				if ( empty( $elementor_data ) ) {
+					return array( 'success' => false, 'message' => 'No Elementor data found for this post' );
+				}
+
+				$data = json_decode( $elementor_data, true );
+				if ( null === $data && JSON_ERROR_NONE !== json_last_error() ) {
+					return array( 'success' => false, 'message' => 'Failed to parse existing Elementor data' );
+				}
+
+				$target_id             = (string) $input['target_container_id'];
+				$container_meta        = mcp_abilities_elementor_find_element_meta( $data, $target_id );
+				$requested_cache_scope = mcp_abilities_elementor_normalize_cache_scope( $input['cache_scope'] ?? 'post', 'post' );
+				$dry_run               = ! empty( $input['dry_run'] );
+				$changed_ids           = array();
+
+				if ( ! is_array( $container_meta ) || ! is_array( $container_meta['element'] ?? null ) ) {
+					return array( 'success' => false, 'message' => 'Target container not found' );
+				}
+
+				$container = $container_meta['element'];
+				if ( 'container' !== ( $container['elType'] ?? '' ) ) {
+					return array( 'success' => false, 'message' => 'Target element is not a container' );
+				}
+
+				if ( ! empty( $input['zero_root_top_padding'] ) ) {
+					$settings = is_array( $container['settings'] ?? null ) ? $container['settings'] : array();
+					$padding  = mcp_abilities_elementor_zero_top_spacing_box( $settings['padding'] ?? null );
+					if ( $padding !== ( $settings['padding'] ?? null ) ) {
+						$settings['padding']  = $padding;
+						$container['settings'] = $settings;
+						$changed_ids[]        = $target_id;
+					}
+				}
+
+				$first_child_id = '';
+				if ( ! empty( $input['first_child_id'] ) && is_string( $input['first_child_id'] ) ) {
+					$first_child_id = $input['first_child_id'];
+				} elseif ( ! empty( $container['elements'][0]['id'] ) && is_string( $container['elements'][0]['id'] ) ) {
+					$first_child_id = $container['elements'][0]['id'];
+				}
+
+				if ( '' !== $first_child_id ) {
+					$first_child_meta = mcp_abilities_elementor_find_element_meta( array( $container ), $first_child_id );
+					if ( is_array( $first_child_meta ) && is_array( $first_child_meta['element'] ?? null ) ) {
+						$first_child = $first_child_meta['element'];
+						$settings    = is_array( $first_child['settings'] ?? null ) ? $first_child['settings'] : array();
+						$child_changed = false;
+
+						if ( ! empty( $input['zero_first_child_margin_top'] ) ) {
+							foreach ( array( '_margin', '_margin_tablet', '_margin_mobile' ) as $margin_key ) {
+								$margin = mcp_abilities_elementor_zero_top_spacing_box( $settings[ $margin_key ] ?? null );
+								if ( $margin !== ( $settings[ $margin_key ] ?? null ) ) {
+									$settings[ $margin_key ] = $margin;
+									$child_changed           = true;
+								}
+							}
+						}
+
+						if ( ! empty( $input['zero_first_child_padding_top'] ) ) {
+							$padding = mcp_abilities_elementor_zero_top_spacing_box( $settings['padding'] ?? null );
+							if ( $padding !== ( $settings['padding'] ?? null ) ) {
+								$settings['padding'] = $padding;
+								$child_changed       = true;
+							}
+						}
+
+						if ( $child_changed ) {
+							$first_child['settings'] = $settings;
+							mcp_abilities_elementor_replace_element_in_tree( $container['elements'], $first_child_id, $first_child );
+							$changed_ids[] = $first_child_id;
+						}
+					}
+				}
+
+				$changed_ids = array_values( array_unique( array_filter( $changed_ids ) ) );
+				if ( empty( $changed_ids ) ) {
+					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
+					$cache_details['post_id'] = (int) $input['id'];
+					return array(
+						'success'       => true,
+						'id'            => (int) $input['id'],
+						'message'       => 'Visible-gap rhythm fix produced no change',
+						'link'          => get_permalink( (int) $input['id'] ),
+						'dry_run'       => $dry_run,
+						'changed_count' => 0,
+						'changed_ids'   => array(),
+						'cache'         => $cache_details,
+					);
+				}
+
+				if ( $dry_run ) {
+					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
+					$cache_details['post_id'] = (int) $input['id'];
+					return array(
+						'success'       => true,
+						'id'            => (int) $input['id'],
+						'message'       => 'Dry run: visible-gap rhythm fix prepared successfully',
+						'link'          => get_permalink( (int) $input['id'] ),
+						'dry_run'       => true,
+						'changed_count' => count( $changed_ids ),
+						'changed_ids'   => $changed_ids,
+						'cache'         => $cache_details,
+					);
+				}
+
+				mcp_abilities_elementor_replace_element_in_tree( $data, $target_id, $container );
+				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
+				$json_data = wp_json_encode( $data );
+				if ( false === $json_data ) {
+					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
+				}
+
+				update_post_meta( (int) $input['id'], '_elementor_data', wp_slash( $json_data ) );
+				$cache_details = mcp_abilities_elementor_invalidate_after_write( (int) $input['id'], $requested_cache_scope );
+
+				return array(
+					'success'       => true,
+					'id'            => (int) $input['id'],
+					'message'       => 'Visible-gap rhythm normalized successfully',
+					'link'          => get_permalink( (int) $input['id'] ),
+					'dry_run'       => false,
+					'changed_count' => count( $changed_ids ),
+					'changed_ids'   => $changed_ids,
+					'cache'         => $cache_details,
 				);
 			},
 			'permission_callback' => function (): bool {

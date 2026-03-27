@@ -3,7 +3,7 @@ Contributors: devenia
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 6.9
-Stable tag: 2.2.12
+Stable tag: 2.2.13
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -55,6 +55,11 @@ Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilit
 * [All Add-on Plugins](https://devenia.com/plugins/mcp-expose-abilities/#add-ons)
 
 == Changelog ==
+
+= 2.2.13 =
+* Added: `elementor/normalize-campaign-detail-page` to apply the repeated campaign-detail lane/gutter/rhythm recipe in one call
+* Added: `elementor/image-widget-to-background-container` to convert an image-widget container into a native background-image container using the same media
+* Added: `elementor/fix-visible-gap-rhythm` to remove hidden leading-edge padding/margin that makes visible section gaps drift from the intended rhythm
 
 = 2.2.12 =
 * Added: `elementor/copy-row-balance` to copy row gap plus direct-child width/flex/padding settings from one row to another for more consistent visual balance
