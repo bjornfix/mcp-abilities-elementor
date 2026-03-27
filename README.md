@@ -6,7 +6,7 @@ Elementor page builder integration for WordPress via MCP.
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 
 **Tested up to:** 6.9
-**Stable tag:** 2.2.8
+**Stable tag:** 2.2.9
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -124,6 +124,7 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 - Experiments map to Elementor's experiments manager; reset to default clears the saved option.
 - Prefer `get-element`/`find-elements` + `update-element` for targeted edits, and use `update-data` only when replacing full JSON.
 - `elementor/update-element` is a full element replacement, not a deep merge. It now refuses shape-changing replacements by default (for example changing `elType`/`widgetType` or replacing a populated container with empty children) unless `force_replace=true`.
+- `elementor/update-element` now also normalizes background-image container replacements by inheriting compiler-relevant layout settings from the original container when the incoming payload omits them. This is meant to prevent Elementor from silently dropping generated background CSS on thin hand-authored payloads.
 - `elementor/update-data` now refuses obviously destructive full-document replacements by default (for example replacing a populated page with empty or drastically smaller top-level data) unless `force_replace=true`.
 - `elementor/delete-element` now refuses deleting top-level or populated elements by default unless `force_delete=true`.
 
@@ -235,6 +236,9 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 ```
 
 ## Changelog
+
+### 2.2.9
+- Fixed: `elementor/update-element` now normalizes background-image container replacements so missing layout settings inherit from the original container before save
 
 ### 2.2.8
 - Docs: expanded the WordPress-standard `readme.txt` so the published ZIP now includes fuller requirements, abilities, setup guidance, and Devenia ecosystem links

@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.2.8
+ * Version: 2.2.9
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -112,6 +112,121 @@ function mcp_abilities_elementor_decode_data_meta( $raw, ?string &$error = null 
 	}
 
 	return is_array( $decoded ) ? $decoded : array();
+}
+
+/**
+ * Check whether an Elementor element is a container using a background image.
+ *
+ * Elementor's CSS compiler can be sensitive to incomplete hand-authored
+ * container payloads. We treat background-image containers specially so
+ * targeted replacements inherit enough of the original frame to remain
+ * compiler-safe.
+ *
+ * @param array $element Elementor element data.
+ * @return bool
+ */
+function mcp_abilities_elementor_is_background_image_container( array $element ): bool {
+	if ( 'container' !== ( $element['elType'] ?? '' ) ) {
+		return false;
+	}
+
+	$settings = $element['settings'] ?? null;
+	if ( ! is_array( $settings ) ) {
+		return false;
+	}
+
+	$background_type = $settings['background_background'] ?? '';
+	$background      = $settings['background_image'] ?? null;
+
+	if ( 'classic' !== $background_type ) {
+		return false;
+	}
+
+	if ( is_array( $background ) ) {
+		return ! empty( $background['url'] ) || ! empty( $background['id'] );
+	}
+
+	if ( is_string( $background ) ) {
+		return '' !== trim( $background );
+	}
+
+	return false;
+}
+
+/**
+ * Normalize replacement payload for background-image containers.
+ *
+ * Copy compiler-relevant container settings from the original element when the
+ * incoming payload omits them. This keeps targeted updates from silently
+ * dropping background CSS generation on installs where Elementor expects a
+ * fuller container frame.
+ *
+ * @param array $new_element Replacement payload.
+ * @param array $original_element Existing stored element.
+ * @return array
+ */
+function mcp_abilities_elementor_normalize_background_container_element( array $new_element, array $original_element ): array {
+	if ( ! mcp_abilities_elementor_is_background_image_container( $new_element ) ) {
+		return $new_element;
+	}
+
+	if ( 'container' !== ( $original_element['elType'] ?? '' ) ) {
+		return $new_element;
+	}
+
+	if ( ! isset( $new_element['settings'] ) || ! is_array( $new_element['settings'] ) ) {
+		$new_element['settings'] = array();
+	}
+
+	$settings          = $new_element['settings'];
+	$original_settings = is_array( $original_element['settings'] ?? null ) ? $original_element['settings'] : array();
+
+	$inherited_setting_keys = array(
+		'content_width',
+		'width',
+		'width_tablet',
+		'width_mobile',
+		'flex_basis',
+		'flex_basis_tablet',
+		'flex_basis_mobile',
+		'min_height',
+		'min_height_tablet',
+		'min_height_mobile',
+		'flex_direction',
+		'flex_justify_content',
+		'flex_align_items',
+		'padding',
+		'padding_tablet',
+		'padding_mobile',
+		'padding_laptop',
+		'padding_widescreen',
+		'padding_widescreen_extra',
+		'padding_mobile_extra',
+		'padding_tablet_extra',
+	);
+
+	foreach ( $inherited_setting_keys as $key ) {
+		if ( array_key_exists( $key, $settings ) || ! array_key_exists( $key, $original_settings ) ) {
+			continue;
+		}
+		$settings[ $key ] = $original_settings[ $key ];
+	}
+
+	if ( empty( $settings['content_width'] ) ) {
+		$settings['content_width'] = 'full';
+	}
+
+	if ( empty( $settings['flex_basis'] ) && ! empty( $settings['width'] ) ) {
+		$settings['flex_basis'] = $settings['width'];
+	}
+
+	if ( empty( $settings['flex_direction'] ) ) {
+		$settings['flex_direction'] = 'column';
+	}
+
+	$new_element['settings'] = $settings;
+
+	return $new_element;
 }
 
 /**
@@ -1126,6 +1241,11 @@ function mcp_abilities_elementor_register_abilities(): void {
 					}
 				}
 
+				$normalized_element = mcp_abilities_elementor_normalize_background_container_element(
+					$input['element_data'],
+					$original_element
+				);
+
 				// Recursive function to find and replace element by ID.
 				$found = false;
 				$replace_element = function ( &$elements, $target_id, $new_element ) use ( &$replace_element, &$found ) {
@@ -1144,7 +1264,7 @@ function mcp_abilities_elementor_register_abilities(): void {
 					return false;
 				};
 
-				$replace_element( $data, $input['element_id'], $input['element_data'] );
+				$replace_element( $data, $input['element_id'], $normalized_element );
 
 				if ( ! $found ) {
 					return array(
