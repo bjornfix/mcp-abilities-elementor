@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.2.15
+ * Version: 2.2.24
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -944,6 +944,50 @@ function mcp_abilities_elementor_scale_spacing_box( $spacing, float $factor ) {
 }
 
 /**
+ * Cap horizontal spacing values in a spacing box.
+ *
+ * @param mixed      $spacing Existing spacing structure.
+ * @param float|null $horizontal_cap Maximum absolute px value for left/right sides.
+ * @return mixed
+ */
+function mcp_abilities_elementor_cap_spacing_box_horizontal( $spacing, ?float $horizontal_cap ) {
+	if ( ! is_array( $spacing ) || null === $horizontal_cap || $horizontal_cap < 0 ) {
+		return $spacing;
+	}
+
+	$updated = $spacing;
+	foreach ( array( 'right', 'left' ) as $side ) {
+		if ( ! array_key_exists( $side, $updated ) ) {
+			continue;
+		}
+
+		$raw_value = $updated[ $side ];
+		if ( is_numeric( $raw_value ) ) {
+			$numeric = (float) $raw_value;
+			if ( abs( $numeric ) > $horizontal_cap ) {
+				$updated[ $side ] = (string) ( $numeric < 0 ? -$horizontal_cap : $horizontal_cap );
+			}
+			continue;
+		}
+
+		if ( ! is_string( $raw_value ) ) {
+			continue;
+		}
+
+		if ( preg_match( '/^\s*(-?\d+(?:\.\d+)?)\s*(px)?\s*$/i', $raw_value, $matches ) ) {
+			$numeric = (float) $matches[1];
+			if ( abs( $numeric ) > $horizontal_cap ) {
+				$updated[ $side ] = (string) ( $numeric < 0 ? -$horizontal_cap : $horizontal_cap );
+			}
+		}
+	}
+
+	$updated['isLinked'] = false;
+
+	return $updated;
+}
+
+/**
  * Determine whether a settings key is design-relevant.
  *
  * @param string $key Setting key.
@@ -1212,6 +1256,2276 @@ function mcp_abilities_elementor_finalize_design_tokens( array $collector ): arr
 }
 
 /**
+ * Build a compact structural signature for an Elementor subtree.
+ *
+ * @param array $element Elementor element.
+ * @param int   $max_depth Maximum depth to include.
+ * @param int   $depth Current depth.
+ * @return string
+ */
+function mcp_abilities_elementor_build_structure_signature( array $element, int $max_depth = 1, int $depth = 0 ): string {
+	$base = (string) ( $element['elType'] ?? 'unknown' );
+	if ( 'widget' === $base ) {
+		$base .= ':' . (string) ( $element['widgetType'] ?? 'unknown' );
+	}
+
+	if ( $depth >= $max_depth ) {
+		return $base;
+	}
+
+	$children = array();
+	foreach ( (array) ( $element['elements'] ?? array() ) as $child ) {
+		if ( is_array( $child ) ) {
+			$children[] = mcp_abilities_elementor_build_structure_signature( $child, $max_depth, $depth + 1 );
+		}
+	}
+
+	if ( empty( $children ) ) {
+		return $base;
+	}
+
+	sort( $children );
+
+	return $base . '[' . implode( '|', $children ) . ']';
+}
+
+/**
+ * Detect whether a subtree contains a widget type.
+ *
+ * @param array  $element Elementor element.
+ * @param string $widget_type Widget type.
+ * @return bool
+ */
+function mcp_abilities_elementor_subtree_contains_widget_type( array $element, string $widget_type ): bool {
+	if ( 'widget' === ( $element['elType'] ?? '' ) && $widget_type === (string) ( $element['widgetType'] ?? '' ) ) {
+		return true;
+	}
+
+	foreach ( (array) ( $element['elements'] ?? array() ) as $child ) {
+		if ( is_array( $child ) && mcp_abilities_elementor_subtree_contains_widget_type( $child, $widget_type ) ) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/**
+ * Detect whether a subtree contains a specific heading tag.
+ *
+ * @param array  $element Elementor element.
+ * @param string $heading_tag Heading tag such as h1.
+ * @return bool
+ */
+function mcp_abilities_elementor_subtree_contains_heading_tag( array $element, string $heading_tag ): bool {
+	if ( 'widget' === ( $element['elType'] ?? '' ) && 'heading' === (string) ( $element['widgetType'] ?? '' ) ) {
+		$settings = is_array( $element['settings'] ?? null ) ? $element['settings'] : array();
+		if ( strtolower( (string) ( $settings['header_size'] ?? '' ) ) === strtolower( $heading_tag ) ) {
+			return true;
+		}
+	}
+
+	foreach ( (array) ( $element['elements'] ?? array() ) as $child ) {
+		if ( is_array( $child ) && mcp_abilities_elementor_subtree_contains_heading_tag( $child, $heading_tag ) ) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/**
+ * Detect whether a subtree contains any heading widget.
+ *
+ * @param array $element Elementor element.
+ * @return bool
+ */
+function mcp_abilities_elementor_subtree_contains_heading( array $element ): bool {
+	if ( 'widget' === ( $element['elType'] ?? '' ) && 'heading' === (string) ( $element['widgetType'] ?? '' ) ) {
+		return true;
+	}
+
+	foreach ( (array) ( $element['elements'] ?? array() ) as $child ) {
+		if ( is_array( $child ) && mcp_abilities_elementor_subtree_contains_heading( $child ) ) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/**
+ * Detect whether a subtree contains text-editor content.
+ *
+ * @param array $element Elementor element.
+ * @return bool
+ */
+function mcp_abilities_elementor_subtree_contains_text_editor( array $element ): bool {
+	return mcp_abilities_elementor_subtree_contains_widget_type( $element, 'text-editor' );
+}
+
+/**
+ * Extract a normalized row-child width token from element settings.
+ *
+ * @param array $settings Element settings.
+ * @return string
+ */
+function mcp_abilities_elementor_extract_child_width_token( array $settings ): string {
+	foreach ( array( 'flex_basis', 'width' ) as $key ) {
+		if ( ! array_key_exists( $key, $settings ) ) {
+			continue;
+		}
+
+		$token = mcp_abilities_elementor_tokenize_dimension_value( $settings[ $key ] );
+		if ( '' !== $token ) {
+			return $token;
+		}
+	}
+
+	return '';
+}
+
+/**
+ * Audit a single Elementor container for generic layout patterns.
+ *
+ * @param array $element Elementor element.
+ * @param int   $depth Current depth.
+ * @param array $stats Collector by reference.
+ * @return void
+ */
+function mcp_abilities_elementor_collect_generic_pattern_stats( array $element, int $depth, array &$stats ): void {
+	if ( 'container' !== ( $element['elType'] ?? '' ) ) {
+		return;
+	}
+
+	$settings = is_array( $element['settings'] ?? null ) ? $element['settings'] : array();
+	$children = array_values(
+		array_filter(
+			(array) ( $element['elements'] ?? array() ),
+			static function ( $child ) {
+				return is_array( $child ) && isset( $child['elType'] );
+			}
+		)
+	);
+
+	$direction = strtolower( (string) ( $settings['flex_direction'] ?? '' ) );
+	if ( 'row' !== $direction || count( $children ) < 2 ) {
+		return;
+	}
+
+	$child_signatures = array();
+	$width_tokens     = array();
+	$container_count  = 0;
+	foreach ( $children as $child ) {
+		$child_signatures[] = mcp_abilities_elementor_build_structure_signature( $child, 1 );
+		$child_settings     = is_array( $child['settings'] ?? null ) ? $child['settings'] : array();
+		$width_token        = mcp_abilities_elementor_extract_child_width_token( $child_settings );
+		if ( '' !== $width_token ) {
+			$width_tokens[] = $width_token;
+		}
+		if ( 'container' === ( $child['elType'] ?? '' ) ) {
+			++$container_count;
+		}
+	}
+
+	$unique_signatures = array_values( array_unique( $child_signatures ) );
+	$unique_widths     = array_values( array_unique( $width_tokens ) );
+	$child_count       = count( $children );
+	$element_id        = (string) ( $element['id'] ?? '' );
+
+	if ( 2 === $child_count && count( $width_tokens ) === $child_count && 1 === count( $unique_widths ) ) {
+		$stats['patterns']['symmetric_two_column'][] = $element_id;
+	}
+
+	if ( 3 === $child_count && count( $width_tokens ) === $child_count && 1 === count( $unique_widths ) ) {
+		$stats['patterns']['three_up_grid'][] = $element_id;
+	}
+
+	if ( $child_count >= 4 && count( $width_tokens ) === $child_count && 1 === count( $unique_widths ) ) {
+		$stats['patterns']['uniform_multi_grid'][] = $element_id;
+	}
+
+	if ( $container_count === $child_count && 1 === count( $unique_signatures ) ) {
+		$stats['patterns']['repeated_component_row'][] = $element_id;
+	}
+
+	if ( $depth <= 1 && 2 === $child_count ) {
+		$left_has_h1    = mcp_abilities_elementor_subtree_contains_heading_tag( $children[0], 'h1' );
+		$right_has_h1   = mcp_abilities_elementor_subtree_contains_heading_tag( $children[1], 'h1' );
+		$left_has_head  = mcp_abilities_elementor_subtree_contains_heading( $children[0] );
+		$right_has_head = mcp_abilities_elementor_subtree_contains_heading( $children[1] );
+		$left_has_text  = mcp_abilities_elementor_subtree_contains_text_editor( $children[0] );
+		$right_has_text = mcp_abilities_elementor_subtree_contains_text_editor( $children[1] );
+		$left_has_btn   = mcp_abilities_elementor_subtree_contains_widget_type( $children[0], 'button' );
+		$right_has_btn  = mcp_abilities_elementor_subtree_contains_widget_type( $children[1], 'button' );
+		$left_has_media = mcp_abilities_elementor_subtree_contains_widget_type( $children[0], 'image' );
+		$right_has_media = mcp_abilities_elementor_subtree_contains_widget_type( $children[1], 'image' );
+
+		$left_is_hero_copy  = $left_has_h1 || ( $left_has_head && $left_has_text && $left_has_btn );
+		$right_is_hero_copy = $right_has_h1 || ( $right_has_head && $right_has_text && $right_has_btn );
+
+		if ( ( $left_is_hero_copy && $right_has_media ) || ( $right_is_hero_copy && $left_has_media ) ) {
+			$stats['patterns']['standard_split_hero'][] = $element_id;
+		}
+	}
+}
+
+/**
+ * Recursively collect generic-layout statistics from an Elementor subtree.
+ *
+ * @param array $element Elementor element.
+ * @param array $stats Collector by reference.
+ * @param int   $max_depth Maximum depth, -1 for unlimited.
+ * @param int   $depth Current depth.
+ * @return void
+ */
+function mcp_abilities_elementor_collect_generic_layout_stats_from_subtree( array $element, array &$stats, int $max_depth = -1, int $depth = 0 ): void {
+	if ( $max_depth >= 0 && $depth > $max_depth ) {
+		return;
+	}
+
+	if ( 0 === $depth ) {
+		$stats['section_signatures'][] = mcp_abilities_elementor_build_structure_signature( $element, 1 );
+	}
+
+	mcp_abilities_elementor_collect_generic_pattern_stats( $element, $depth, $stats );
+
+	foreach ( (array) ( $element['elements'] ?? array() ) as $child ) {
+		if ( is_array( $child ) ) {
+			mcp_abilities_elementor_collect_generic_layout_stats_from_subtree( $child, $stats, $max_depth, $depth + 1 );
+		}
+	}
+}
+
+/**
+ * Finalize generic layout audit data.
+ *
+ * @param array $stats Raw stats.
+ * @return array
+ */
+function mcp_abilities_elementor_finalize_generic_layout_audit( array $stats ): array {
+	$patterns = array();
+	foreach ( (array) ( $stats['patterns'] ?? array() ) as $name => $ids ) {
+		$ids = array_values( array_unique( array_filter( array_map( 'strval', (array) $ids ) ) ) );
+		$patterns[ $name ] = array(
+			'count'       => count( $ids ),
+			'element_ids' => $ids,
+		);
+	}
+
+	$section_signatures = array_values( array_filter( (array) ( $stats['section_signatures'] ?? array() ) ) );
+	$signature_counts   = array_count_values( $section_signatures );
+	arsort( $signature_counts );
+	$top_repeated = array_slice( $signature_counts, 0, 5, true );
+
+	$recommendations = array();
+	if ( ! empty( $patterns['standard_split_hero']['count'] ) ) {
+		$recommendations[] = 'Consider breaking the default split-hero formula by varying media placement, information density, or section sequencing.';
+	}
+	if ( ! empty( $patterns['three_up_grid']['count'] ) || ! empty( $patterns['uniform_multi_grid']['count'] ) ) {
+		$recommendations[] = 'Reduce repeated equal-width grids. Keep at least one major section on a different column rhythm or card count.';
+	}
+	if ( ! empty( $patterns['repeated_component_row']['count'] ) ) {
+		$recommendations[] = 'Introduce at least one section whose child components do not all share the same internal structure.';
+	}
+	if ( ! empty( $patterns['symmetric_two_column']['count'] ) && $patterns['symmetric_two_column']['count'] > 1 ) {
+		$recommendations[] = 'Avoid stacking multiple 50/50 rows in sequence. Vary section ratios so the page does not settle into a repetitive beat.';
+	}
+	if ( ! empty( $top_repeated ) && max( $top_repeated ) > 1 ) {
+		$recommendations[] = 'Top-level section composition is repeating. Increase compositional contrast between adjacent sections.';
+	}
+
+	return array(
+		'patterns'            => $patterns,
+		'section_signatures'  => array_map(
+			static function ( $signature, $count ) {
+				return array(
+					'signature' => (string) $signature,
+					'count'     => (int) $count,
+				);
+			},
+			array_keys( $top_repeated ),
+			array_values( $top_repeated )
+		),
+		'recommendations'     => array_values( array_unique( $recommendations ) ),
+	);
+}
+
+/**
+ * Compute a neutral distinctiveness score from generic-layout audit data.
+ *
+ * @param array $audit Finalized audit payload.
+ * @return array
+ */
+function mcp_abilities_elementor_score_distinctiveness_from_audit( array $audit ): array {
+	$patterns = is_array( $audit['patterns'] ?? null ) ? $audit['patterns'] : array();
+	$penalties = array();
+
+	$weights = array(
+		'standard_split_hero'   => 18,
+		'symmetric_two_column'  => 8,
+		'three_up_grid'         => 10,
+		'uniform_multi_grid'    => 12,
+		'repeated_component_row'=> 10,
+	);
+
+	foreach ( $weights as $pattern => $weight ) {
+		$count = (int) ( $patterns[ $pattern ]['count'] ?? 0 );
+		if ( $count <= 0 ) {
+			continue;
+		}
+		$penalties[] = array(
+			'pattern' => $pattern,
+			'count'   => $count,
+			'points'  => min( 30, $count * $weight ),
+		);
+	}
+
+	$section_signature_penalty = 0;
+	foreach ( (array) ( $audit['section_signatures'] ?? array() ) as $entry ) {
+		$count = (int) ( $entry['count'] ?? 0 );
+		if ( $count > 1 ) {
+			$section_signature_penalty += min( 12, ( $count - 1 ) * 6 );
+		}
+	}
+	if ( $section_signature_penalty > 0 ) {
+		$penalties[] = array(
+			'pattern' => 'top_level_repetition',
+			'count'   => $section_signature_penalty / 6,
+			'points'  => min( 24, $section_signature_penalty ),
+		);
+	}
+
+	$total_penalty = 0;
+	foreach ( $penalties as $penalty ) {
+		$total_penalty += (int) $penalty['points'];
+	}
+
+	$score = max( 0, 100 - min( 90, $total_penalty ) );
+
+	return array(
+		'score'          => $score,
+		'penalties'      => $penalties,
+		'recommendations'=> array_values( array_unique( (array) ( $audit['recommendations'] ?? array() ) ) ),
+	);
+}
+
+/**
+ * Extract plain text from Elementor subtree content.
+ *
+ * @param array $element Elementor element.
+ * @return string
+ */
+function mcp_abilities_elementor_extract_text_from_subtree( array $element ): string {
+	$text = '';
+
+	if ( 'widget' === ( $element['elType'] ?? '' ) ) {
+		$widget_type = (string) ( $element['widgetType'] ?? '' );
+		$settings    = is_array( $element['settings'] ?? null ) ? $element['settings'] : array();
+
+		if ( 'heading' === $widget_type && ! empty( $settings['title'] ) && is_string( $settings['title'] ) ) {
+			$text .= ' ' . wp_strip_all_tags( $settings['title'] );
+		}
+
+		if ( 'text-editor' === $widget_type && ! empty( $settings['editor'] ) && is_string( $settings['editor'] ) ) {
+			$text .= ' ' . wp_strip_all_tags( $settings['editor'] );
+		}
+
+		if ( 'button' === $widget_type && ! empty( $settings['text'] ) && is_string( $settings['text'] ) ) {
+			$text .= ' ' . wp_strip_all_tags( $settings['text'] );
+		}
+	}
+
+	foreach ( (array) ( $element['elements'] ?? array() ) as $child ) {
+		if ( is_array( $child ) ) {
+			$text .= ' ' . mcp_abilities_elementor_extract_text_from_subtree( $child );
+		}
+	}
+
+	return trim( preg_replace( '/\s+/', ' ', $text ) ?? '' );
+}
+
+/**
+ * Count words in subtree text content.
+ *
+ * @param array $element Elementor element.
+ * @return int
+ */
+function mcp_abilities_elementor_count_subtree_words( array $element ): int {
+	$text = mcp_abilities_elementor_extract_text_from_subtree( $element );
+	if ( '' === $text ) {
+		return 0;
+	}
+
+	$words = preg_split( '/\s+/', $text );
+	return is_array( $words ) ? count( array_filter( $words, 'strlen' ) ) : 0;
+}
+
+/**
+ * Build a column role profile for a subtree.
+ *
+ * @param array $element Elementor element.
+ * @return array
+ */
+function mcp_abilities_elementor_build_column_role_profile( array $element ): array {
+	$heading_count = 0;
+	$text_count    = 0;
+	$button_count  = 0;
+	$image_count   = 0;
+
+	$walker = static function ( array $node ) use ( &$walker, &$heading_count, &$text_count, &$button_count, &$image_count ): void {
+		if ( 'widget' === ( $node['elType'] ?? '' ) ) {
+			$widget_type = (string) ( $node['widgetType'] ?? '' );
+			if ( 'heading' === $widget_type ) {
+				++$heading_count;
+			} elseif ( 'text-editor' === $widget_type ) {
+				++$text_count;
+			} elseif ( 'button' === $widget_type ) {
+				++$button_count;
+			} elseif ( 'image' === $widget_type ) {
+				++$image_count;
+			}
+		}
+
+		foreach ( (array) ( $node['elements'] ?? array() ) as $child ) {
+			if ( is_array( $child ) ) {
+				$walker( $child );
+			}
+		}
+	};
+
+	$walker( $element );
+
+	$word_count   = mcp_abilities_elementor_count_subtree_words( $element );
+	$copy_score   = ( $heading_count * 3 ) + ( $text_count * 3 ) + ( $button_count * 2 ) + min( 8, (int) floor( $word_count / 20 ) );
+	$media_score  = $image_count * 4;
+	$total_score  = $copy_score + $media_score;
+	$role         = 'light';
+
+	if ( $copy_score >= ( $media_score + 3 ) && $copy_score >= 4 ) {
+		$role = 'copy';
+	} elseif ( $media_score >= ( $copy_score + 3 ) && $media_score >= 4 ) {
+		$role = 'media';
+	} elseif ( $total_score >= 5 ) {
+		$role = 'mixed';
+	}
+
+	return array(
+		'heading_count' => $heading_count,
+		'text_count'    => $text_count,
+		'button_count'  => $button_count,
+		'image_count'   => $image_count,
+		'word_count'    => $word_count,
+		'copy_score'    => $copy_score,
+		'media_score'   => $media_score,
+		'total_score'   => $total_score,
+		'role'          => $role,
+	);
+}
+
+/**
+ * Build a normalized row signature for a column container.
+ *
+ * @param array $width_tokens Width tokens.
+ * @return string
+ */
+function mcp_abilities_elementor_build_ratio_signature( array $width_tokens ): string {
+	$tokens = array_values( array_filter( array_map( 'strval', $width_tokens ) ) );
+	if ( empty( $tokens ) ) {
+		return 'auto';
+	}
+
+	return implode( '|', $tokens );
+}
+
+/**
+ * Audit a row container for column-specific issues.
+ *
+ * @param array $element Elementor element.
+ * @param int   $depth Current depth.
+ * @param array $stats Collector by reference.
+ * @return void
+ */
+function mcp_abilities_elementor_collect_column_audit_stats( array $element, int $depth, array &$stats ): void {
+	if ( 'container' !== ( $element['elType'] ?? '' ) ) {
+		return;
+	}
+
+	$settings = is_array( $element['settings'] ?? null ) ? $element['settings'] : array();
+	$children = array_values(
+		array_filter(
+			(array) ( $element['elements'] ?? array() ),
+			static function ( $child ) {
+				return is_array( $child ) && isset( $child['elType'] );
+			}
+		)
+	);
+
+	$direction = strtolower( (string) ( $settings['flex_direction'] ?? '' ) );
+	if ( 'row' !== $direction || count( $children ) < 2 ) {
+		return;
+	}
+
+	$element_id     = (string) ( $element['id'] ?? '' );
+	$width_tokens   = array();
+	$child_profiles = array();
+	$container_count = 0;
+	$image_widget_count = 0;
+	foreach ( $children as $child ) {
+		$child_settings  = is_array( $child['settings'] ?? null ) ? $child['settings'] : array();
+		$width_tokens[]  = mcp_abilities_elementor_extract_child_width_token( $child_settings );
+		$child_profiles[] = mcp_abilities_elementor_build_column_role_profile( $child );
+		if ( 'container' === ( $child['elType'] ?? '' ) ) {
+			++$container_count;
+		}
+		if ( 'widget' === ( $child['elType'] ?? '' ) && 'image' === (string) ( $child['widgetType'] ?? '' ) ) {
+			++$image_widget_count;
+		}
+	}
+
+	if ( 0 === $container_count && $image_widget_count < 1 ) {
+		return;
+	}
+
+	$ratio_signature = mcp_abilities_elementor_build_ratio_signature( $width_tokens );
+	$gap_token       = mcp_abilities_elementor_tokenize_dimension_value( $settings['flex_gap'] ?? null );
+	$gap_token       = '' !== $gap_token ? $gap_token : 'gap:auto';
+
+	$stats['rows'][] = array(
+		'element_id'       => $element_id,
+		'depth'            => $depth,
+		'child_count'      => count( $children ),
+		'ratio_signature'  => $ratio_signature,
+		'gap_token'        => $gap_token,
+		'child_profiles'   => $child_profiles,
+	);
+}
+
+/**
+ * Recursively collect column audit stats from an Elementor subtree.
+ *
+ * @param array $element Elementor element.
+ * @param array $stats Collector by reference.
+ * @param int   $max_depth Maximum depth, -1 for unlimited.
+ * @param int   $depth Current depth.
+ * @return void
+ */
+function mcp_abilities_elementor_collect_column_audit_stats_from_subtree( array $element, array &$stats, int $max_depth = -1, int $depth = 0 ): void {
+	if ( $max_depth >= 0 && $depth > $max_depth ) {
+		return;
+	}
+
+	mcp_abilities_elementor_collect_column_audit_stats( $element, $depth, $stats );
+
+	foreach ( (array) ( $element['elements'] ?? array() ) as $child ) {
+		if ( is_array( $child ) ) {
+			mcp_abilities_elementor_collect_column_audit_stats_from_subtree( $child, $stats, $max_depth, $depth + 1 );
+		}
+	}
+}
+
+/**
+ * Finalize column pattern audit.
+ *
+ * @param array $rows Row audit entries.
+ * @return array
+ */
+function mcp_abilities_elementor_finalize_column_patterns_audit( array $rows ): array {
+	$ratio_map        = array();
+	$equal_split_ids  = array();
+	$equal_third_ids  = array();
+	$recommendations  = array();
+
+	foreach ( $rows as $row ) {
+		$ratio_signature = (string) ( $row['ratio_signature'] ?? 'auto' );
+		$child_count     = (int) ( $row['child_count'] ?? 0 );
+		$element_id      = (string) ( $row['element_id'] ?? '' );
+
+		if ( ! isset( $ratio_map[ $ratio_signature ] ) ) {
+			$ratio_map[ $ratio_signature ] = array();
+		}
+		$ratio_map[ $ratio_signature ][] = $element_id;
+
+		$parts = array_values( array_filter( explode( '|', $ratio_signature ), 'strlen' ) );
+		if ( 2 === $child_count && 2 === count( $parts ) && 1 === count( array_unique( $parts ) ) ) {
+			$equal_split_ids[] = $element_id;
+		}
+		if ( 3 === $child_count && 3 === count( $parts ) && 1 === count( array_unique( $parts ) ) ) {
+			$equal_third_ids[] = $element_id;
+		}
+	}
+
+	$repeated_ratios = array();
+	foreach ( $ratio_map as $signature => $ids ) {
+		$ids = array_values( array_filter( array_unique( array_map( 'strval', $ids ) ) ) );
+		if ( count( $ids ) > 1 ) {
+			$repeated_ratios[] = array(
+				'ratio_signature' => (string) $signature,
+				'count'           => count( $ids ),
+				'element_ids'     => $ids,
+			);
+		}
+	}
+
+	usort(
+		$repeated_ratios,
+		static function ( array $left, array $right ): int {
+			return (int) $right['count'] <=> (int) $left['count'];
+		}
+	);
+
+	if ( count( $equal_split_ids ) > 1 ) {
+		$recommendations[] = 'Repeated equal two-column splits can make the page settle into a predictable beat. That is only worth changing when the split no longer feels earned by the content.';
+	}
+	if ( count( $equal_third_ids ) > 0 ) {
+		$recommendations[] = 'Equal thirds are easy to default to. Use them when comparison is the point, not just because the grid is available.';
+	}
+
+	return array(
+		'row_count'        => count( $rows ),
+		'equal_split_ids'  => array_values( array_unique( $equal_split_ids ) ),
+		'equal_third_ids'  => array_values( array_unique( $equal_third_ids ) ),
+		'repeated_ratios'  => array_slice( $repeated_ratios, 0, 8 ),
+		'recommendations'  => array_values( array_unique( $recommendations ) ),
+	);
+}
+
+/**
+ * Finalize layout mechanism fit audit.
+ *
+ * Uses Elementor's own Grid-vs-Flex guidance:
+ * - Grid is for equal, symmetric rows/columns.
+ * - Flexbox is for user-shaped directional patterns.
+ *
+ * @param array $rows Row audit entries.
+ * @return array
+ */
+function mcp_abilities_elementor_finalize_layout_mechanism_fit_audit( array $rows ): array {
+	$grid_candidates  = array();
+	$recommendations  = array();
+	$guidance_sources = array(
+		'https://elementor.com/help/create-a-grid-container/',
+		'https://elementor.com/help/grid-container-layout-options/',
+	);
+
+	foreach ( $rows as $row ) {
+		$ratio_signature = (string) ( $row['ratio_signature'] ?? 'auto' );
+		$parts           = array_values( array_filter( explode( '|', $ratio_signature ), 'strlen' ) );
+		$child_count     = (int) ( $row['child_count'] ?? 0 );
+		$element_id      = (string) ( $row['element_id'] ?? '' );
+		$gap_token       = (string) ( $row['gap_token'] ?? 'gap:auto' );
+
+		if ( $child_count < 2 || count( $parts ) !== $child_count ) {
+			continue;
+		}
+
+		if ( count( array_unique( $parts ) ) !== 1 ) {
+			continue;
+		}
+
+		$grid_candidates[] = array(
+			'element_id'       => $element_id,
+			'child_count'      => $child_count,
+			'ratio_signature'  => $ratio_signature,
+			'gap_token'        => $gap_token,
+			'recommended_mode' => 'grid',
+			'reason'           => 'Equal, symmetric columns are a better fit for Elementor Grid containers than Flexbox rows with guessed child widths.',
+		);
+	}
+
+	if ( ! empty( $grid_candidates ) ) {
+		$recommendations[] = 'For equal, symmetric column groups, prefer Elementor Grid containers. Elementor documents Grid for equal symmetric rows/columns and Flexbox for user-shaped directional patterns.';
+	}
+
+	return array(
+		'grid_candidate_count' => count( $grid_candidates ),
+		'grid_candidates'      => array_values( $grid_candidates ),
+		'guidance_sources'     => $guidance_sources,
+		'recommendations'      => array_values( array_unique( $recommendations ) ),
+	);
+}
+
+/**
+ * Finalize column dominance audit.
+ *
+ * @param array $rows Row audit entries.
+ * @return array
+ */
+function mcp_abilities_elementor_finalize_column_dominance_audit( array $rows ): array {
+	$issues          = array();
+	$recommendations = array();
+
+	foreach ( $rows as $row ) {
+		$child_profiles = is_array( $row['child_profiles'] ?? null ) ? $row['child_profiles'] : array();
+		$ratio_signature = (string) ( $row['ratio_signature'] ?? 'auto' );
+		$parts = array_values( array_filter( explode( '|', $ratio_signature ), 'strlen' ) );
+
+		if ( 2 !== count( $child_profiles ) ) {
+			continue;
+		}
+
+		$left  = $child_profiles[0];
+		$right = $child_profiles[1];
+		$delta = abs( (int) ( $left['total_score'] ?? 0 ) - (int) ( $right['total_score'] ?? 0 ) );
+		$is_equal_split = 2 === count( $parts ) && 1 === count( array_unique( $parts ) );
+
+		if ( $is_equal_split && $delta >= 4 ) {
+			$issues[] = array(
+				'type'          => 'equal_split_with_clear_dominant_side',
+				'element_id'    => (string) ( $row['element_id'] ?? '' ),
+				'ratio'         => $ratio_signature,
+				'left_role'     => (string) ( $left['role'] ?? 'light' ),
+				'right_role'    => (string) ( $right['role'] ?? 'light' ),
+				'left_score'    => (int) ( $left['total_score'] ?? 0 ),
+				'right_score'   => (int) ( $right['total_score'] ?? 0 ),
+			);
+		}
+	}
+
+	if ( ! empty( $issues ) ) {
+		$recommendations[] = 'Some equal column splits appear to hide a clear dominant side. Consider whether those rows are understating their own hierarchy.';
+	}
+
+	return array(
+		'issues'         => $issues,
+		'recommendations'=> $recommendations,
+	);
+}
+
+/**
+ * Finalize column alignment rhythm audit.
+ *
+ * @param array $rows Row audit entries.
+ * @return array
+ */
+function mcp_abilities_elementor_finalize_column_alignment_rhythm_audit( array $rows ): array {
+	$gap_map          = array();
+	$ratio_gap_map    = array();
+	$recommendations  = array();
+
+	foreach ( $rows as $row ) {
+		$gap   = (string) ( $row['gap_token'] ?? 'gap:auto' );
+		$ratio = (string) ( $row['ratio_signature'] ?? 'auto' );
+		$id    = (string) ( $row['element_id'] ?? '' );
+
+		if ( ! isset( $gap_map[ $gap ] ) ) {
+			$gap_map[ $gap ] = array();
+		}
+		$gap_map[ $gap ][] = $id;
+
+		if ( ! isset( $ratio_gap_map[ $ratio ] ) ) {
+			$ratio_gap_map[ $ratio ] = array();
+		}
+		$ratio_gap_map[ $ratio ][] = $gap;
+	}
+
+	$inconsistent_rows = array();
+	foreach ( $ratio_gap_map as $ratio => $gaps ) {
+		$unique_gaps = array_values( array_unique( array_filter( array_map( 'strval', $gaps ) ) ) );
+		if ( count( $unique_gaps ) > 1 ) {
+			$inconsistent_rows[] = array(
+				'ratio_signature' => (string) $ratio,
+				'gap_tokens'      => $unique_gaps,
+			);
+		}
+	}
+
+	if ( ! empty( $inconsistent_rows ) ) {
+		$recommendations[] = 'Similar column ratios are using different gutter rhythms. That can be deliberate, but it is worth checking whether the spacing differences help the message or just add noise.';
+	}
+
+	return array(
+		'gap_groups'       => array_map(
+			static function ( $gap, $ids ): array {
+				return array(
+					'gap_token'   => (string) $gap,
+					'count'       => count( array_unique( $ids ) ),
+					'element_ids' => array_values( array_unique( array_map( 'strval', $ids ) ) ),
+				);
+			},
+			array_keys( $gap_map ),
+			array_values( $gap_map )
+		),
+		'inconsistent_ratios' => $inconsistent_rows,
+		'recommendations'     => $recommendations,
+	);
+}
+
+/**
+ * Finalize column balance audit.
+ *
+ * @param array $rows Row audit entries.
+ * @return array
+ */
+function mcp_abilities_elementor_finalize_column_balance_audit( array $rows ): array {
+	$issues          = array();
+	$recommendations = array();
+
+	foreach ( $rows as $row ) {
+		$child_profiles = is_array( $row['child_profiles'] ?? null ) ? $row['child_profiles'] : array();
+		$ratio_signature = (string) ( $row['ratio_signature'] ?? 'auto' );
+		$parts = array_values( array_filter( explode( '|', $ratio_signature ), 'strlen' ) );
+		if ( 2 !== count( $child_profiles ) || 2 !== count( $parts ) ) {
+			continue;
+		}
+
+		$left  = $child_profiles[0];
+		$right = $child_profiles[1];
+		$delta = abs( (int) ( $left['total_score'] ?? 0 ) - (int) ( $right['total_score'] ?? 0 ) );
+		$is_equal_split = 1 === count( array_unique( $parts ) );
+
+		if ( ! $is_equal_split && $delta <= 1 ) {
+			$issues[] = array(
+				'type'         => 'asymmetry_without_clear_content_reason',
+				'element_id'   => (string) ( $row['element_id'] ?? '' ),
+				'ratio'        => $ratio_signature,
+				'left_score'   => (int) ( $left['total_score'] ?? 0 ),
+				'right_score'  => (int) ( $right['total_score'] ?? 0 ),
+			);
+		}
+	}
+
+	if ( ! empty( $issues ) ) {
+		$recommendations[] = 'Some asymmetric rows have very similar content weight on both sides. Check whether the asymmetry is buying clarity or just visual tension.';
+	}
+
+	return array(
+		'issues'         => $issues,
+		'recommendations'=> $recommendations,
+	);
+}
+
+/**
+ * Finalize column necessity audit.
+ *
+ * @param array $rows Row audit entries.
+ * @return array
+ */
+function mcp_abilities_elementor_finalize_column_necessity_audit( array $rows ): array {
+	$issues          = array();
+	$recommendations = array();
+
+	foreach ( $rows as $row ) {
+		$child_profiles = is_array( $row['child_profiles'] ?? null ) ? $row['child_profiles'] : array();
+		if ( 2 !== count( $child_profiles ) ) {
+			continue;
+		}
+
+		$left  = $child_profiles[0];
+		$right = $child_profiles[1];
+		$roles = array( (string) ( $left['role'] ?? 'light' ), (string) ( $right['role'] ?? 'light' ) );
+
+		$both_light = 'light' === $roles[0] && 'light' === $roles[1];
+		$both_copy  = 'copy' === $roles[0] && 'copy' === $roles[1];
+		$low_words  = ( (int) ( $left['word_count'] ?? 0 ) + (int) ( $right['word_count'] ?? 0 ) ) <= 45;
+		$no_media   = 0 === ( (int) ( $left['image_count'] ?? 0 ) + (int) ( $right['image_count'] ?? 0 ) );
+
+		if ( $both_light || ( $both_copy && $low_words && $no_media ) ) {
+			$issues[] = array(
+				'type'          => 'split_may_not_be_earning_its_complexity',
+				'element_id'    => (string) ( $row['element_id'] ?? '' ),
+				'ratio'         => (string) ( $row['ratio_signature'] ?? 'auto' ),
+				'left_role'     => $roles[0],
+				'right_role'    => $roles[1],
+				'left_words'    => (int) ( $left['word_count'] ?? 0 ),
+				'right_words'   => (int) ( $right['word_count'] ?? 0 ),
+			);
+		}
+	}
+
+	if ( ! empty( $issues ) ) {
+		$recommendations[] = 'Some splits may not be earning their complexity. Check whether those rows would read more clearly as one lane instead of two parallel columns.';
+	}
+
+	return array(
+		'issues'         => $issues,
+		'recommendations'=> $recommendations,
+	);
+}
+
+/**
+ * Parse a simple color string into RGB components when possible.
+ *
+ * @param string $color Color string.
+ * @return array|null
+ */
+function mcp_abilities_elementor_parse_color_to_rgb( string $color ): ?array {
+	$color = trim( strtolower( $color ) );
+	if ( '' === $color || 'transparent' === $color ) {
+		return null;
+	}
+
+	if ( preg_match( '/^#([0-9a-f]{3})$/', $color, $matches ) ) {
+		return array(
+			hexdec( str_repeat( $matches[1][0], 2 ) ),
+			hexdec( str_repeat( $matches[1][1], 2 ) ),
+			hexdec( str_repeat( $matches[1][2], 2 ) ),
+		);
+	}
+
+	if ( preg_match( '/^#([0-9a-f]{6})$/', $color, $matches ) ) {
+		return array(
+			hexdec( substr( $matches[1], 0, 2 ) ),
+			hexdec( substr( $matches[1], 2, 2 ) ),
+			hexdec( substr( $matches[1], 4, 2 ) ),
+		);
+	}
+
+	if ( preg_match( '/^rgba?\(([^)]+)\)$/', $color, $matches ) ) {
+		$parts = array_map( 'trim', explode( ',', $matches[1] ) );
+		if ( count( $parts ) >= 3 ) {
+			return array(
+				max( 0, min( 255, (int) round( (float) $parts[0] ) ) ),
+				max( 0, min( 255, (int) round( (float) $parts[1] ) ) ),
+				max( 0, min( 255, (int) round( (float) $parts[2] ) ) ),
+			);
+		}
+	}
+
+	return null;
+}
+
+/**
+ * Classify a background color into a broad tone bucket.
+ *
+ * @param array $settings Elementor settings.
+ * @return string
+ */
+function mcp_abilities_elementor_classify_surface_tone( array $settings ): string {
+	$color = '';
+	foreach ( array( 'background_color', 'background_color_b' ) as $key ) {
+		if ( ! empty( $settings[ $key ] ) && is_string( $settings[ $key ] ) ) {
+			$color = $settings[ $key ];
+			break;
+		}
+	}
+
+	if ( '' === $color ) {
+		return 'none';
+	}
+
+	$rgb = mcp_abilities_elementor_parse_color_to_rgb( $color );
+	if ( null === $rgb ) {
+		return 'styled';
+	}
+
+	list( $red, $green, $blue ) = $rgb;
+	$luma = ( 0.2126 * $red ) + ( 0.7152 * $green ) + ( 0.0722 * $blue );
+
+	if ( $luma < 70 ) {
+		return 'dark';
+	}
+
+	if ( $luma > 220 ) {
+		return 'light';
+	}
+
+	if ( $red > ( $green + 20 ) && $red > ( $blue + 20 ) ) {
+		return 'accent';
+	}
+
+	if ( abs( $red - $green ) < 14 && abs( $green - $blue ) < 14 ) {
+		return 'muted';
+	}
+
+	return 'mid';
+}
+
+/**
+ * Build a normalized surface signature for styled containers.
+ *
+ * @param array $element Elementor element.
+ * @return string
+ */
+function mcp_abilities_elementor_build_surface_signature( array $element ): string {
+	if ( 'container' !== ( $element['elType'] ?? '' ) ) {
+		return '';
+	}
+
+	$settings = is_array( $element['settings'] ?? null ) ? $element['settings'] : array();
+	$tone     = mcp_abilities_elementor_classify_surface_tone( $settings );
+	$radius   = mcp_abilities_elementor_tokenize_dimension_value( $settings['border_radius'] ?? null );
+	$padding  = mcp_abilities_elementor_tokenize_dimension_value( $settings['padding'] ?? null );
+	$border   = ! empty( $settings['border_border'] ) ? 'border' : 'plain';
+	$shadow   = ! empty( $settings['box_shadow_box_shadow_type'] ) || ! empty( $settings['image_box_shadow_box_shadow_type'] ) ? 'shadow' : 'flat';
+
+	if ( 'none' === $tone && '' === $radius && 'border' === $border && 'flat' === $shadow ) {
+		return '';
+	}
+
+	if ( 'none' === $tone && '' === $radius && 'plain' === $border && 'flat' === $shadow ) {
+		return '';
+	}
+
+	if ( 'none' === $tone && '' === $radius && '' === $padding && 'plain' === $border && 'flat' === $shadow ) {
+		return '';
+	}
+
+	return implode(
+		'|',
+		array(
+			$tone,
+			'' !== $radius ? $radius : 'radius:none',
+			'' !== $padding ? $padding : 'padding:none',
+			$border,
+			$shadow,
+		)
+	);
+}
+
+/**
+ * Determine whether a subtree looks like a reusable card/panel pattern.
+ *
+ * @param array $element Elementor element.
+ * @return bool
+ */
+function mcp_abilities_elementor_is_card_like_container( array $element ): bool {
+	if ( 'container' !== ( $element['elType'] ?? '' ) ) {
+		return false;
+	}
+
+	if ( empty( $element['isInner'] ) ) {
+		return false;
+	}
+
+	$signature = mcp_abilities_elementor_build_surface_signature( $element );
+	if ( '' === $signature ) {
+		return false;
+	}
+
+	$settings      = is_array( $element['settings'] ?? null ) ? $element['settings'] : array();
+	$has_treatment = ! empty( $settings['border_border'] ) || ! empty( $settings['border_radius'] ) || ! empty( $settings['background_color'] ) || ! empty( $settings['background_color_b'] ) || ! empty( $settings['box_shadow_box_shadow_type'] );
+	if ( ! $has_treatment ) {
+		return false;
+	}
+
+	$has_heading = mcp_abilities_elementor_subtree_contains_heading( $element );
+	$has_text    = mcp_abilities_elementor_subtree_contains_text_editor( $element );
+	$has_button  = mcp_abilities_elementor_subtree_contains_widget_type( $element, 'button' );
+
+	return $has_heading && ( $has_text || $has_button );
+}
+
+/**
+ * Build a compact component profile for a subtree.
+ *
+ * @param array $element Elementor element.
+ * @return array
+ */
+function mcp_abilities_elementor_build_component_profile( array $element ): array {
+	$widget_counts = array(
+		'button'      => 0,
+		'image'       => 0,
+		'heading'     => 0,
+		'text-editor' => 0,
+		'icon'        => 0,
+	);
+	$card_like_ids = array();
+
+	$walker = static function ( array $node ) use ( &$walker, &$widget_counts, &$card_like_ids ): void {
+		if ( 'widget' === ( $node['elType'] ?? '' ) ) {
+			$widget_type = (string) ( $node['widgetType'] ?? '' );
+			if ( array_key_exists( $widget_type, $widget_counts ) ) {
+				++$widget_counts[ $widget_type ];
+			}
+		}
+
+		if ( mcp_abilities_elementor_is_card_like_container( $node ) ) {
+			$card_like_ids[] = (string) ( $node['id'] ?? '' );
+		}
+
+		foreach ( (array) ( $node['elements'] ?? array() ) as $child ) {
+			if ( is_array( $child ) ) {
+				$walker( $child );
+			}
+		}
+	};
+
+	$walker( $element );
+
+	return array(
+		'widget_counts' => $widget_counts,
+		'card_like_ids' => array_values( array_filter( array_unique( $card_like_ids ) ) ),
+	);
+}
+
+/**
+ * Finalize component overuse audit.
+ *
+ * @param array $profile Component profile.
+ * @return array
+ */
+function mcp_abilities_elementor_finalize_component_overuse_audit( array $profile ): array {
+	$widget_counts = is_array( $profile['widget_counts'] ?? null ) ? $profile['widget_counts'] : array();
+	$card_like_ids = array_values( array_filter( array_map( 'strval', (array) ( $profile['card_like_ids'] ?? array() ) ) ) );
+	$issues        = array();
+	$recommendations = array();
+
+	$button_count = (int) ( $widget_counts['button'] ?? 0 );
+	if ( $button_count >= 4 ) {
+		$issues[] = array(
+			'type'  => 'button_overuse',
+			'count' => $button_count,
+		);
+		$recommendations[] = 'Too many buttons can make a page feel like stock landing-page furniture. Keep calls to action more selective.';
+	}
+
+	if ( count( $card_like_ids ) >= 3 ) {
+		$issues[] = array(
+			'type'        => 'card_like_surface_overuse',
+			'count'       => count( $card_like_ids ),
+			'element_ids' => $card_like_ids,
+		);
+		$recommendations[] = 'Repeated panel/card treatment is starting to dominate the page. Use that surface language more selectively.';
+	}
+
+	return array(
+		'widget_counts'   => $widget_counts,
+		'card_like_count' => count( $card_like_ids ),
+		'card_like_ids'   => $card_like_ids,
+		'issues'          => $issues,
+		'recommendations' => array_values( array_unique( $recommendations ) ),
+	);
+}
+
+/**
+ * Collect repeated surface signatures from a subtree.
+ *
+ * @param array $element Elementor element.
+ * @param array $collector Collector by reference.
+ * @return void
+ */
+function mcp_abilities_elementor_collect_surface_signatures_from_subtree( array $element, array &$collector ): void {
+	$signature = mcp_abilities_elementor_build_surface_signature( $element );
+	if ( '' !== $signature && ! empty( $element['isInner'] ) ) {
+		if ( ! isset( $collector[ $signature ] ) || ! is_array( $collector[ $signature ] ) ) {
+			$collector[ $signature ] = array();
+		}
+		$collector[ $signature ][] = (string) ( $element['id'] ?? '' );
+	}
+
+	foreach ( (array) ( $element['elements'] ?? array() ) as $child ) {
+		if ( is_array( $child ) ) {
+			mcp_abilities_elementor_collect_surface_signatures_from_subtree( $child, $collector );
+		}
+	}
+}
+
+/**
+ * Finalize repeated surface audit.
+ *
+ * @param array $collector Surface collector.
+ * @return array
+ */
+function mcp_abilities_elementor_finalize_surface_overuse_audit( array $collector ): array {
+	$repeated = array();
+	$recommendations = array();
+
+	foreach ( $collector as $signature => $ids ) {
+		$ids = array_values( array_filter( array_unique( array_map( 'strval', (array) $ids ) ) ) );
+		if ( count( $ids ) < 3 ) {
+			continue;
+		}
+		$repeated[] = array(
+			'signature'  => (string) $signature,
+			'count'      => count( $ids ),
+			'element_ids'=> $ids,
+		);
+	}
+
+	usort(
+		$repeated,
+		static function ( array $left, array $right ): int {
+			return (int) $right['count'] <=> (int) $left['count'];
+		}
+	);
+
+	if ( ! empty( $repeated ) ) {
+		$recommendations[] = 'A single surface treatment is repeating often. That is only worth changing if it starts to feel formulaic rather than intentionally restrained.';
+	}
+
+	return array(
+		'repeated_surfaces' => array_slice( $repeated, 0, 8 ),
+		'recommendations'   => $recommendations,
+	);
+}
+
+/**
+ * Compute a broad emphasis score for a section subtree.
+ *
+ * @param array $element Elementor element.
+ * @return array
+ */
+function mcp_abilities_elementor_compute_section_emphasis_profile( array $element ): array {
+	$settings         = is_array( $element['settings'] ?? null ) ? $element['settings'] : array();
+	$tone             = mcp_abilities_elementor_classify_surface_tone( $settings );
+	$has_h1           = mcp_abilities_elementor_subtree_contains_heading_tag( $element, 'h1' );
+	$has_h2           = mcp_abilities_elementor_subtree_contains_heading_tag( $element, 'h2' );
+	$has_media        = mcp_abilities_elementor_subtree_contains_widget_type( $element, 'image' );
+	$has_btn          = mcp_abilities_elementor_subtree_contains_widget_type( $element, 'button' );
+	$has_text         = mcp_abilities_elementor_subtree_contains_text_editor( $element );
+	$component        = mcp_abilities_elementor_build_component_profile( $element );
+	$widget_counts    = is_array( $component['widget_counts'] ?? null ) ? $component['widget_counts'] : array();
+	$card_like_ids    = array_values( array_filter( array_map( 'strval', (array) ( $component['card_like_ids'] ?? array() ) ) ) );
+	$button_count     = (int) ( $widget_counts['button'] ?? 0 );
+	$card_like_count  = count( $card_like_ids );
+
+	$score = 0;
+	$score += $has_h1 ? 4 : 0;
+	$score += $has_h2 ? 3 : 0;
+	$score += $has_media ? 2 : 0;
+	$score += $has_btn ? 2 : 0;
+	$score += $has_text ? 1 : 0;
+	$score += in_array( $tone, array( 'dark', 'accent' ), true ) ? 1 : 0;
+
+	$spotlight_score = 0;
+	$spotlight_score += $score >= 8 ? 2 : ( $score >= 6 ? 1 : 0 );
+	$spotlight_score += in_array( $tone, array( 'dark', 'accent' ), true ) ? 1 : 0;
+	$spotlight_score += $button_count >= 2 ? 1 : 0;
+	$spotlight_score += $card_like_count >= 1 ? 1 : 0;
+	$spotlight_score += ( $has_media && ( $has_h1 || $has_h2 ) ) ? 1 : 0;
+
+	return array(
+		'element_id'       => (string) ( $element['id'] ?? '' ),
+		'score'            => $score,
+		'tone'             => $tone,
+		'has_h1'           => $has_h1,
+		'has_h2'           => $has_h2,
+		'has_media'        => $has_media,
+		'has_button'       => $has_btn,
+		'has_text'         => $has_text,
+		'button_count'     => $button_count,
+		'card_like_count'  => $card_like_count,
+		'card_like_ids'    => $card_like_ids,
+		'spotlight_score'  => $spotlight_score,
+	);
+}
+
+/**
+ * Finalize emphasis drift audit across top-level sections.
+ *
+ * @param array $profiles Section emphasis profiles.
+ * @return array
+ */
+function mcp_abilities_elementor_finalize_emphasis_drift_audit( array $profiles ): array {
+	$scores = array_values(
+		array_map(
+			static function ( array $profile ): int {
+				return (int) ( $profile['score'] ?? 0 );
+			},
+			$profiles
+		)
+	);
+
+	$recommendations = array();
+	$range           = empty( $scores ) ? 0 : ( max( $scores ) - min( $scores ) );
+	$cta_sections    = 0;
+	foreach ( $profiles as $profile ) {
+		if ( ! empty( $profile['has_button'] ) ) {
+			++$cta_sections;
+		}
+	}
+
+	$flat_sections = array();
+	if ( count( $profiles ) >= 4 && $range <= 2 && $cta_sections >= 3 ) {
+		foreach ( $profiles as $profile ) {
+			$flat_sections[] = (string) ( $profile['element_id'] ?? '' );
+		}
+		$recommendations[] = 'Section emphasis is quite flat across the page. That can be fine for restraint, but it risks making key moments land with the same force as supporting sections.';
+	}
+
+	return array(
+		'section_profiles' => $profiles,
+		'score_range'      => $range,
+		'cta_section_count'=> $cta_sections,
+		'flat_section_ids' => array_values( array_filter( $flat_sections ) ),
+		'recommendations'  => $recommendations,
+	);
+}
+
+/**
+ * Finalize composition rhythm audit across top-level sections.
+ *
+ * @param array $profiles Section emphasis profiles.
+ * @return array
+ */
+function mcp_abilities_elementor_finalize_composition_rhythm_audit( array $profiles ): array {
+	$tone_runs       = array();
+	$current_tone    = '';
+	$current_ids     = array();
+	$recommendations = array();
+
+	foreach ( $profiles as $profile ) {
+		$tone = (string) ( $profile['tone'] ?? 'none' );
+		$id   = (string) ( $profile['element_id'] ?? '' );
+
+		if ( '' === $current_tone ) {
+			$current_tone = $tone;
+			$current_ids  = array( $id );
+			continue;
+		}
+
+		if ( $tone === $current_tone ) {
+			$current_ids[] = $id;
+			continue;
+		}
+
+		if ( count( $current_ids ) >= 3 && 'none' !== $current_tone ) {
+			$tone_runs[] = array(
+				'tone'       => $current_tone,
+				'count'      => count( $current_ids ),
+				'element_ids'=> $current_ids,
+			);
+		}
+
+		$current_tone = $tone;
+		$current_ids  = array( $id );
+	}
+
+	if ( count( $current_ids ) >= 3 && 'none' !== $current_tone ) {
+		$tone_runs[] = array(
+			'tone'       => $current_tone,
+			'count'      => count( $current_ids ),
+			'element_ids'=> $current_ids,
+		);
+	}
+
+	if ( ! empty( $tone_runs ) ) {
+		$recommendations[] = 'Several adjacent sections share the same tonal weight. That is not automatically wrong, but it can reduce pacing if no later section breaks the run.';
+	}
+
+	return array(
+		'section_profiles' => $profiles,
+		'tone_runs'        => $tone_runs,
+		'recommendations'  => $recommendations,
+	);
+}
+
+/**
+ * Determine whether an element settings array carries a visible top border.
+ *
+ * @param array $settings Elementor settings.
+ * @return bool
+ */
+function mcp_abilities_elementor_has_visible_top_border( array $settings ): bool {
+	$border_style = isset( $settings['border_border'] ) ? (string) $settings['border_border'] : '';
+	if ( '' === $border_style || 'none' === $border_style ) {
+		return false;
+	}
+
+	$top_width = 0.0;
+	if ( isset( $settings['border_width'] ) && is_array( $settings['border_width'] ) ) {
+		$top_width = isset( $settings['border_width']['top'] ) ? (float) $settings['border_width']['top'] : 0.0;
+	} elseif ( isset( $settings['border_top_width'] ) ) {
+		$top_width = (float) $settings['border_top_width'];
+	}
+
+	if ( $top_width <= 0 ) {
+		return false;
+	}
+
+	$border_color = isset( $settings['border_color'] ) ? strtolower( trim( (string) $settings['border_color'] ) ) : '';
+	if ( '' === $border_color ) {
+		return true;
+	}
+
+	if ( 'transparent' === $border_color || 'rgba(0,0,0,0)' === $border_color || 'rgba(0, 0, 0, 0)' === $border_color ) {
+		return false;
+	}
+
+	return true;
+}
+
+/**
+ * Compute a top-level section separator profile.
+ *
+ * @param array $element Elementor element.
+ * @return array
+ */
+function mcp_abilities_elementor_compute_section_separator_profile( array $element ): array {
+	$settings = is_array( $element['settings'] ?? null ) ? $element['settings'] : array();
+
+	return array(
+		'element_id'          => (string) ( $element['id'] ?? '' ),
+		'has_section_top_border' => mcp_abilities_elementor_has_visible_top_border( $settings ),
+		'tone'                => mcp_abilities_elementor_classify_surface_tone( $settings ),
+	);
+}
+
+/**
+ * Finalize separator discipline audit across top-level sections.
+ *
+ * This is intentionally soft. It should only speak up when separators start
+ * flattening the page into repeated major-block boundaries.
+ *
+ * @param array $profiles Separator profiles.
+ * @return array
+ */
+function mcp_abilities_elementor_finalize_separator_discipline_audit( array $profiles ): array {
+	$top_border_ids    = array();
+	$top_border_runs   = array();
+	$current_run       = array();
+	$recommendations   = array();
+	$total_sections    = count( $profiles );
+
+	foreach ( $profiles as $profile ) {
+		$id             = (string) ( $profile['element_id'] ?? '' );
+		$has_top_border = ! empty( $profile['has_section_top_border'] );
+
+		if ( $has_top_border ) {
+			$top_border_ids[] = $id;
+			$current_run[]    = $id;
+			continue;
+		}
+
+		if ( count( $current_run ) >= 3 ) {
+			$top_border_runs[] = array(
+				'count'       => count( $current_run ),
+				'element_ids' => array_values( array_filter( $current_run ) ),
+			);
+		}
+		$current_run = array();
+	}
+
+	if ( count( $current_run ) >= 3 ) {
+		$top_border_runs[] = array(
+			'count'       => count( $current_run ),
+			'element_ids' => array_values( array_filter( $current_run ) ),
+		);
+	}
+
+	$top_border_ids = array_values( array_filter( array_unique( $top_border_ids ) ) );
+	$top_border_count = count( $top_border_ids );
+
+	if ( $total_sections >= 5 && $top_border_count >= 4 ) {
+		$recommendations[] = 'Separator treatment is appearing on too many major section boundaries. That can make the page feel mechanically divided instead of intentionally paced.';
+	}
+
+	if ( ! empty( $top_border_runs ) ) {
+		$recommendations[] = 'Consecutive top-level sections are all using explicit separator boundaries. Keep separators inside section families more than between every major block.';
+	}
+
+	return array(
+		'section_profiles'        => $profiles,
+		'section_top_border_ids'  => $top_border_ids,
+		'section_top_border_count'=> $top_border_count,
+		'section_top_border_runs' => $top_border_runs,
+		'recommendations'         => array_values( array_unique( $recommendations ) ),
+	);
+}
+
+/**
+ * Finalize section rivalry audit across top-level sections.
+ *
+ * This tries to catch pages where several sections are all acting like local climaxes.
+ * It is intentionally cautious: restrained/simple pages should not be penalized.
+ *
+ * @param array $profiles Section emphasis profiles.
+ * @return array
+ */
+function mcp_abilities_elementor_finalize_section_rivalry_audit( array $profiles ): array {
+	$peak_sections      = array();
+	$peak_ids           = array();
+	$high_emphasis_ids  = array();
+	$adjacent_peak_runs = array();
+	$recommendations    = array();
+	$current_run        = array();
+
+	foreach ( $profiles as $profile ) {
+		$score           = (int) ( $profile['score'] ?? 0 );
+		$spotlight_score = (int) ( $profile['spotlight_score'] ?? 0 );
+		$tone            = (string) ( $profile['tone'] ?? 'none' );
+		$button_count    = (int) ( $profile['button_count'] ?? 0 );
+		$card_like_count = (int) ( $profile['card_like_count'] ?? 0 );
+
+		$is_peak = $spotlight_score >= 4
+			|| ( $spotlight_score >= 3 && $score >= 7 && ( in_array( $tone, array( 'dark', 'accent' ), true ) || $card_like_count >= 1 ) );
+
+		if ( $score >= 7 ) {
+			$high_emphasis_ids[] = (string) ( $profile['element_id'] ?? '' );
+		}
+
+		if ( $is_peak ) {
+			$peak_sections[] = array(
+				'element_id'      => (string) ( $profile['element_id'] ?? '' ),
+				'score'           => $score,
+				'spotlight_score' => $spotlight_score,
+				'tone'            => $tone,
+				'button_count'    => $button_count,
+				'card_like_count' => $card_like_count,
+			);
+			$peak_ids[] = (string) ( $profile['element_id'] ?? '' );
+			$current_run[] = (string) ( $profile['element_id'] ?? '' );
+			continue;
+		}
+
+		if ( count( $current_run ) >= 2 ) {
+			$adjacent_peak_runs[] = array(
+				'count'       => count( $current_run ),
+				'element_ids' => array_values( array_filter( $current_run ) ),
+			);
+		}
+		$current_run = array();
+	}
+
+	if ( count( $current_run ) >= 2 ) {
+		$adjacent_peak_runs[] = array(
+			'count'       => count( $current_run ),
+			'element_ids' => array_values( array_filter( $current_run ) ),
+		);
+	}
+
+	$total_sections       = count( $profiles );
+	$peak_count           = count( $peak_sections );
+	$has_adjacent_rivalry = ! empty( $adjacent_peak_runs );
+	$peak_ratio           = $total_sections > 0 ? ( $peak_count / $total_sections ) : 0;
+
+	if ( $total_sections >= 4 && $peak_count >= 3 && ( $has_adjacent_rivalry || $peak_ratio >= 0.5 ) ) {
+		$recommendations[] = 'Several sections are carrying peak-emphasis signals at once. That can make the page feel like each block is trying to be the main event rather than letting one section lead.';
+	}
+
+	if ( count( $adjacent_peak_runs ) >= 2 ) {
+		$recommendations[] = 'Strong sections are clustering together in multiple places. Consider calming one of the neighboring sections so the page has a clearer hierarchy of loud versus supporting moments.';
+	}
+
+	return array(
+		'section_profiles'     => $profiles,
+		'peak_section_count'   => $peak_count,
+		'peak_section_ids'     => array_values( array_filter( array_unique( $peak_ids ) ) ),
+		'peak_sections'        => $peak_sections,
+		'high_emphasis_ids'    => array_values( array_filter( array_unique( $high_emphasis_ids ) ) ),
+		'adjacent_peak_runs'   => $adjacent_peak_runs,
+		'recommendations'      => array_values( array_unique( $recommendations ) ),
+	);
+}
+
+/**
+ * Get the active Elementor kit ID.
+ *
+ * @return int
+ */
+function mcp_abilities_elementor_get_active_kit_id(): int {
+	return (int) get_option( 'elementor_active_kit', 0 );
+}
+
+/**
+ * Get the active Elementor kit settings.
+ *
+ * @return array
+ */
+function mcp_abilities_elementor_get_active_kit_settings(): array {
+	$kit_id = mcp_abilities_elementor_get_active_kit_id();
+	if ( $kit_id <= 0 ) {
+		return array();
+	}
+
+	$settings = get_post_meta( $kit_id, '_elementor_page_settings', true );
+	return is_array( $settings ) ? $settings : array();
+}
+
+/**
+ * Summarize current Elementor/theme context.
+ *
+ * @return array
+ */
+function mcp_abilities_elementor_get_theme_context_summary(): array {
+	$theme  = wp_get_theme();
+	$kit_id = mcp_abilities_elementor_get_active_kit_id();
+	$kit    = $kit_id > 0 ? get_post( $kit_id ) : null;
+
+	return array(
+		'theme' => array(
+			'name'           => $theme->get( 'Name' ),
+			'stylesheet'     => $theme->get_stylesheet(),
+			'template'       => $theme->get_template(),
+			'version'        => $theme->get( 'Version' ),
+			'is_block_theme' => function_exists( 'wp_is_block_theme' ) ? wp_is_block_theme() : false,
+		),
+		'elementor' => array(
+			'version' => defined( 'ELEMENTOR_VERSION' ) ? (string) ELEMENTOR_VERSION : '',
+			'active_kit' => array(
+				'id'      => $kit_id,
+				'title'   => $kit instanceof WP_Post ? $kit->post_title : '',
+				'status'  => $kit instanceof WP_Post ? $kit->post_status : '',
+			),
+			'viewport_options' => array(
+				'elementor_viewport_lg' => get_option( 'elementor_viewport_lg', '' ),
+				'elementor_viewport_md' => get_option( 'elementor_viewport_md', '' ),
+			),
+		),
+	);
+}
+
+/**
+ * Build a style-guide summary from the active Elementor kit.
+ *
+ * @return array
+ */
+function mcp_abilities_elementor_get_style_guide_summary(): array {
+	$kit_settings = mcp_abilities_elementor_get_active_kit_settings();
+	$collector    = array(
+		'colors'        => array(),
+		'font_families' => array(),
+		'font_sizes'    => array(),
+		'font_weights'  => array(),
+		'line_heights'  => array(),
+		'gaps'          => array(),
+		'dimensions'    => array(),
+		'spacing'       => array(),
+	);
+
+	if ( ! empty( $kit_settings ) ) {
+		mcp_abilities_elementor_collect_tokens_from_settings( $kit_settings, $collector );
+	}
+
+	return array(
+		'kit_id'         => mcp_abilities_elementor_get_active_kit_id(),
+		'tokens'         => mcp_abilities_elementor_finalize_design_tokens( $collector ),
+		'layout'         => array(
+			'container_width'          => $kit_settings['container_width'] ?? null,
+			'content_width'            => $kit_settings['content_width'] ?? null,
+			'space_between_widgets'    => $kit_settings['space_between_widgets'] ?? null,
+			'viewport_lg'              => get_option( 'elementor_viewport_lg', '' ),
+			'viewport_md'              => get_option( 'elementor_viewport_md', '' ),
+		),
+		'global_colors'  => array_values( (array) ( $kit_settings['system_colors'] ?? array() ) ),
+		'global_typography' => array_values( (array) ( $kit_settings['system_typography'] ?? array() ) ),
+		'raw_settings'   => $kit_settings,
+	);
+}
+
+/**
+ * Resolve Elementor data/elements for an audit-oriented ability.
+ *
+ * @param int    $post_id Post/Page ID.
+ * @param string $element_id Optional root element ID.
+ * @return array|\WP_Error
+ */
+function mcp_abilities_elementor_resolve_audit_scope( int $post_id, string $element_id = '' ) {
+	$post = get_post( $post_id );
+	if ( ! $post ) {
+		return new WP_Error( 'post_not_found', 'Post not found' );
+	}
+
+	$elementor_data = get_post_meta( $post_id, '_elementor_data', true );
+	if ( empty( $elementor_data ) ) {
+		return new WP_Error( 'missing_elementor_data', 'No Elementor data found for this post' );
+	}
+
+	$data = json_decode( $elementor_data, true );
+	if ( null === $data && JSON_ERROR_NONE !== json_last_error() ) {
+		return new WP_Error( 'invalid_elementor_data', 'Failed to parse existing Elementor data' );
+	}
+
+	$elements = is_array( $data ) ? $data : array();
+	if ( '' !== $element_id ) {
+		$element_meta = mcp_abilities_elementor_find_element_meta( $data, $element_id );
+		if ( ! is_array( $element_meta ) || ! is_array( $element_meta['element'] ?? null ) ) {
+			return new WP_Error( 'element_not_found', 'Element not found' );
+		}
+		$elements = array( $element_meta['element'] );
+	}
+
+	return array(
+		'post'       => $post,
+		'data'       => $data,
+		'elements'   => $elements,
+		'element_id' => $element_id,
+	);
+}
+
+/**
+ * Collect section emphasis profiles from a set of root elements.
+ *
+ * @param array $elements Root elements.
+ * @return array
+ */
+function mcp_abilities_elementor_collect_section_profiles( array $elements ): array {
+	$profiles = array();
+	foreach ( $elements as $element ) {
+		if ( is_array( $element ) ) {
+			$profiles[] = mcp_abilities_elementor_compute_section_emphasis_profile( $element );
+		}
+	}
+
+	return $profiles;
+}
+
+/**
+ * Evaluate Elementor design coherence from a root-element set.
+ *
+ * @param array $elements Root elements.
+ * @return array
+ */
+function mcp_abilities_elementor_evaluate_design_from_elements( array $elements ): array {
+	$generic_stats = array(
+		'patterns'           => array(
+			'standard_split_hero'    => array(),
+			'symmetric_two_column'   => array(),
+			'three_up_grid'          => array(),
+			'uniform_multi_grid'     => array(),
+			'repeated_component_row' => array(),
+		),
+		'section_signatures' => array(),
+	);
+	$surface_collector = array();
+	$column_stats      = array( 'rows' => array() );
+	$component_root    = array(
+		'id'       => '__page__',
+		'elType'   => 'container',
+		'isInner'  => false,
+		'settings' => array(),
+		'elements' => $elements,
+	);
+
+	foreach ( $elements as $element ) {
+		if ( ! is_array( $element ) ) {
+			continue;
+		}
+
+		mcp_abilities_elementor_collect_generic_layout_stats_from_subtree( $element, $generic_stats, -1 );
+		mcp_abilities_elementor_collect_surface_signatures_from_subtree( $element, $surface_collector );
+		mcp_abilities_elementor_collect_column_audit_stats_from_subtree( $element, $column_stats, -1 );
+	}
+
+	$profiles              = mcp_abilities_elementor_collect_section_profiles( $elements );
+	$separator_profiles    = array();
+	foreach ( $elements as $element ) {
+		if ( is_array( $element ) ) {
+			$separator_profiles[] = mcp_abilities_elementor_compute_section_separator_profile( $element );
+		}
+	}
+	$generic_audit         = mcp_abilities_elementor_finalize_generic_layout_audit( $generic_stats );
+	$distinctiveness       = mcp_abilities_elementor_score_distinctiveness_from_audit( $generic_audit );
+	$component_audit       = mcp_abilities_elementor_finalize_component_overuse_audit( mcp_abilities_elementor_build_component_profile( $component_root ) );
+	$surface_audit         = mcp_abilities_elementor_finalize_surface_overuse_audit( $surface_collector );
+	$emphasis_drift_audit  = mcp_abilities_elementor_finalize_emphasis_drift_audit( $profiles );
+	$section_rivalry_audit = mcp_abilities_elementor_finalize_section_rivalry_audit( $profiles );
+	$composition_audit     = mcp_abilities_elementor_finalize_composition_rhythm_audit( $profiles );
+	$separator_audit       = mcp_abilities_elementor_finalize_separator_discipline_audit( $separator_profiles );
+	$rows                  = (array) ( $column_stats['rows'] ?? array() );
+	$column_patterns_audit = mcp_abilities_elementor_finalize_column_patterns_audit( $rows );
+	$layout_mechanism_audit = mcp_abilities_elementor_finalize_layout_mechanism_fit_audit( $rows );
+	$column_dominance_audit = mcp_abilities_elementor_finalize_column_dominance_audit( $rows );
+	$column_alignment_audit = mcp_abilities_elementor_finalize_column_alignment_rhythm_audit( $rows );
+	$column_balance_audit   = mcp_abilities_elementor_finalize_column_balance_audit( $rows );
+	$column_necessity_audit = mcp_abilities_elementor_finalize_column_necessity_audit( $rows );
+
+	$issues = array();
+
+	if ( (int) ( $distinctiveness['score'] ?? 100 ) <= 80 && ! empty( $generic_audit['recommendations'] ) ) {
+		$issues[] = array(
+			'type'            => 'generic_layout_repetition',
+			'score'           => (int) ( $distinctiveness['score'] ?? 100 ),
+			'patterns'        => $generic_audit['patterns'] ?? array(),
+			'recommendations' => array_values( (array) ( $generic_audit['recommendations'] ?? array() ) ),
+		);
+	}
+
+	foreach ( (array) ( $component_audit['issues'] ?? array() ) as $issue ) {
+		if ( is_array( $issue ) ) {
+			$issues[] = $issue;
+		}
+	}
+
+	if ( ! empty( $surface_audit['repeated_surfaces'] ) ) {
+		$issues[] = array(
+			'type'              => 'surface_overuse',
+			'repeated_surfaces' => $surface_audit['repeated_surfaces'],
+		);
+	}
+
+	if ( ! empty( $section_rivalry_audit['recommendations'] ) ) {
+		$issues[] = array(
+			'type'               => 'section_rivalry',
+			'peak_section_ids'   => $section_rivalry_audit['peak_section_ids'] ?? array(),
+			'adjacent_peak_runs' => $section_rivalry_audit['adjacent_peak_runs'] ?? array(),
+		);
+	}
+
+	if ( ! empty( $emphasis_drift_audit['recommendations'] ) ) {
+		$issues[] = array(
+			'type'             => 'emphasis_drift',
+			'flat_section_ids' => $emphasis_drift_audit['flat_section_ids'] ?? array(),
+		);
+	}
+
+	if ( ! empty( $composition_audit['tone_runs'] ) ) {
+		$issues[] = array(
+			'type'      => 'composition_rhythm',
+			'tone_runs' => $composition_audit['tone_runs'],
+		);
+	}
+
+	if ( ! empty( $separator_audit['recommendations'] ) ) {
+		$issues[] = array(
+			'type'                   => 'separator_overuse',
+			'section_top_border_ids' => $separator_audit['section_top_border_ids'] ?? array(),
+			'section_top_border_runs'=> $separator_audit['section_top_border_runs'] ?? array(),
+		);
+	}
+
+	if ( ! empty( $column_patterns_audit['repeated_ratios'] ) ) {
+		$issues[] = array(
+			'type'            => 'column_pattern_repetition',
+			'repeated_ratios' => $column_patterns_audit['repeated_ratios'],
+		);
+	}
+
+	if ( ! empty( $layout_mechanism_audit['grid_candidates'] ) ) {
+		$issues[] = array(
+			'type'            => 'layout_mechanism_fit',
+			'grid_candidates' => $layout_mechanism_audit['grid_candidates'],
+			'guidance_sources'=> $layout_mechanism_audit['guidance_sources'] ?? array(),
+		);
+	}
+
+	if ( ! empty( $column_alignment_audit['inconsistent_ratios'] ) ) {
+		$issues[] = array(
+			'type'                => 'column_alignment_rhythm',
+			'inconsistent_ratios' => $column_alignment_audit['inconsistent_ratios'],
+		);
+	}
+
+	foreach ( array(
+		$column_dominance_audit,
+		$column_balance_audit,
+		$column_necessity_audit,
+	) as $column_issue_group ) {
+		foreach ( (array) ( $column_issue_group['issues'] ?? array() ) as $issue ) {
+			if ( is_array( $issue ) ) {
+				$issues[] = $issue;
+			}
+		}
+	}
+
+	$score = (int) ( $distinctiveness['score'] ?? 100 );
+	foreach ( $issues as $issue ) {
+		$type = (string) ( $issue['type'] ?? '' );
+		if ( 'button_overuse' === $type || 'card_like_surface_overuse' === $type ) {
+			$score -= 8;
+		} elseif ( 'surface_overuse' === $type ) {
+			$score -= 8;
+		} elseif ( 'section_rivalry' === $type ) {
+			$score -= 14;
+		} elseif ( 'emphasis_drift' === $type ) {
+			$score -= 8;
+		} elseif ( 'composition_rhythm' === $type ) {
+			$score -= 6;
+		} elseif ( 'separator_overuse' === $type ) {
+			$score -= 5;
+		} elseif ( 'column_pattern_repetition' === $type || 'column_alignment_rhythm' === $type ) {
+			$score -= 6;
+		} elseif ( in_array( $type, array( 'equal_split_with_clear_dominant_side', 'asymmetry_without_clear_content_reason', 'split_may_not_be_earning_its_complexity' ), true ) ) {
+			$score -= 8;
+		}
+	}
+	$score = max( 0, min( 100, $score ) );
+
+	$blocking_issue_types = array();
+	foreach ( $issues as $issue ) {
+		$type = (string) ( $issue['type'] ?? '' );
+		if ( 'section_rivalry' === $type ) {
+			$blocking_issue_types[] = $type;
+		}
+		if ( 'generic_layout_repetition' === $type && (int) ( $distinctiveness['score'] ?? 100 ) <= 60 ) {
+			$blocking_issue_types[] = $type;
+		}
+	}
+	$blocking_issue_types = array_values( array_unique( array_filter( array_map( 'strval', $blocking_issue_types ) ) ) );
+
+	$recommendations = array_values(
+		array_unique(
+			array_merge(
+				array_values( (array) ( $distinctiveness['recommendations'] ?? array() ) ),
+				array_values( (array) ( $component_audit['recommendations'] ?? array() ) ),
+				array_values( (array) ( $surface_audit['recommendations'] ?? array() ) ),
+				array_values( (array) ( $emphasis_drift_audit['recommendations'] ?? array() ) ),
+				array_values( (array) ( $section_rivalry_audit['recommendations'] ?? array() ) ),
+				array_values( (array) ( $composition_audit['recommendations'] ?? array() ) ),
+				array_values( (array) ( $separator_audit['recommendations'] ?? array() ) ),
+				array_values( (array) ( $column_patterns_audit['recommendations'] ?? array() ) ),
+				array_values( (array) ( $layout_mechanism_audit['recommendations'] ?? array() ) ),
+				array_values( (array) ( $column_dominance_audit['recommendations'] ?? array() ) ),
+				array_values( (array) ( $column_alignment_audit['recommendations'] ?? array() ) ),
+				array_values( (array) ( $column_balance_audit['recommendations'] ?? array() ) ),
+				array_values( (array) ( $column_necessity_audit['recommendations'] ?? array() ) )
+			)
+		)
+	);
+
+	return array(
+		'score'                => $score,
+		'issues'               => $issues,
+		'issue_count'          => count( $issues ),
+		'passes'               => 0 === count( $blocking_issue_types ),
+		'blocking_issue_count' => count( $blocking_issue_types ),
+		'blocking_issue_types' => $blocking_issue_types,
+		'recommendations'      => $recommendations,
+		'audits'               => array(
+			'generic_layout'    => $generic_audit,
+			'distinctiveness'   => $distinctiveness,
+			'component_overuse' => $component_audit,
+			'surface_overuse'   => $surface_audit,
+			'emphasis_drift'    => $emphasis_drift_audit,
+			'section_rivalry'   => $section_rivalry_audit,
+			'composition_rhythm'=> $composition_audit,
+			'separator_discipline' => $separator_audit,
+			'column_patterns'   => $column_patterns_audit,
+			'layout_mechanism_fit' => $layout_mechanism_audit,
+			'column_dominance'  => $column_dominance_audit,
+			'column_alignment'  => $column_alignment_audit,
+			'column_balance'    => $column_balance_audit,
+			'column_necessity'  => $column_necessity_audit,
+		),
+	);
+}
+
+/**
+ * Suggest concrete Elementor design fixes from an evaluation payload.
+ *
+ * @param array $evaluation Evaluation payload.
+ * @return array
+ */
+function mcp_abilities_elementor_suggest_design_fixes_from_evaluation( array $evaluation ): array {
+	$issues       = is_array( $evaluation['issues'] ?? null ) ? $evaluation['issues'] : array();
+	$suggestions  = array();
+	$seen_types   = array();
+
+	foreach ( $issues as $issue ) {
+		$type = (string) ( $issue['type'] ?? '' );
+		if ( '' === $type || isset( $seen_types[ $type ] ) ) {
+			continue;
+		}
+		if ( 'surface_overuse' === $type && isset( $seen_types['card_like_surface_overuse'] ) ) {
+			continue;
+		}
+		$seen_types[ $type ] = true;
+
+		if ( 'generic_layout_repetition' === $type ) {
+			$suggestions[] = array(
+				'type'    => $type,
+				'problem' => 'Too many sections are leaning on the same stock layout patterns.',
+				'fixes'   => array(
+					'Break repeated 50/50 and equal-grid sequences with at least one section that uses a different ratio or information density.',
+					'Let one section become more linear or open instead of keeping every block on the same module pattern.',
+				),
+			);
+		} elseif ( 'button_overuse' === $type ) {
+			$suggestions[] = array(
+				'type'    => $type,
+				'problem' => 'The page is asking for action too often.',
+				'fixes'   => array(
+					'Reduce the number of CTA moments so the strongest action is easier to believe.',
+					'Replace some secondary buttons with plain text links or proof statements.',
+				),
+			);
+		} elseif ( 'card_like_surface_overuse' === $type || 'surface_overuse' === $type ) {
+			$suggestions[] = array(
+				'type'    => $type,
+				'problem' => 'Contained panel treatment is starting to dominate the page.',
+				'fixes'   => array(
+					'Flatten some sections so they live directly on the page background instead of inside another card-like surface.',
+					'Reserve boxed treatment for modules that truly need containment.',
+				),
+			);
+		} elseif ( 'section_rivalry' === $type ) {
+			$suggestions[] = array(
+				'type'    => $type,
+				'problem' => 'Several sections are trying to be local climaxes at the same time.',
+				'fixes'   => array(
+					'Keep one dominant hero and one clear secondary proof/evidence moment, then calm the surrounding sections.',
+					'Reduce framed drama, CTA pressure, or high-contrast styling in neighboring sections so the page has a clearer hierarchy of loud versus supporting moments.',
+				),
+			);
+		} elseif ( 'emphasis_drift' === $type ) {
+			$suggestions[] = array(
+				'type'    => $type,
+				'problem' => 'Too many sections are landing with similar emphasis weight.',
+				'fixes'   => array(
+					'Let support sections become quieter in headline size, contrast, or containment.',
+					'Reserve the strongest emphasis for the sections that carry the selling job.',
+				),
+			);
+		} elseif ( 'composition_rhythm' === $type ) {
+			$suggestions[] = array(
+				'type'    => $type,
+				'problem' => 'The page pacing is settling into one long tonal run.',
+				'fixes'   => array(
+					'Break long sequences of similar section tone with one calmer or more open section.',
+					'Use contrast changes deliberately, not on every section.',
+				),
+			);
+		} elseif ( 'separator_overuse' === $type ) {
+			$suggestions[] = array(
+				'type'    => $type,
+				'problem' => 'Major section separators are starting to flatten the page hierarchy.',
+				'fixes'   => array(
+					'Use separators inside section families such as rule lists or service sequences more than between every major block.',
+					'Let some major section transitions happen through spacing, tone, or composition changes instead of another hard line.',
+				),
+			);
+		} elseif ( 'column_pattern_repetition' === $type ) {
+			$suggestions[] = array(
+				'type'    => $type,
+				'problem' => 'Column ratios are repeating too predictably.',
+				'fixes'   => array(
+					'Vary repeated equal splits when the content roles are not actually symmetrical.',
+					'Use equal thirds when comparison is the point, not just as a default grid habit.',
+				),
+			);
+		} elseif ( 'layout_mechanism_fit' === $type ) {
+			$suggestions[] = array(
+				'type'    => $type,
+				'problem' => 'Some symmetric column groups are using Flexbox where Elementor Grid is the more reliable fit.',
+				'fixes'   => array(
+					'For equal, symmetric column groups, switch from Flexbox width-guessing to an Elementor Grid container.',
+					'Keep Flexbox for directional or intentionally uneven rows, and use Grid when comparison or equal peer columns are the point.',
+				),
+			);
+		} elseif ( 'column_alignment_rhythm' === $type ) {
+			$suggestions[] = array(
+				'type'    => $type,
+				'problem' => 'Similar rows are using different gutter rhythms.',
+				'fixes'   => array(
+					'Normalize gap logic across rows that are meant to feel like one family.',
+					'Keep spacing differences only where they help the message instead of adding noise.',
+				),
+			);
+		} elseif ( 'equal_split_with_clear_dominant_side' === $type ) {
+			$suggestions[] = array(
+				'type'    => $type,
+				'problem' => 'An equal split is hiding a clearly dominant side.',
+				'fixes'   => array(
+					'Let the row ratio reflect the real hierarchy instead of forcing a 50/50 split.',
+					'If the split stays equal, reduce the dominance of the stronger side so the row feels honest again.',
+				),
+			);
+		} elseif ( 'asymmetry_without_clear_content_reason' === $type ) {
+			$suggestions[] = array(
+				'type'    => $type,
+				'problem' => 'A row is asymmetrical without earning that tension.',
+				'fixes'   => array(
+					'Either give one side a clearer dominant role or bring the row back toward a calmer equal split.',
+					'Do not keep asymmetry just because it seems more designed on paper.',
+				),
+			);
+		} elseif ( 'split_may_not_be_earning_its_complexity' === $type ) {
+			$suggestions[] = array(
+				'type'    => $type,
+				'problem' => 'A split row may not be earning the complexity of two columns.',
+				'fixes'   => array(
+					'Collapse the content into one lane if the two sides are too light or too similar.',
+					'Only keep the split if comparison, contrast, or media/copy interplay is doing real work.',
+				),
+			);
+		}
+	}
+
+	return array(
+		'score'                => (int) ( $evaluation['score'] ?? 0 ),
+		'issue_count'          => (int) ( $evaluation['issue_count'] ?? 0 ),
+		'passes'               => (bool) ( $evaluation['passes'] ?? false ),
+		'blocking_issue_count' => (int) ( $evaluation['blocking_issue_count'] ?? 0 ),
+		'blocking_issue_types' => array_values( array_map( 'strval', (array) ( $evaluation['blocking_issue_types'] ?? array() ) ) ),
+		'issues'               => $issues,
+		'suggestions'          => $suggestions,
+	);
+}
+
+/**
+ * Fetch rendered HTML for a permalink.
+ *
+ * @param string $url URL to fetch.
+ * @return array|\WP_Error
+ */
+function mcp_abilities_elementor_fetch_rendered_html( string $url ) {
+	if ( '' === $url ) {
+		return new WP_Error( 'missing_url', 'URL is required' );
+	}
+
+	$response = wp_remote_get(
+		$url,
+		array(
+			'timeout'     => 15,
+			'redirection' => 5,
+			'headers'     => array(
+				'Accept' => 'text/html',
+			),
+		)
+	);
+	if ( is_wp_error( $response ) ) {
+		return $response;
+	}
+
+	return array(
+		'status_code' => (int) wp_remote_retrieve_response_code( $response ),
+		'html'        => (string) wp_remote_retrieve_body( $response ),
+	);
+}
+
+/**
+ * Evaluate wrapper/render context around an Elementor page.
+ *
+ * @param int $post_id Post/Page ID.
+ * @return array|\WP_Error
+ */
+function mcp_abilities_elementor_evaluate_render_context( int $post_id ) {
+	$post = get_post( $post_id );
+	if ( ! $post ) {
+		return new WP_Error( 'post_not_found', 'Post not found' );
+	}
+
+	$url = (string) get_permalink( $post_id );
+	if ( '' === $url ) {
+		return new WP_Error( 'missing_permalink', 'Could not determine permalink for this post' );
+	}
+
+	$fetched = mcp_abilities_elementor_fetch_rendered_html( $url );
+	if ( is_wp_error( $fetched ) ) {
+		return $fetched;
+	}
+
+	$html        = (string) ( $fetched['html'] ?? '' );
+	$status_code = (int) ( $fetched['status_code'] ?? 0 );
+	$issues      = array();
+	$observations = array(
+		'main_found'                => false,
+		'content_wrapper_found'     => false,
+		'content_wrapper_selector'  => '',
+		'main_child_element_count'  => 0,
+		'pre_content_sibling_count' => 0,
+		'leading_content_child_tag' => '',
+		'embedded_style_block_count'=> 0,
+		'elementor_root_count'      => 0,
+	);
+
+	if ( '' === $html ) {
+		return array(
+			'url'          => $url,
+			'status_code'  => $status_code,
+			'post'         => array(
+				'id'     => $post_id,
+				'type'   => $post->post_type,
+				'status' => $post->post_status,
+				'slug'   => $post->post_name,
+				'title'  => get_the_title( $post ),
+			),
+			'issues'       => array(
+				array(
+					'type'     => 'empty_rendered_html',
+					'severity' => 'warning',
+					'message'  => 'The rendered page returned no HTML body to inspect.',
+				),
+			),
+			'observations' => $observations,
+		);
+	}
+
+	if ( ! class_exists( 'DOMDocument' ) ) {
+		return array(
+			'url'          => $url,
+			'status_code'  => $status_code,
+			'post'         => array(
+				'id'     => $post_id,
+				'type'   => $post->post_type,
+				'status' => $post->post_status,
+				'slug'   => $post->post_name,
+				'title'  => get_the_title( $post ),
+			),
+			'issues'       => array(
+				array(
+					'type'     => 'dom_extension_missing',
+					'severity' => 'warning',
+					'message'  => 'DOM extension is unavailable, so render-context inspection could not parse the HTML tree.',
+				),
+			),
+			'observations' => $observations,
+		);
+	}
+
+	libxml_use_internal_errors( true );
+	$dom = new DOMDocument();
+	$dom->loadHTML( $html );
+	libxml_clear_errors();
+	$xpath = new DOMXPath( $dom );
+
+	$main = $xpath->query( '//main' )->item( 0 );
+	if ( $main instanceof DOMElement ) {
+		$observations['main_found'] = true;
+		foreach ( $main->childNodes as $child ) {
+			if ( XML_ELEMENT_NODE === $child->nodeType ) {
+				++$observations['main_child_element_count'];
+			}
+		}
+	}
+
+	$content_wrapper = $xpath->query( '//*[contains(concat(" ", normalize-space(@class), " "), " elementor ")]' )->item( 0 );
+	if ( $content_wrapper instanceof DOMElement ) {
+		$observations['content_wrapper_found']    = true;
+		$observations['content_wrapper_selector'] = strtolower( $content_wrapper->tagName ) . '.' . trim( preg_replace( '/\s+/', '.', (string) $content_wrapper->getAttribute( 'class' ) ), '.' );
+		$elementor_roots = $xpath->query( '//*[contains(concat(" ", normalize-space(@class), " "), " elementor ")]' );
+		$observations['elementor_root_count'] = $elementor_roots ? (int) $elementor_roots->length : 0;
+
+		foreach ( $content_wrapper->childNodes as $child ) {
+			if ( XML_ELEMENT_NODE === $child->nodeType ) {
+				$observations['leading_content_child_tag'] = strtolower( $child->nodeName );
+				break;
+			}
+		}
+
+		$previous = $content_wrapper->previousSibling;
+		while ( $previous ) {
+			if ( XML_ELEMENT_NODE === $previous->nodeType ) {
+				++$observations['pre_content_sibling_count'];
+			}
+			$previous = $previous->previousSibling;
+		}
+
+		$observations['embedded_style_block_count'] = (int) $xpath->query( './/style', $content_wrapper )->length;
+	}
+
+	if ( ! $observations['content_wrapper_found'] ) {
+		$issues[] = array(
+			'type'     => 'missing_elementor_wrapper',
+			'severity' => 'warning',
+			'message'  => 'Rendered page did not expose a detectable Elementor root wrapper. Theme or plugin chrome may be obscuring the content lane.',
+		);
+	}
+
+	if ( $observations['pre_content_sibling_count'] > 0 ) {
+		$issues[] = array(
+			'type'     => 'pre_content_wrappers',
+			'severity' => 'warning',
+			'count'    => $observations['pre_content_sibling_count'],
+			'message'  => 'Rendered page contains wrapper elements before the Elementor content wrapper; these can create unexpected spacing or layout chrome above the first Elementor section.',
+		);
+	}
+
+	if ( 'style' === $observations['leading_content_child_tag'] ) {
+		$issues[] = array(
+			'type'     => 'leading_style_block',
+			'severity' => 'warning',
+			'message'  => 'The first rendered child inside the Elementor wrapper is a style block. This can interact badly with theme flow spacing ahead of the hero.',
+		);
+	}
+
+	return array(
+		'url'          => $url,
+		'status_code'  => $status_code,
+		'post'         => array(
+			'id'     => $post_id,
+			'type'   => $post->post_type,
+			'status' => $post->post_status,
+			'slug'   => $post->post_name,
+			'title'  => get_the_title( $post ),
+		),
+		'issues'       => $issues,
+		'observations' => $observations,
+	);
+}
+
+/**
  * Apply text hierarchy rules to a single widget element.
  *
  * @param array $element Elementor element.
@@ -1430,7 +3744,7 @@ function mcp_abilities_elementor_normalize_spacing_rhythm_subtree( array $elemen
  * @param array $changed_ids Changed IDs.
  * @return array
  */
-function mcp_abilities_elementor_normalize_responsive_values_subtree( array $element, bool $include_root, int $max_depth, int $depth, bool $fill_missing_only, float $tablet_factor, float $mobile_factor, array &$changed_ids ): array {
+function mcp_abilities_elementor_normalize_responsive_values_subtree( array $element, bool $include_root, int $max_depth, int $depth, bool $fill_missing_only, float $tablet_factor, float $mobile_factor, ?float $tablet_horizontal_spacing_cap, ?float $mobile_horizontal_spacing_cap, array &$changed_ids ): array {
 	if ( $max_depth >= 0 && $depth > $max_depth ) {
 		return $element;
 	}
@@ -1467,10 +3781,16 @@ function mcp_abilities_elementor_normalize_responsive_values_subtree( array $ele
 
 			if ( 'spacing' === $family['type'] ) {
 				if ( $should_set_tablet ) {
-					$settings[ $tablet_key ] = mcp_abilities_elementor_scale_spacing_box( $desktop_value, $tablet_factor );
+					$settings[ $tablet_key ] = mcp_abilities_elementor_cap_spacing_box_horizontal(
+						mcp_abilities_elementor_scale_spacing_box( $desktop_value, $tablet_factor ),
+						$tablet_horizontal_spacing_cap
+					);
 				}
 				if ( $should_set_mobile ) {
-					$settings[ $mobile_key ] = mcp_abilities_elementor_scale_spacing_box( $desktop_value, $mobile_factor );
+					$settings[ $mobile_key ] = mcp_abilities_elementor_cap_spacing_box_horizontal(
+						mcp_abilities_elementor_scale_spacing_box( $desktop_value, $mobile_factor ),
+						$mobile_horizontal_spacing_cap
+					);
 				}
 				continue;
 			}
@@ -1494,7 +3814,7 @@ function mcp_abilities_elementor_normalize_responsive_values_subtree( array $ele
 	if ( ! empty( $element['elements'] ) && is_array( $element['elements'] ) ) {
 		foreach ( $element['elements'] as $index => $child ) {
 			if ( is_array( $child ) ) {
-				$element['elements'][ $index ] = mcp_abilities_elementor_normalize_responsive_values_subtree( $child, true, $max_depth, $depth + 1, $fill_missing_only, $tablet_factor, $mobile_factor, $changed_ids );
+				$element['elements'][ $index ] = mcp_abilities_elementor_normalize_responsive_values_subtree( $child, true, $max_depth, $depth + 1, $fill_missing_only, $tablet_factor, $mobile_factor, $tablet_horizontal_spacing_cap, $mobile_horizontal_spacing_cap, $changed_ids );
 			}
 		}
 	}
@@ -4879,6 +7199,1606 @@ function mcp_abilities_elementor_register_abilities(): void {
 	);
 
 	// =========================================================================
+	// ELEMENTOR - Audit Generic Layout Patterns
+	// =========================================================================
+	wp_register_ability(
+		'elementor/audit-generic-layout-patterns',
+		array(
+			'label'               => 'Audit Elementor Generic Layout Patterns',
+			'description'         => 'Analyzes an Elementor page/subtree for common generic landing-page patterns such as repeated 50/50 rows, equal-width card grids, repeated card rows, and standard split-hero structures. This is style-neutral: it does not prescribe fonts, colors, or any branded look.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'id'         => array(
+						'type'        => 'integer',
+						'description' => 'Optional Post/Page ID to inspect.',
+					),
+					'element_id' => array(
+						'type'        => 'string',
+						'description' => 'Optional root element ID to restrict the audit to a subtree.',
+					),
+					'max_depth'   => array(
+						'type'        => 'integer',
+						'default'     => -1,
+						'description' => 'Maximum depth to inspect. Use -1 for unlimited.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'         => array( 'type' => 'boolean' ),
+					'id'              => array( 'type' => 'integer' ),
+					'element_id'      => array( 'type' => 'string' ),
+					'audit'           => array( 'type' => 'object' ),
+					'message'         => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input     = is_array( $input ) ? $input : array();
+				$post_id   = isset( $input['id'] ) ? (int) $input['id'] : 0;
+				$max_depth = isset( $input['max_depth'] ) ? (int) $input['max_depth'] : -1;
+				$stats     = array(
+					'patterns'           => array(
+						'standard_split_hero'    => array(),
+						'symmetric_two_column'   => array(),
+						'three_up_grid'          => array(),
+						'uniform_multi_grid'     => array(),
+						'repeated_component_row' => array(),
+					),
+					'section_signatures' => array(),
+				);
+
+				if ( $post_id > 0 ) {
+					$post = get_post( $post_id );
+					if ( ! $post ) {
+						return array( 'success' => false, 'message' => 'Post not found' );
+					}
+
+					$elementor_data = get_post_meta( $post_id, '_elementor_data', true );
+					if ( empty( $elementor_data ) ) {
+						return array( 'success' => false, 'message' => 'No Elementor data found for this post' );
+					}
+
+					$data = json_decode( $elementor_data, true );
+					if ( null === $data && JSON_ERROR_NONE !== json_last_error() ) {
+						return array( 'success' => false, 'message' => 'Failed to parse existing Elementor data' );
+					}
+
+					if ( ! empty( $input['element_id'] ) && is_string( $input['element_id'] ) ) {
+						$element_meta = mcp_abilities_elementor_find_element_meta( $data, (string) $input['element_id'] );
+						if ( ! is_array( $element_meta ) || ! is_array( $element_meta['element'] ?? null ) ) {
+							return array( 'success' => false, 'message' => 'Element not found' );
+						}
+						mcp_abilities_elementor_collect_generic_layout_stats_from_subtree( $element_meta['element'], $stats, $max_depth );
+					} else {
+						foreach ( $data as $element ) {
+							if ( is_array( $element ) ) {
+								mcp_abilities_elementor_collect_generic_layout_stats_from_subtree( $element, $stats, $max_depth );
+							}
+						}
+					}
+				}
+
+				return array(
+					'success'    => true,
+					'id'         => $post_id,
+					'element_id' => isset( $input['element_id'] ) && is_string( $input['element_id'] ) ? $input['element_id'] : '',
+					'audit'      => mcp_abilities_elementor_finalize_generic_layout_audit( $stats ),
+					'message'    => 'Generic layout audit completed successfully',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Score Distinctiveness
+	// =========================================================================
+	wp_register_ability(
+		'elementor/score-distinctiveness',
+		array(
+			'label'               => 'Score Elementor Distinctiveness',
+			'description'         => 'Scores an Elementor page/subtree for compositional distinctiveness based on structural repetition and generic-layout patterns. This is style-neutral: it does not push any particular aesthetic, only flags repetition and symmetry overuse.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'id'         => array(
+						'type'        => 'integer',
+						'description' => 'Optional Post/Page ID to inspect.',
+					),
+					'element_id' => array(
+						'type'        => 'string',
+						'description' => 'Optional root element ID to restrict scoring to a subtree.',
+					),
+					'max_depth'   => array(
+						'type'        => 'integer',
+						'default'     => -1,
+						'description' => 'Maximum depth to inspect. Use -1 for unlimited.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'         => array( 'type' => 'boolean' ),
+					'id'              => array( 'type' => 'integer' ),
+					'element_id'      => array( 'type' => 'string' ),
+					'score'           => array( 'type' => 'integer' ),
+					'penalties'       => array( 'type' => 'array' ),
+					'recommendations' => array( 'type' => 'array' ),
+					'audit'           => array( 'type' => 'object' ),
+					'message'         => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input     = is_array( $input ) ? $input : array();
+				$post_id   = isset( $input['id'] ) ? (int) $input['id'] : 0;
+				$max_depth = isset( $input['max_depth'] ) ? (int) $input['max_depth'] : -1;
+				$stats     = array(
+					'patterns'           => array(
+						'standard_split_hero'    => array(),
+						'symmetric_two_column'   => array(),
+						'three_up_grid'          => array(),
+						'uniform_multi_grid'     => array(),
+						'repeated_component_row' => array(),
+					),
+					'section_signatures' => array(),
+				);
+
+				if ( $post_id > 0 ) {
+					$post = get_post( $post_id );
+					if ( ! $post ) {
+						return array( 'success' => false, 'message' => 'Post not found' );
+					}
+
+					$elementor_data = get_post_meta( $post_id, '_elementor_data', true );
+					if ( empty( $elementor_data ) ) {
+						return array( 'success' => false, 'message' => 'No Elementor data found for this post' );
+					}
+
+					$data = json_decode( $elementor_data, true );
+					if ( null === $data && JSON_ERROR_NONE !== json_last_error() ) {
+						return array( 'success' => false, 'message' => 'Failed to parse existing Elementor data' );
+					}
+
+					if ( ! empty( $input['element_id'] ) && is_string( $input['element_id'] ) ) {
+						$element_meta = mcp_abilities_elementor_find_element_meta( $data, (string) $input['element_id'] );
+						if ( ! is_array( $element_meta ) || ! is_array( $element_meta['element'] ?? null ) ) {
+							return array( 'success' => false, 'message' => 'Element not found' );
+						}
+						mcp_abilities_elementor_collect_generic_layout_stats_from_subtree( $element_meta['element'], $stats, $max_depth );
+					} else {
+						foreach ( $data as $element ) {
+							if ( is_array( $element ) ) {
+								mcp_abilities_elementor_collect_generic_layout_stats_from_subtree( $element, $stats, $max_depth );
+							}
+						}
+					}
+				}
+
+				$audit = mcp_abilities_elementor_finalize_generic_layout_audit( $stats );
+				$score = mcp_abilities_elementor_score_distinctiveness_from_audit( $audit );
+
+				return array(
+					'success'         => true,
+					'id'              => $post_id,
+					'element_id'      => isset( $input['element_id'] ) && is_string( $input['element_id'] ) ? $input['element_id'] : '',
+					'score'           => (int) ( $score['score'] ?? 0 ),
+					'penalties'       => array_values( (array) ( $score['penalties'] ?? array() ) ),
+					'recommendations' => array_values( (array) ( $score['recommendations'] ?? array() ) ),
+					'audit'           => $audit,
+					'message'         => 'Distinctiveness scored successfully',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Audit Column Patterns
+	// =========================================================================
+	wp_register_ability(
+		'elementor/audit-column-patterns',
+		array(
+			'label'               => 'Audit Elementor Column Patterns',
+			'description'         => 'Audits repeated column ratios such as repeated 50/50 and equal-third rows. This is readonly and does not assume asymmetry is automatically better.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'id'         => array(
+						'type'        => 'integer',
+						'description' => 'Optional Post/Page ID to inspect.',
+					),
+					'element_id' => array(
+						'type'        => 'string',
+						'description' => 'Optional root element ID to restrict the audit to a subtree.',
+					),
+					'max_depth'   => array(
+						'type'        => 'integer',
+						'default'     => -1,
+						'description' => 'Maximum depth to inspect. Use -1 for unlimited.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'    => array( 'type' => 'boolean' ),
+					'id'         => array( 'type' => 'integer' ),
+					'element_id' => array( 'type' => 'string' ),
+					'audit'      => array( 'type' => 'object' ),
+					'message'    => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input     = is_array( $input ) ? $input : array();
+				$post_id   = isset( $input['id'] ) ? (int) $input['id'] : 0;
+				$max_depth = isset( $input['max_depth'] ) ? (int) $input['max_depth'] : -1;
+				$stats     = array( 'rows' => array() );
+
+				if ( $post_id > 0 ) {
+					$post = get_post( $post_id );
+					if ( ! $post ) {
+						return array( 'success' => false, 'message' => 'Post not found' );
+					}
+
+					$elementor_data = get_post_meta( $post_id, '_elementor_data', true );
+					if ( empty( $elementor_data ) ) {
+						return array( 'success' => false, 'message' => 'No Elementor data found for this post' );
+					}
+
+					$data = json_decode( $elementor_data, true );
+					if ( null === $data && JSON_ERROR_NONE !== json_last_error() ) {
+						return array( 'success' => false, 'message' => 'Failed to parse existing Elementor data' );
+					}
+
+					if ( ! empty( $input['element_id'] ) && is_string( $input['element_id'] ) ) {
+						$element_meta = mcp_abilities_elementor_find_element_meta( $data, (string) $input['element_id'] );
+						if ( ! is_array( $element_meta ) || ! is_array( $element_meta['element'] ?? null ) ) {
+							return array( 'success' => false, 'message' => 'Element not found' );
+						}
+						mcp_abilities_elementor_collect_column_audit_stats_from_subtree( $element_meta['element'], $stats, $max_depth );
+					} else {
+						foreach ( (array) $data as $element ) {
+							if ( is_array( $element ) ) {
+								mcp_abilities_elementor_collect_column_audit_stats_from_subtree( $element, $stats, $max_depth );
+							}
+						}
+					}
+				}
+
+				return array(
+					'success'    => true,
+					'id'         => $post_id,
+					'element_id' => isset( $input['element_id'] ) && is_string( $input['element_id'] ) ? $input['element_id'] : '',
+					'audit'      => mcp_abilities_elementor_finalize_column_patterns_audit( (array) ( $stats['rows'] ?? array() ) ),
+					'message'    => 'Column pattern audit completed successfully',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Audit Layout Mechanism Fit
+	// =========================================================================
+	wp_register_ability(
+		'elementor/audit-layout-mechanism-fit',
+		array(
+			'label'               => 'Audit Elementor Layout Mechanism Fit',
+			'description'         => 'Checks whether symmetric equal-column groups are using the right Elementor layout mechanism. Uses Elementor’s own guidance: Grid for equal, symmetric rows/columns; Flexbox for user-shaped directional patterns.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'id'         => array(
+						'type'        => 'integer',
+						'description' => 'Optional Post/Page ID to inspect.',
+					),
+					'element_id' => array(
+						'type'        => 'string',
+						'description' => 'Optional root element ID to restrict the audit to a subtree.',
+					),
+					'max_depth'   => array(
+						'type'        => 'integer',
+						'default'     => -1,
+						'description' => 'Maximum depth to inspect. Use -1 for unlimited.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'    => array( 'type' => 'boolean' ),
+					'id'         => array( 'type' => 'integer' ),
+					'element_id' => array( 'type' => 'string' ),
+					'audit'      => array( 'type' => 'object' ),
+					'message'    => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input     = is_array( $input ) ? $input : array();
+				$post_id   = isset( $input['id'] ) ? (int) $input['id'] : 0;
+				$max_depth = isset( $input['max_depth'] ) ? (int) $input['max_depth'] : -1;
+				$stats     = array( 'rows' => array() );
+
+				if ( $post_id > 0 ) {
+					$post = get_post( $post_id );
+					if ( ! $post ) {
+						return array( 'success' => false, 'message' => 'Post not found' );
+					}
+
+					$elementor_data = get_post_meta( $post_id, '_elementor_data', true );
+					if ( empty( $elementor_data ) ) {
+						return array( 'success' => false, 'message' => 'No Elementor data found for this post' );
+					}
+
+					$data = json_decode( $elementor_data, true );
+					if ( null === $data && JSON_ERROR_NONE !== json_last_error() ) {
+						return array( 'success' => false, 'message' => 'Failed to parse existing Elementor data' );
+					}
+
+					if ( ! empty( $input['element_id'] ) && is_string( $input['element_id'] ) ) {
+						$element_meta = mcp_abilities_elementor_find_element_meta( $data, (string) $input['element_id'] );
+						if ( ! is_array( $element_meta ) || ! is_array( $element_meta['element'] ?? null ) ) {
+							return array( 'success' => false, 'message' => 'Element not found' );
+						}
+						mcp_abilities_elementor_collect_column_audit_stats_from_subtree( $element_meta['element'], $stats, $max_depth );
+					} else {
+						foreach ( (array) $data as $element ) {
+							if ( is_array( $element ) ) {
+								mcp_abilities_elementor_collect_column_audit_stats_from_subtree( $element, $stats, $max_depth );
+							}
+						}
+					}
+				}
+
+				return array(
+					'success'    => true,
+					'id'         => $post_id,
+					'element_id' => isset( $input['element_id'] ) && is_string( $input['element_id'] ) ? $input['element_id'] : '',
+					'audit'      => mcp_abilities_elementor_finalize_layout_mechanism_fit_audit( (array) ( $stats['rows'] ?? array() ) ),
+					'message'    => 'Layout mechanism fit audit completed successfully',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Audit Column Dominance
+	// =========================================================================
+	wp_register_ability(
+		'elementor/audit-column-dominance',
+		array(
+			'label'               => 'Audit Elementor Column Dominance',
+			'description'         => 'Checks whether equal column splits are hiding a clearly dominant side. This is readonly and only flags rows where the content hierarchy may be stronger than the ratio suggests.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'id'         => array(
+						'type'        => 'integer',
+						'description' => 'Optional Post/Page ID to inspect.',
+					),
+					'element_id' => array(
+						'type'        => 'string',
+						'description' => 'Optional root element ID to restrict the audit to a subtree.',
+					),
+					'max_depth'   => array(
+						'type'        => 'integer',
+						'default'     => -1,
+						'description' => 'Maximum depth to inspect. Use -1 for unlimited.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'    => array( 'type' => 'boolean' ),
+					'id'         => array( 'type' => 'integer' ),
+					'element_id' => array( 'type' => 'string' ),
+					'audit'      => array( 'type' => 'object' ),
+					'message'    => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input     = is_array( $input ) ? $input : array();
+				$post_id   = isset( $input['id'] ) ? (int) $input['id'] : 0;
+				$max_depth = isset( $input['max_depth'] ) ? (int) $input['max_depth'] : -1;
+				$stats     = array( 'rows' => array() );
+
+				if ( $post_id > 0 ) {
+					$post = get_post( $post_id );
+					if ( ! $post ) {
+						return array( 'success' => false, 'message' => 'Post not found' );
+					}
+
+					$elementor_data = get_post_meta( $post_id, '_elementor_data', true );
+					if ( empty( $elementor_data ) ) {
+						return array( 'success' => false, 'message' => 'No Elementor data found for this post' );
+					}
+
+					$data = json_decode( $elementor_data, true );
+					if ( null === $data && JSON_ERROR_NONE !== json_last_error() ) {
+						return array( 'success' => false, 'message' => 'Failed to parse existing Elementor data' );
+					}
+
+					if ( ! empty( $input['element_id'] ) && is_string( $input['element_id'] ) ) {
+						$element_meta = mcp_abilities_elementor_find_element_meta( $data, (string) $input['element_id'] );
+						if ( ! is_array( $element_meta ) || ! is_array( $element_meta['element'] ?? null ) ) {
+							return array( 'success' => false, 'message' => 'Element not found' );
+						}
+						mcp_abilities_elementor_collect_column_audit_stats_from_subtree( $element_meta['element'], $stats, $max_depth );
+					} else {
+						foreach ( (array) $data as $element ) {
+							if ( is_array( $element ) ) {
+								mcp_abilities_elementor_collect_column_audit_stats_from_subtree( $element, $stats, $max_depth );
+							}
+						}
+					}
+				}
+
+				return array(
+					'success'    => true,
+					'id'         => $post_id,
+					'element_id' => isset( $input['element_id'] ) && is_string( $input['element_id'] ) ? $input['element_id'] : '',
+					'audit'      => mcp_abilities_elementor_finalize_column_dominance_audit( (array) ( $stats['rows'] ?? array() ) ),
+					'message'    => 'Column dominance audit completed successfully',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Audit Column Alignment Rhythm
+	// =========================================================================
+	wp_register_ability(
+		'elementor/audit-column-alignment-rhythm',
+		array(
+			'label'               => 'Audit Elementor Column Alignment Rhythm',
+			'description'         => 'Reports whether similar column ratios are using inconsistent gutter rhythms. This is readonly and does not assume uniform spacing is always better.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'id'         => array(
+						'type'        => 'integer',
+						'description' => 'Optional Post/Page ID to inspect.',
+					),
+					'element_id' => array(
+						'type'        => 'string',
+						'description' => 'Optional root element ID to restrict the audit to a subtree.',
+					),
+					'max_depth'   => array(
+						'type'        => 'integer',
+						'default'     => -1,
+						'description' => 'Maximum depth to inspect. Use -1 for unlimited.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'    => array( 'type' => 'boolean' ),
+					'id'         => array( 'type' => 'integer' ),
+					'element_id' => array( 'type' => 'string' ),
+					'audit'      => array( 'type' => 'object' ),
+					'message'    => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input     = is_array( $input ) ? $input : array();
+				$post_id   = isset( $input['id'] ) ? (int) $input['id'] : 0;
+				$max_depth = isset( $input['max_depth'] ) ? (int) $input['max_depth'] : -1;
+				$stats     = array( 'rows' => array() );
+
+				if ( $post_id > 0 ) {
+					$post = get_post( $post_id );
+					if ( ! $post ) {
+						return array( 'success' => false, 'message' => 'Post not found' );
+					}
+
+					$elementor_data = get_post_meta( $post_id, '_elementor_data', true );
+					if ( empty( $elementor_data ) ) {
+						return array( 'success' => false, 'message' => 'No Elementor data found for this post' );
+					}
+
+					$data = json_decode( $elementor_data, true );
+					if ( null === $data && JSON_ERROR_NONE !== json_last_error() ) {
+						return array( 'success' => false, 'message' => 'Failed to parse existing Elementor data' );
+					}
+
+					if ( ! empty( $input['element_id'] ) && is_string( $input['element_id'] ) ) {
+						$element_meta = mcp_abilities_elementor_find_element_meta( $data, (string) $input['element_id'] );
+						if ( ! is_array( $element_meta ) || ! is_array( $element_meta['element'] ?? null ) ) {
+							return array( 'success' => false, 'message' => 'Element not found' );
+						}
+						mcp_abilities_elementor_collect_column_audit_stats_from_subtree( $element_meta['element'], $stats, $max_depth );
+					} else {
+						foreach ( (array) $data as $element ) {
+							if ( is_array( $element ) ) {
+								mcp_abilities_elementor_collect_column_audit_stats_from_subtree( $element, $stats, $max_depth );
+							}
+						}
+					}
+				}
+
+				return array(
+					'success'    => true,
+					'id'         => $post_id,
+					'element_id' => isset( $input['element_id'] ) && is_string( $input['element_id'] ) ? $input['element_id'] : '',
+					'audit'      => mcp_abilities_elementor_finalize_column_alignment_rhythm_audit( (array) ( $stats['rows'] ?? array() ) ),
+					'message'    => 'Column alignment rhythm audit completed successfully',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Audit Column Balance
+	// =========================================================================
+	wp_register_ability(
+		'elementor/audit-column-balance',
+		array(
+			'label'               => 'Audit Elementor Column Balance',
+			'description'         => 'Checks whether asymmetric rows appear to be earning their asymmetry. This is readonly and does not assume equal splits are better.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'id'         => array(
+						'type'        => 'integer',
+						'description' => 'Optional Post/Page ID to inspect.',
+					),
+					'element_id' => array(
+						'type'        => 'string',
+						'description' => 'Optional root element ID to restrict the audit to a subtree.',
+					),
+					'max_depth'   => array(
+						'type'        => 'integer',
+						'default'     => -1,
+						'description' => 'Maximum depth to inspect. Use -1 for unlimited.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'    => array( 'type' => 'boolean' ),
+					'id'         => array( 'type' => 'integer' ),
+					'element_id' => array( 'type' => 'string' ),
+					'audit'      => array( 'type' => 'object' ),
+					'message'    => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input     = is_array( $input ) ? $input : array();
+				$post_id   = isset( $input['id'] ) ? (int) $input['id'] : 0;
+				$max_depth = isset( $input['max_depth'] ) ? (int) $input['max_depth'] : -1;
+				$stats     = array( 'rows' => array() );
+
+				if ( $post_id > 0 ) {
+					$post = get_post( $post_id );
+					if ( ! $post ) {
+						return array( 'success' => false, 'message' => 'Post not found' );
+					}
+
+					$elementor_data = get_post_meta( $post_id, '_elementor_data', true );
+					if ( empty( $elementor_data ) ) {
+						return array( 'success' => false, 'message' => 'No Elementor data found for this post' );
+					}
+
+					$data = json_decode( $elementor_data, true );
+					if ( null === $data && JSON_ERROR_NONE !== json_last_error() ) {
+						return array( 'success' => false, 'message' => 'Failed to parse existing Elementor data' );
+					}
+
+					if ( ! empty( $input['element_id'] ) && is_string( $input['element_id'] ) ) {
+						$element_meta = mcp_abilities_elementor_find_element_meta( $data, (string) $input['element_id'] );
+						if ( ! is_array( $element_meta ) || ! is_array( $element_meta['element'] ?? null ) ) {
+							return array( 'success' => false, 'message' => 'Element not found' );
+						}
+						mcp_abilities_elementor_collect_column_audit_stats_from_subtree( $element_meta['element'], $stats, $max_depth );
+					} else {
+						foreach ( (array) $data as $element ) {
+							if ( is_array( $element ) ) {
+								mcp_abilities_elementor_collect_column_audit_stats_from_subtree( $element, $stats, $max_depth );
+							}
+						}
+					}
+				}
+
+				return array(
+					'success'    => true,
+					'id'         => $post_id,
+					'element_id' => isset( $input['element_id'] ) && is_string( $input['element_id'] ) ? $input['element_id'] : '',
+					'audit'      => mcp_abilities_elementor_finalize_column_balance_audit( (array) ( $stats['rows'] ?? array() ) ),
+					'message'    => 'Column balance audit completed successfully',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Audit Column Necessity
+	// =========================================================================
+	wp_register_ability(
+		'elementor/audit-column-necessity',
+		array(
+			'label'               => 'Audit Elementor Column Necessity',
+			'description'         => 'Flags column splits that may not be earning their complexity. This is readonly and only suggests checking whether a row would read more clearly as one lane.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'id'         => array(
+						'type'        => 'integer',
+						'description' => 'Optional Post/Page ID to inspect.',
+					),
+					'element_id' => array(
+						'type'        => 'string',
+						'description' => 'Optional root element ID to restrict the audit to a subtree.',
+					),
+					'max_depth'   => array(
+						'type'        => 'integer',
+						'default'     => -1,
+						'description' => 'Maximum depth to inspect. Use -1 for unlimited.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'    => array( 'type' => 'boolean' ),
+					'id'         => array( 'type' => 'integer' ),
+					'element_id' => array( 'type' => 'string' ),
+					'audit'      => array( 'type' => 'object' ),
+					'message'    => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input     = is_array( $input ) ? $input : array();
+				$post_id   = isset( $input['id'] ) ? (int) $input['id'] : 0;
+				$max_depth = isset( $input['max_depth'] ) ? (int) $input['max_depth'] : -1;
+				$stats     = array( 'rows' => array() );
+
+				if ( $post_id > 0 ) {
+					$post = get_post( $post_id );
+					if ( ! $post ) {
+						return array( 'success' => false, 'message' => 'Post not found' );
+					}
+
+					$elementor_data = get_post_meta( $post_id, '_elementor_data', true );
+					if ( empty( $elementor_data ) ) {
+						return array( 'success' => false, 'message' => 'No Elementor data found for this post' );
+					}
+
+					$data = json_decode( $elementor_data, true );
+					if ( null === $data && JSON_ERROR_NONE !== json_last_error() ) {
+						return array( 'success' => false, 'message' => 'Failed to parse existing Elementor data' );
+					}
+
+					if ( ! empty( $input['element_id'] ) && is_string( $input['element_id'] ) ) {
+						$element_meta = mcp_abilities_elementor_find_element_meta( $data, (string) $input['element_id'] );
+						if ( ! is_array( $element_meta ) || ! is_array( $element_meta['element'] ?? null ) ) {
+							return array( 'success' => false, 'message' => 'Element not found' );
+						}
+						mcp_abilities_elementor_collect_column_audit_stats_from_subtree( $element_meta['element'], $stats, $max_depth );
+					} else {
+						foreach ( (array) $data as $element ) {
+							if ( is_array( $element ) ) {
+								mcp_abilities_elementor_collect_column_audit_stats_from_subtree( $element, $stats, $max_depth );
+							}
+						}
+					}
+				}
+
+				return array(
+					'success'    => true,
+					'id'         => $post_id,
+					'element_id' => isset( $input['element_id'] ) && is_string( $input['element_id'] ) ? $input['element_id'] : '',
+					'audit'      => mcp_abilities_elementor_finalize_column_necessity_audit( (array) ( $stats['rows'] ?? array() ) ),
+					'message'    => 'Column necessity audit completed successfully',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Audit Generic Component Repetition
+	// =========================================================================
+	wp_register_ability(
+		'elementor/audit-generic-component-repetition',
+		array(
+			'label'               => 'Audit Elementor Generic Component Repetition',
+			'description'         => 'Flags repeated landing-page furniture such as excessive buttons and repeated card-like panel treatments. This is style-neutral and does not punish simple layouts for being restrained.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'id'         => array(
+						'type'        => 'integer',
+						'description' => 'Optional Post/Page ID to inspect.',
+					),
+					'element_id' => array(
+						'type'        => 'string',
+						'description' => 'Optional root element ID to restrict the audit to a subtree.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'         => array( 'type' => 'boolean' ),
+					'id'              => array( 'type' => 'integer' ),
+					'element_id'      => array( 'type' => 'string' ),
+					'audit'           => array( 'type' => 'object' ),
+					'message'         => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input   = is_array( $input ) ? $input : array();
+				$post_id = isset( $input['id'] ) ? (int) $input['id'] : 0;
+				$root    = null;
+
+				if ( $post_id > 0 ) {
+					$post = get_post( $post_id );
+					if ( ! $post ) {
+						return array( 'success' => false, 'message' => 'Post not found' );
+					}
+
+					$elementor_data = get_post_meta( $post_id, '_elementor_data', true );
+					if ( empty( $elementor_data ) ) {
+						return array( 'success' => false, 'message' => 'No Elementor data found for this post' );
+					}
+
+					$data = json_decode( $elementor_data, true );
+					if ( null === $data && JSON_ERROR_NONE !== json_last_error() ) {
+						return array( 'success' => false, 'message' => 'Failed to parse existing Elementor data' );
+					}
+
+					if ( ! empty( $input['element_id'] ) && is_string( $input['element_id'] ) ) {
+						$element_meta = mcp_abilities_elementor_find_element_meta( $data, (string) $input['element_id'] );
+						if ( ! is_array( $element_meta ) || ! is_array( $element_meta['element'] ?? null ) ) {
+							return array( 'success' => false, 'message' => 'Element not found' );
+						}
+						$root = $element_meta['element'];
+					} else {
+						$root = array(
+							'id'       => 'document_root',
+							'elType'   => 'container',
+							'settings' => array(),
+							'elements' => $data,
+						);
+					}
+				}
+
+				$profile = is_array( $root ) ? mcp_abilities_elementor_build_component_profile( $root ) : array(
+					'widget_counts' => array(),
+					'card_like_ids' => array(),
+				);
+
+				return array(
+					'success'    => true,
+					'id'         => $post_id,
+					'element_id' => isset( $input['element_id'] ) && is_string( $input['element_id'] ) ? $input['element_id'] : '',
+					'audit'      => mcp_abilities_elementor_finalize_component_overuse_audit( $profile ),
+					'message'    => 'Generic component repetition audit completed successfully',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Audit Surface Overuse
+	// =========================================================================
+	wp_register_ability(
+		'elementor/audit-surface-overuse',
+		array(
+			'label'               => 'Audit Elementor Surface Overuse',
+			'description'         => 'Reports when the same panel/surface treatment repeats often enough to risk feeling formulaic. It is intentionally cautious and does not assume repeated surfaces are bad when simplicity is intentional.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'id'         => array(
+						'type'        => 'integer',
+						'description' => 'Optional Post/Page ID to inspect.',
+					),
+					'element_id' => array(
+						'type'        => 'string',
+						'description' => 'Optional root element ID to restrict the audit to a subtree.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'         => array( 'type' => 'boolean' ),
+					'id'              => array( 'type' => 'integer' ),
+					'element_id'      => array( 'type' => 'string' ),
+					'audit'           => array( 'type' => 'object' ),
+					'message'         => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input     = is_array( $input ) ? $input : array();
+				$post_id   = isset( $input['id'] ) ? (int) $input['id'] : 0;
+				$collector = array();
+				$elements  = array();
+
+				if ( $post_id > 0 ) {
+					$post = get_post( $post_id );
+					if ( ! $post ) {
+						return array( 'success' => false, 'message' => 'Post not found' );
+					}
+
+					$elementor_data = get_post_meta( $post_id, '_elementor_data', true );
+					if ( empty( $elementor_data ) ) {
+						return array( 'success' => false, 'message' => 'No Elementor data found for this post' );
+					}
+
+					$data = json_decode( $elementor_data, true );
+					if ( null === $data && JSON_ERROR_NONE !== json_last_error() ) {
+						return array( 'success' => false, 'message' => 'Failed to parse existing Elementor data' );
+					}
+
+					if ( ! empty( $input['element_id'] ) && is_string( $input['element_id'] ) ) {
+						$element_meta = mcp_abilities_elementor_find_element_meta( $data, (string) $input['element_id'] );
+						if ( ! is_array( $element_meta ) || ! is_array( $element_meta['element'] ?? null ) ) {
+							return array( 'success' => false, 'message' => 'Element not found' );
+						}
+						$elements = array( $element_meta['element'] );
+					} else {
+						$elements = is_array( $data ) ? $data : array();
+					}
+				}
+
+				foreach ( $elements as $element ) {
+					if ( is_array( $element ) ) {
+						mcp_abilities_elementor_collect_surface_signatures_from_subtree( $element, $collector );
+					}
+				}
+
+				return array(
+					'success'    => true,
+					'id'         => $post_id,
+					'element_id' => isset( $input['element_id'] ) && is_string( $input['element_id'] ) ? $input['element_id'] : '',
+					'audit'      => mcp_abilities_elementor_finalize_surface_overuse_audit( $collector ),
+					'message'    => 'Surface overuse audit completed successfully',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Audit Emphasis Drift
+	// =========================================================================
+	wp_register_ability(
+		'elementor/audit-emphasis-drift',
+		array(
+			'label'               => 'Audit Elementor Emphasis Drift',
+			'description'         => 'Checks whether top-level sections are all carrying roughly the same emphasis weight. It is cautious by design and only warns when a page risks making every section land with the same force.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'id' => array(
+						'type'        => 'integer',
+						'description' => 'Optional Post/Page ID to inspect.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'         => array( 'type' => 'boolean' ),
+					'id'              => array( 'type' => 'integer' ),
+					'audit'           => array( 'type' => 'object' ),
+					'message'         => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input   = is_array( $input ) ? $input : array();
+				$post_id = isset( $input['id'] ) ? (int) $input['id'] : 0;
+				$profiles = array();
+
+				if ( $post_id > 0 ) {
+					$post = get_post( $post_id );
+					if ( ! $post ) {
+						return array( 'success' => false, 'message' => 'Post not found' );
+					}
+
+					$elementor_data = get_post_meta( $post_id, '_elementor_data', true );
+					if ( empty( $elementor_data ) ) {
+						return array( 'success' => false, 'message' => 'No Elementor data found for this post' );
+					}
+
+					$data = json_decode( $elementor_data, true );
+					if ( null === $data && JSON_ERROR_NONE !== json_last_error() ) {
+						return array( 'success' => false, 'message' => 'Failed to parse existing Elementor data' );
+					}
+
+					foreach ( (array) $data as $element ) {
+						if ( is_array( $element ) ) {
+							$profiles[] = mcp_abilities_elementor_compute_section_emphasis_profile( $element );
+						}
+					}
+				}
+
+				return array(
+					'success' => true,
+					'id'      => $post_id,
+					'audit'   => mcp_abilities_elementor_finalize_emphasis_drift_audit( $profiles ),
+					'message' => 'Emphasis drift audit completed successfully',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Audit Section Rivalry
+	// =========================================================================
+	wp_register_ability(
+		'elementor/audit-section-rivalry',
+		array(
+			'label'               => 'Audit Elementor Section Rivalry',
+			'description'         => 'Checks whether too many top-level sections are carrying peak-emphasis signals at once. It is style-neutral and tries to catch competing local climaxes without punishing restrained or simple pages.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'id' => array(
+						'type'        => 'integer',
+						'description' => 'Optional Post/Page ID to inspect.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'         => array( 'type' => 'boolean' ),
+					'id'              => array( 'type' => 'integer' ),
+					'audit'           => array( 'type' => 'object' ),
+					'message'         => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input    = is_array( $input ) ? $input : array();
+				$post_id  = isset( $input['id'] ) ? (int) $input['id'] : 0;
+				$profiles = array();
+
+				if ( $post_id > 0 ) {
+					$post = get_post( $post_id );
+					if ( ! $post ) {
+						return array( 'success' => false, 'message' => 'Post not found' );
+					}
+
+					$elementor_data = get_post_meta( $post_id, '_elementor_data', true );
+					if ( empty( $elementor_data ) ) {
+						return array( 'success' => false, 'message' => 'No Elementor data found for this post' );
+					}
+
+					$data = json_decode( $elementor_data, true );
+					if ( null === $data && JSON_ERROR_NONE !== json_last_error() ) {
+						return array( 'success' => false, 'message' => 'Failed to parse existing Elementor data' );
+					}
+
+					foreach ( (array) $data as $element ) {
+						if ( is_array( $element ) ) {
+							$profiles[] = mcp_abilities_elementor_compute_section_emphasis_profile( $element );
+						}
+					}
+				}
+
+				return array(
+					'success' => true,
+					'id'      => $post_id,
+					'audit'   => mcp_abilities_elementor_finalize_section_rivalry_audit( $profiles ),
+					'message' => 'Section rivalry audit completed successfully',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Audit Composition Rhythm
+	// =========================================================================
+	wp_register_ability(
+		'elementor/audit-composition-rhythm',
+		array(
+			'label'               => 'Audit Elementor Composition Rhythm',
+			'description'         => 'Looks at top-level section pacing and tonal runs to spot pages that may be settling into one long beat. It does not assume that minimal or restrained pages are bad.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'id' => array(
+						'type'        => 'integer',
+						'description' => 'Optional Post/Page ID to inspect.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'         => array( 'type' => 'boolean' ),
+					'id'              => array( 'type' => 'integer' ),
+					'audit'           => array( 'type' => 'object' ),
+					'message'         => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input    = is_array( $input ) ? $input : array();
+				$post_id  = isset( $input['id'] ) ? (int) $input['id'] : 0;
+				$profiles = array();
+
+				if ( $post_id > 0 ) {
+					$post = get_post( $post_id );
+					if ( ! $post ) {
+						return array( 'success' => false, 'message' => 'Post not found' );
+					}
+
+					$elementor_data = get_post_meta( $post_id, '_elementor_data', true );
+					if ( empty( $elementor_data ) ) {
+						return array( 'success' => false, 'message' => 'No Elementor data found for this post' );
+					}
+
+					$data = json_decode( $elementor_data, true );
+					if ( null === $data && JSON_ERROR_NONE !== json_last_error() ) {
+						return array( 'success' => false, 'message' => 'Failed to parse existing Elementor data' );
+					}
+
+					foreach ( (array) $data as $element ) {
+						if ( is_array( $element ) ) {
+							$profiles[] = mcp_abilities_elementor_compute_section_emphasis_profile( $element );
+						}
+					}
+				}
+
+				return array(
+					'success' => true,
+					'id'      => $post_id,
+					'audit'   => mcp_abilities_elementor_finalize_composition_rhythm_audit( $profiles ),
+					'message' => 'Composition rhythm audit completed successfully',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Audit Separator Discipline
+	// =========================================================================
+	wp_register_ability(
+		'elementor/audit-separator-discipline',
+		array(
+			'label'               => 'Audit Elementor Separator Discipline',
+			'description'         => 'Checks whether top-level section separators are starting to flatten the page hierarchy. It is deliberately cautious and only warns when separators begin behaving like a page-wide default.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'id' => array(
+						'type'        => 'integer',
+						'description' => 'Optional Post/Page ID to inspect.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'id'      => array( 'type' => 'integer' ),
+					'audit'   => array( 'type' => 'object' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input    = is_array( $input ) ? $input : array();
+				$post_id  = isset( $input['id'] ) ? (int) $input['id'] : 0;
+				$profiles = array();
+
+				if ( $post_id > 0 ) {
+					$post = get_post( $post_id );
+					if ( ! $post ) {
+						return array( 'success' => false, 'message' => 'Post not found' );
+					}
+
+					$elementor_data = get_post_meta( $post_id, '_elementor_data', true );
+					if ( empty( $elementor_data ) ) {
+						return array( 'success' => false, 'message' => 'No Elementor data found for this post' );
+					}
+
+					$data = json_decode( $elementor_data, true );
+					if ( null === $data && JSON_ERROR_NONE !== json_last_error() ) {
+						return array( 'success' => false, 'message' => 'Failed to parse existing Elementor data' );
+					}
+
+					foreach ( (array) $data as $element ) {
+						if ( is_array( $element ) ) {
+							$profiles[] = mcp_abilities_elementor_compute_section_separator_profile( $element );
+						}
+					}
+				}
+
+				return array(
+					'success' => true,
+					'id'      => $post_id,
+					'audit'   => mcp_abilities_elementor_finalize_separator_discipline_audit( $profiles ),
+					'message' => 'Separator discipline audit completed successfully',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Get Theme Context
+	// =========================================================================
+	wp_register_ability(
+		'elementor/get-theme-context',
+		array(
+			'label'               => 'Get Elementor Theme Context',
+			'description'         => 'Summarizes the active WordPress theme, Elementor version, active kit, and viewport options so design work starts from actual site context instead of guesswork.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'include_viewports' => array(
+						'type'        => 'boolean',
+						'default'     => true,
+						'description' => 'If false, omit Elementor viewport option values from the returned context.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'context' => array( 'type' => 'object' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input   = is_array( $input ) ? $input : array();
+				$context = mcp_abilities_elementor_get_theme_context_summary();
+				if ( array_key_exists( 'include_viewports', $input ) && empty( $input['include_viewports'] ) ) {
+					unset( $context['elementor']['viewport_options'] );
+				}
+
+				return array(
+					'success' => true,
+					'context' => $context,
+					'message' => 'Theme context retrieved successfully',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Get Style Guide
+	// =========================================================================
+	wp_register_ability(
+		'elementor/get-style-guide',
+		array(
+			'label'               => 'Get Elementor Style Guide',
+			'description'         => 'Builds a style-guide summary from the active Elementor kit, including design tokens, layout settings, global colors, and global typography.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'include_raw_settings' => array(
+						'type'        => 'boolean',
+						'default'     => true,
+						'description' => 'If false, omit the full raw kit settings payload from the response.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'     => array( 'type' => 'boolean' ),
+					'style_guide' => array( 'type' => 'object' ),
+					'message'     => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input       = is_array( $input ) ? $input : array();
+				$style_guide = mcp_abilities_elementor_get_style_guide_summary();
+				if ( array_key_exists( 'include_raw_settings', $input ) && empty( $input['include_raw_settings'] ) ) {
+					unset( $style_guide['raw_settings'] );
+				}
+
+				return array(
+					'success'     => true,
+					'style_guide' => $style_guide,
+					'message'     => 'Style guide retrieved successfully',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Evaluate Design
+	// =========================================================================
+	wp_register_ability(
+		'elementor/evaluate-design',
+		array(
+			'label'               => 'Evaluate Elementor Design',
+			'description'         => 'Runs the main Elementor design audits together and returns one score, issue list, blocking issues, and recommendations so overlapping helpers become one evaluation surface.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id' ),
+				'properties'           => array(
+					'id' => array(
+						'type'        => 'integer',
+						'description' => 'Post/Page ID to inspect.',
+					),
+					'element_id' => array(
+						'type'        => 'string',
+						'description' => 'Optional root element ID to limit evaluation to a subtree.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'    => array( 'type' => 'boolean' ),
+					'id'         => array( 'type' => 'integer' ),
+					'element_id' => array( 'type' => 'string' ),
+					'evaluation' => array( 'type' => 'object' ),
+					'message'    => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input      = is_array( $input ) ? $input : array();
+				$post_id    = isset( $input['id'] ) ? (int) $input['id'] : 0;
+				$element_id = isset( $input['element_id'] ) && is_string( $input['element_id'] ) ? $input['element_id'] : '';
+
+				if ( $post_id <= 0 ) {
+					return array( 'success' => false, 'message' => 'Post/Page ID is required' );
+				}
+
+				$scope = mcp_abilities_elementor_resolve_audit_scope( $post_id, $element_id );
+				if ( is_wp_error( $scope ) ) {
+					return array( 'success' => false, 'message' => $scope->get_error_message() );
+				}
+
+				return array(
+					'success'    => true,
+					'id'         => $post_id,
+					'element_id' => $element_id,
+					'evaluation' => mcp_abilities_elementor_evaluate_design_from_elements( (array) ( $scope['elements'] ?? array() ) ),
+					'message'    => 'Design evaluation completed successfully',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Suggest Design Fixes
+	// =========================================================================
+	wp_register_ability(
+		'elementor/suggest-design-fixes',
+		array(
+			'label'               => 'Suggest Elementor Design Fixes',
+			'description'         => 'Turns the aggregated Elementor design evaluation into concrete, issue-type-specific design fix suggestions.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id' ),
+				'properties'           => array(
+					'id' => array(
+						'type'        => 'integer',
+						'description' => 'Post/Page ID to inspect.',
+					),
+					'element_id' => array(
+						'type'        => 'string',
+						'description' => 'Optional root element ID to limit evaluation to a subtree.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'     => array( 'type' => 'boolean' ),
+					'id'          => array( 'type' => 'integer' ),
+					'element_id'  => array( 'type' => 'string' ),
+					'evaluation'  => array( 'type' => 'object' ),
+					'suggestions' => array( 'type' => 'object' ),
+					'message'     => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input      = is_array( $input ) ? $input : array();
+				$post_id    = isset( $input['id'] ) ? (int) $input['id'] : 0;
+				$element_id = isset( $input['element_id'] ) && is_string( $input['element_id'] ) ? $input['element_id'] : '';
+
+				if ( $post_id <= 0 ) {
+					return array( 'success' => false, 'message' => 'Post/Page ID is required' );
+				}
+
+				$scope = mcp_abilities_elementor_resolve_audit_scope( $post_id, $element_id );
+				if ( is_wp_error( $scope ) ) {
+					return array( 'success' => false, 'message' => $scope->get_error_message() );
+				}
+
+				$evaluation = mcp_abilities_elementor_evaluate_design_from_elements( (array) ( $scope['elements'] ?? array() ) );
+
+				return array(
+					'success'     => true,
+					'id'          => $post_id,
+					'element_id'  => $element_id,
+					'evaluation'  => $evaluation,
+					'suggestions' => mcp_abilities_elementor_suggest_design_fixes_from_evaluation( $evaluation ),
+					'message'     => 'Design fix suggestions generated successfully',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Evaluate Render Context
+	// =========================================================================
+	wp_register_ability(
+		'elementor/evaluate-render-context',
+		array(
+			'label'               => 'Evaluate Elementor Render Context',
+			'description'         => 'Checks the rendered frontend around an Elementor page so wrapper-level problems stay separate from actual Elementor content quality.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id' ),
+				'properties'           => array(
+					'id' => array(
+						'type'        => 'integer',
+						'description' => 'Post/Page ID to inspect.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'id'      => array( 'type' => 'integer' ),
+					'result'  => array( 'type' => 'object' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input   = is_array( $input ) ? $input : array();
+				$post_id = isset( $input['id'] ) ? (int) $input['id'] : 0;
+
+				if ( $post_id <= 0 ) {
+					return array( 'success' => false, 'message' => 'Post/Page ID is required' );
+				}
+
+				$result = mcp_abilities_elementor_evaluate_render_context( $post_id );
+				if ( is_wp_error( $result ) ) {
+					return array( 'success' => false, 'message' => $result->get_error_message() );
+				}
+
+				return array(
+					'success' => true,
+					'id'      => $post_id,
+					'result'  => $result,
+					'message' => 'Render context evaluation completed successfully',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
 	// ELEMENTOR - Apply Text Hierarchy
 	// =========================================================================
 	wp_register_ability(
@@ -4956,22 +8876,20 @@ function mcp_abilities_elementor_register_abilities(): void {
 				}
 
 				$heading_scale = isset( $input['heading_scale'] ) && is_array( $input['heading_scale'] ) ? $input['heading_scale'] : array(
-					'h1'      => array( 'font_size' => 56, 'line_height' => 1.05, 'font_weight' => '600', 'font_family' => 'Jost' ),
-					'h2'      => array( 'font_size' => 44, 'line_height' => 1.1, 'font_weight' => '600', 'font_family' => 'Jost' ),
-					'h3'      => array( 'font_size' => 34, 'line_height' => 1.15, 'font_weight' => '600', 'font_family' => 'Jost' ),
-					'h4'      => array( 'font_size' => 28, 'line_height' => 1.2, 'font_weight' => '600', 'font_family' => 'Jost' ),
-					'h5'      => array( 'font_size' => 22, 'line_height' => 1.25, 'font_weight' => '600', 'font_family' => 'Jost' ),
-					'h6'      => array( 'font_size' => 18, 'line_height' => 1.3, 'font_weight' => '600', 'font_family' => 'Jost' ),
-					'default' => array( 'font_size' => 34, 'line_height' => 1.15, 'font_weight' => '600', 'font_family' => 'Jost' ),
+					'h1'      => array( 'font_size' => 56, 'line_height' => 1.05, 'font_weight' => '600' ),
+					'h2'      => array( 'font_size' => 44, 'line_height' => 1.1, 'font_weight' => '600' ),
+					'h3'      => array( 'font_size' => 34, 'line_height' => 1.15, 'font_weight' => '600' ),
+					'h4'      => array( 'font_size' => 28, 'line_height' => 1.2, 'font_weight' => '600' ),
+					'h5'      => array( 'font_size' => 22, 'line_height' => 1.25, 'font_weight' => '600' ),
+					'h6'      => array( 'font_size' => 18, 'line_height' => 1.3, 'font_weight' => '600' ),
+					'default' => array( 'font_size' => 34, 'line_height' => 1.15, 'font_weight' => '600' ),
 				);
 				$body_style = isset( $input['body_style'] ) && is_array( $input['body_style'] ) ? $input['body_style'] : array(
-					'font_family' => 'Jost',
 					'font_size'   => 18,
 					'line_height' => 1.6,
 					'font_weight' => '400',
 				);
 				$button_style = isset( $input['button_style'] ) && is_array( $input['button_style'] ) ? $input['button_style'] : array(
-					'font_family' => 'Jost',
 					'font_size'   => 16,
 					'line_height' => 1.2,
 					'font_weight' => '500',
@@ -5235,7 +9153,7 @@ function mcp_abilities_elementor_register_abilities(): void {
 		'elementor/normalize-responsive-values',
 		array(
 			'label'               => 'Normalize Elementor Responsive Values',
-			'description'         => 'Fills or normalizes tablet/mobile spacing and size values from the desktop settings in a subtree. Useful when a migrated section only has desktop values and starts drifting at breakpoints. Supports `dry_run`.',
+			'description'         => 'Fills or normalizes tablet/mobile spacing and size values from the desktop settings in a subtree. By default it also caps inherited left/right spacing on narrower breakpoints so desktop padding does not crush mobile/tablet layouts. Supports `dry_run`.',
 			'category'            => 'site',
 			'input_schema'        => array(
 				'type'                 => 'object',
@@ -5248,6 +9166,8 @@ function mcp_abilities_elementor_register_abilities(): void {
 					'fill_missing_only'  => array( 'type' => 'boolean', 'default' => true, 'description' => 'If true, only fill missing tablet/mobile values.' ),
 					'tablet_factor'      => array( 'type' => 'number', 'default' => 1, 'description' => 'Scale factor for generated tablet values.' ),
 					'mobile_factor'      => array( 'type' => 'number', 'default' => 1, 'description' => 'Scale factor for generated mobile values.' ),
+					'tablet_horizontal_spacing_cap' => array( 'type' => 'number', 'default' => 40, 'description' => 'Optional maximum px value for generated tablet left/right spacing.' ),
+					'mobile_horizontal_spacing_cap' => array( 'type' => 'number', 'default' => 24, 'description' => 'Optional maximum px value for generated mobile left/right spacing.' ),
 					'dry_run'            => array( 'type' => 'boolean', 'default' => false, 'description' => 'If true, return changed IDs without writing.' ),
 					'cache_scope'        => array(
 						'type'        => 'string',
@@ -5309,6 +9229,8 @@ function mcp_abilities_elementor_register_abilities(): void {
 				$fill_missing_only = ! array_key_exists( 'fill_missing_only', $input ) || ! empty( $input['fill_missing_only'] );
 				$tablet_factor = isset( $input['tablet_factor'] ) ? (float) $input['tablet_factor'] : 1.0;
 				$mobile_factor = isset( $input['mobile_factor'] ) ? (float) $input['mobile_factor'] : 1.0;
+				$tablet_horizontal_spacing_cap = array_key_exists( 'tablet_horizontal_spacing_cap', $input ) ? ( null === $input['tablet_horizontal_spacing_cap'] ? null : (float) $input['tablet_horizontal_spacing_cap'] ) : 40.0;
+				$mobile_horizontal_spacing_cap = array_key_exists( 'mobile_horizontal_spacing_cap', $input ) ? ( null === $input['mobile_horizontal_spacing_cap'] ? null : (float) $input['mobile_horizontal_spacing_cap'] ) : 24.0;
 				$updated = mcp_abilities_elementor_normalize_responsive_values_subtree(
 					$element_meta['element'],
 					$include_root,
@@ -5317,6 +9239,8 @@ function mcp_abilities_elementor_register_abilities(): void {
 					$fill_missing_only,
 					$tablet_factor,
 					$mobile_factor,
+					$tablet_horizontal_spacing_cap,
+					$mobile_horizontal_spacing_cap,
 					$changed_ids
 				);
 				$changed_ids = array_values( array_unique( array_filter( $changed_ids ) ) );

@@ -6,7 +6,7 @@ Elementor page builder integration for WordPress via MCP.
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 
 **Tested up to:** 6.9
-**Stable tag:** 2.2.15
+**Stable tag:** 2.2.24
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -50,7 +50,7 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 3. Upload via WordPress Admin > Plugins > Add New > Upload Plugin
 4. Activate the plugin
 
-## Abilities (54)
+## Abilities (62)
 
 ### Page/Post Data
 | Ability | Description |
@@ -67,11 +67,30 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 | `elementor/image-widget-to-background-container` | Convert an image-widget container into a native background-image container |
 | `elementor/fix-visible-gap-rhythm` | Remove hidden leading-edge spacing that breaks visible gap rhythm |
 | `elementor/enforce-boundary-coherence` | Normalize a subtree to true full-width or coherent boxed left/right boundaries |
+| `elementor/audit-generic-layout-patterns` | Audit a page/subtree for repeated generic landing-page composition patterns |
+| `elementor/score-distinctiveness` | Score compositional distinctiveness without prescribing any house style |
+| `elementor/audit-generic-component-repetition` | Flag repeated landing-page furniture such as excessive buttons and repeated card-like panel treatments |
+| `elementor/audit-surface-overuse` | Report repeated surface treatments cautiously without treating simplicity as failure |
+| `elementor/audit-emphasis-drift` | Check whether top-level sections are landing with overly similar emphasis weight |
+| `elementor/audit-section-rivalry` | Catch pages where too many sections are acting like simultaneous local climaxes |
+| `elementor/audit-composition-rhythm` | Inspect top-level tonal runs and pacing without punishing restrained design |
+| `elementor/audit-separator-discipline` | Warn when separators start flattening major-section hierarchy instead of helping section families |
+| `elementor/get-theme-context` | Summarize active theme, Elementor version, active kit, and viewport settings |
+| `elementor/get-style-guide` | Build a style-guide summary from the active Elementor kit and token set |
+| `elementor/evaluate-design` | Aggregate the main design audits into one score, issue list, and recommendations |
+| `elementor/suggest-design-fixes` | Turn the aggregated evaluation into concrete design-fix suggestions |
+| `elementor/evaluate-render-context` | Inspect frontend wrapper/render context separately from Elementor content quality |
+| `elementor/audit-column-patterns` | Audit repeated column ratios such as repeated 50/50 and equal-third rows |
+| `elementor/audit-layout-mechanism-fit` | Recommend Grid instead of Flexbox for equal, symmetric column groups when Elementor’s own layout guidance points that way |
+| `elementor/audit-column-dominance` | Flag equal column splits that may be hiding a clearly dominant side |
+| `elementor/audit-column-alignment-rhythm` | Report when similar column ratios use inconsistent gutter rhythms |
+| `elementor/audit-column-balance` | Flag asymmetric rows that may not be earning their asymmetry |
+| `elementor/audit-column-necessity` | Flag splits that may not be earning their complexity and could read more clearly as one lane |
 | `elementor/reset-negative-margins-subtree` | Clamp negative margins in a subtree |
 | `elementor/extract-design-tokens` | Extract recurring colors, type, spacing, and dimensional tokens from a page/subtree |
 | `elementor/apply-text-hierarchy` | Normalize heading/body/button typography in a subtree |
 | `elementor/normalize-section-spacing-rhythm` | Snap section spacing and row gaps to a consistent rhythm |
-| `elementor/normalize-responsive-values` | Fill or normalize tablet/mobile values from desktop settings |
+| `elementor/normalize-responsive-values` | Fill or normalize tablet/mobile values from desktop settings with capped inherited side spacing |
 | `elementor/sync-component-variant` | Copy design-relevant settings from one component subtree to another |
 | `elementor/delete-element` | Delete a specific element by ID |
 | `elementor/update-data` | Replace entire Elementor JSON for a page |
@@ -138,7 +157,10 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 - Experiments map to Elementor's experiments manager; reset to default clears the saved option.
 - Prefer `get-element`/`find-elements` + `update-element` for targeted edits, and use `update-data` only when replacing full JSON.
 - Prefer `merge-element-settings` for small spacing/width/layout adjustments when you do not need to replace an entire element payload.
-- Use `zero-container-padding-subtree`, `copy-lane-settings`, `copy-row-balance`, `normalize-campaign-detail-page`, `image-widget-to-background-container`, `fix-visible-gap-rhythm`, `enforce-boundary-coherence`, `reset-negative-margins-subtree`, `extract-design-tokens`, `apply-text-hierarchy`, `normalize-section-spacing-rhythm`, `normalize-responsive-values`, and `sync-component-variant` when tracking Elementor lane drift, hidden inner padding, repeated campaign-detail cleanup, full-height image-column conversion, visible gap mismatch, left/right boundary incoherence, negative offset cleanup, design-token drift, typography inconsistency, rhythm mismatch, breakpoint drift, or component-variant mismatch across a migrated section.
+- Use `get-theme-context` and `get-style-guide` before design work when you need the actual theme/kit context.
+- Prefer `evaluate-design` and `suggest-design-fixes` as the main entry point when the narrow design audits start to feel noisy or overlapping.
+- Use `evaluate-render-context` when the problem may live in the rendered wrapper/theme chrome rather than in Elementor content itself.
+- Use `zero-container-padding-subtree`, `copy-lane-settings`, `copy-row-balance`, `normalize-campaign-detail-page`, `image-widget-to-background-container`, `fix-visible-gap-rhythm`, `enforce-boundary-coherence`, `reset-negative-margins-subtree`, `extract-design-tokens`, `apply-text-hierarchy`, `normalize-section-spacing-rhythm`, `normalize-responsive-values`, `sync-component-variant`, `audit-emphasis-drift`, `audit-section-rivalry`, and `audit-composition-rhythm` when tracking Elementor lane drift, hidden inner padding, repeated campaign-detail cleanup, full-height image-column conversion, visible gap mismatch, left/right boundary incoherence, negative offset cleanup, design-token drift, typography inconsistency, rhythm mismatch, breakpoint drift, component-variant mismatch, flat section hierarchy, or pages where too many sections are competing for the same spotlight.
 - `elementor/update-element` is a full element replacement, not a deep merge. It now refuses shape-changing replacements by default (for example changing `elType`/`widgetType` or replacing a populated container with empty children) unless `force_replace=true`.
 - `elementor/update-element` now also normalizes background-image container replacements by inheriting compiler-relevant layout settings from the original container when the incoming payload omits them. This is meant to prevent Elementor from silently dropping generated background CSS on thin hand-authored payloads.
 - All Elementor data write paths now normalize top-level background-image subtrees too. When a top-level container subtree contains a native background-image container, the root container is automatically marked with `e-no-lazyload` so Elementor's lazyload descendant resets do not blank the generated background on the frontend.
@@ -253,6 +275,35 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 ```
 
 ## Changelog
+
+### 2.2.24
+- Added: `elementor/audit-layout-mechanism-fit` to identify equal, symmetric column groups where Elementor Grid is the better mechanism than Flexbox width guessing
+- Improved: `elementor/evaluate-design` and `elementor/suggest-design-fixes` now surface Grid-vs-Flex recommendations for symmetric peer-column layouts using Elementor's official guidance
+
+### 2.2.20
+- Added: `elementor/audit-column-patterns` to audit repeated column ratios such as repeated 50/50 and equal-third rows without assuming asymmetry is automatically better
+- Added: `elementor/audit-column-dominance` to flag equal column splits that may be hiding a clearly dominant side
+- Added: `elementor/audit-column-alignment-rhythm` to report when similar column ratios use inconsistent gutter rhythms
+- Added: `elementor/audit-column-balance` to flag asymmetric rows that may not be earning their asymmetry
+- Added: `elementor/audit-column-necessity` to flag splits that may not be earning their complexity and could read more clearly as one lane
+
+### 2.2.19
+- Added: `elementor/audit-generic-component-repetition` to flag overused landing-page furniture such as too many buttons and repeated card-like panel treatments without punishing simple layouts for being restrained
+- Added: `elementor/audit-surface-overuse` to report repeated panel/surface signatures cautiously, with recommendations that distinguish formulaic repetition from intentional simplicity
+- Added: `elementor/audit-emphasis-drift` to check whether top-level sections are all carrying roughly the same emphasis weight, while only warning when the page risks making every section land with the same force
+- Added: `elementor/audit-composition-rhythm` to inspect top-level tonal runs and pacing without assuming that minimal or restrained pages are wrong
+
+### 2.2.18
+- Fixed: `elementor/audit-generic-layout-patterns` no longer treats simple header rows with image+button furniture as generic split-hero compositions; split-hero detection now requires a real hero-style copy side
+
+### 2.2.17
+- Added: `elementor/audit-generic-layout-patterns` to flag repeated split heroes, repeated 50/50 rows, equal-width grids, and repeated component rows without prescribing any visual style
+- Added: `elementor/score-distinctiveness` to turn those structural repetition signals into a neutral distinctiveness score with non-style-specific recommendations
+- Changed: `elementor/apply-text-hierarchy` no longer hardcodes `Jost` as the default font family; default hierarchy normalization is now style-neutral unless explicit font choices are provided
+
+### 2.2.16
+- Fixed: `elementor/normalize-responsive-values` now caps generated tablet/mobile left-right spacing by default so inherited desktop padding does not crush narrow breakpoint layouts
+- Added: `tablet_horizontal_spacing_cap` and `mobile_horizontal_spacing_cap` inputs on `elementor/normalize-responsive-values` for explicit breakpoint edge-spacing control
 
 ### 2.2.15
 - Added: `elementor/extract-design-tokens` to inspect recurring colors, typography, spacing, and dimensional rhythm from a page/subtree and the active kit

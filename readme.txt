@@ -3,7 +3,7 @@ Contributors: devenia
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 6.9
-Stable tag: 2.2.15
+Stable tag: 2.2.24
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -55,6 +55,46 @@ Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilit
 * [All Add-on Plugins](https://devenia.com/plugins/mcp-expose-abilities/#add-ons)
 
 == Changelog ==
+
+= 2.2.24 =
+* Added: `elementor/audit-layout-mechanism-fit` to identify equal, symmetric column groups where Elementor Grid is a better fit than Flexbox width-guessing
+* Improved: `elementor/evaluate-design` and `elementor/suggest-design-fixes` now surface Grid-vs-Flex recommendations for symmetric peer-column layouts using Elementor's official guidance
+
+= 2.2.23 =
+* Added: `elementor/audit-separator-discipline` to detect when top-level section separators start flattening hierarchy instead of helping section families
+* Improved: `elementor/evaluate-design` and `elementor/suggest-design-fixes` now include separator-overuse as a soft rhythm/hierarchy issue instead of forcing it as a style rule
+
+= 2.2.22 =
+* Added: `elementor/get-theme-context` to summarize the active theme, Elementor version, active kit, and viewport options before design work begins
+* Added: `elementor/get-style-guide` to turn the active Elementor kit into a usable style-guide summary with tokens, layout, colors, and typography
+* Added: `elementor/evaluate-design` to aggregate overlapping design audits into one coherent score, issue list, and recommendation surface
+* Added: `elementor/suggest-design-fixes` to turn that aggregated evaluation into concrete next-step design fixes
+* Added: `elementor/evaluate-render-context` to inspect wrapper/theme-render issues separately from Elementor content quality
+
+= 2.2.20 =
+* Added: `elementor/audit-column-patterns` to audit repeated column ratios such as repeated 50/50 and equal-third rows without assuming asymmetry is automatically better
+* Added: `elementor/audit-column-dominance` to flag equal column splits that may be hiding a clearly dominant side
+* Added: `elementor/audit-column-alignment-rhythm` to report when similar column ratios use inconsistent gutter rhythms
+* Added: `elementor/audit-column-balance` to flag asymmetric rows that may not be earning their asymmetry
+* Added: `elementor/audit-column-necessity` to flag splits that may not be earning their complexity and could read more clearly as one lane
+
+= 2.2.19 =
+* Added: `elementor/audit-generic-component-repetition` to flag overused landing-page furniture such as too many buttons and repeated card-like panel treatments without punishing simple layouts for being restrained
+* Added: `elementor/audit-surface-overuse` to report repeated panel/surface signatures cautiously, with recommendations that explicitly distinguish formulaic repetition from intentional simplicity
+* Added: `elementor/audit-emphasis-drift` to check whether top-level sections are all carrying roughly the same emphasis weight, while only warning when the page risks making every section land with the same force
+* Added: `elementor/audit-composition-rhythm` to inspect top-level tonal runs and pacing without assuming that minimal or restrained pages are wrong
+
+= 2.2.18 =
+* Fixed: `elementor/audit-generic-layout-patterns` no longer treats simple header rows with image+button furniture as generic split-hero compositions; split-hero detection now requires a real hero-style copy side
+
+= 2.2.17 =
+* Added: `elementor/audit-generic-layout-patterns` to flag repeated split heroes, repeated 50/50 rows, equal-width grids, and repeated component rows without prescribing any visual style
+* Added: `elementor/score-distinctiveness` to turn those structural repetition signals into a neutral distinctiveness score with non-style-specific recommendations
+* Changed: `elementor/apply-text-hierarchy` no longer hardcodes `Jost` as the default font family; default hierarchy normalization is now style-neutral unless explicit font choices are provided
+
+= 2.2.16 =
+* Fixed: `elementor/normalize-responsive-values` now caps generated left/right tablet/mobile spacing by default so desktop padding does not collapse narrow breakpoint layouts
+* Added: `tablet_horizontal_spacing_cap` and `mobile_horizontal_spacing_cap` inputs on `elementor/normalize-responsive-values` for explicit breakpoint edge-spacing control
 
 = 2.2.15 =
 * Added: `elementor/extract-design-tokens` to inspect recurring colors, typography, spacing, and dimensional rhythm from a page/subtree and the active kit
