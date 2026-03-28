@@ -3,7 +3,7 @@ Contributors: devenia
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 6.9
-Stable tag: 2.2.36
+Stable tag: 2.2.37
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -63,10 +63,11 @@ Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilit
 = 2.2.28 =
 * Improved: `elementor/get-theme-context`, `elementor/get-style-guide`, `elementor/evaluate-design`, and `elementor/suggest-design-fixes` now expose `guidance_basis` alongside `source_policy`, explicitly separating official Elementor-doc-backed topics from plugin heuristic audits
 
-= 2.2.36 =
+= 2.2.37 =
 
 * Normalize Elementor Pro popup display settings so `triggers` and `timing` stay frontend-safe on popup writes.
 * Extend the interactive frontend runtime guard to surface broken published popup/theme-builder documents when they are the likely root cause of missing interactive JS.
+* Remove the direct script-tag runtime fallback so frontend repair stays inside WordPress enqueue/print flows and passes Plugin Check.
 
 = 2.2.35 =
 * Fixed: the direct JS fallback no longer skips itself just because Elementor marked script handles as enqueued on templates that still never print those handles.

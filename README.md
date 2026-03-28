@@ -6,7 +6,7 @@ Elementor page builder integration for WordPress via MCP.
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 
 **Tested up to:** 6.9
-**Stable tag:** 2.2.36
+**Stable tag:** 2.2.37
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -282,10 +282,11 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 
 ## Changelog
 
-### 2.2.36
+### 2.2.37
 
 - Normalize Elementor Pro popup display settings so `triggers` and `timing` stay frontend-safe on popup writes.
 - Extend the interactive frontend runtime guard to surface broken published popup/theme-builder documents when they are the likely root cause of missing interactive JS.
+- Remove the direct script-tag runtime fallback so frontend repair stays inside WordPress enqueue/print flows and passes Plugin Check.
 
 ### 2.2.35
 - Fixed: the direct JS fallback no longer skips itself just because Elementor marked script handles as enqueued on templates that still never print those handles.

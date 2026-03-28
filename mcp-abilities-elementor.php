@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.2.36
+ * Version: 2.2.37
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -5179,43 +5179,6 @@ function mcp_abilities_elementor_print_frontend_config_when_needed(): void {
 		}
 	}
 }
-
-/**
- * Print a direct Elementor core runtime fallback when script handles never materialize.
- *
- * Some canvas/front-page setups expose Elementor config and CSS but never emit
- * the core JS runtime handles. In that case, print the three core Elementor JS
- * runtime assets directly so interactive widgets can still bootstrap.
- *
- * @return void
- */
-function mcp_abilities_elementor_print_frontend_script_fallback_when_needed(): void {
-	$context = mcp_abilities_elementor_get_current_frontend_runtime_context();
-	if ( empty( $context['needed'] ) ) {
-		return;
-	}
-
-	$base_url = defined( 'ELEMENTOR_URL' ) ? trailingslashit( ELEMENTOR_URL ) : '';
-	if ( '' === $base_url ) {
-		return;
-	}
-
-	$version = defined( 'ELEMENTOR_VERSION' ) ? ELEMENTOR_VERSION : null;
-	$scripts = array(
-		$base_url . 'assets/js/webpack.runtime.min.js',
-		$base_url . 'assets/js/frontend-modules.min.js',
-		$base_url . 'assets/js/frontend.min.js',
-	);
-
-	foreach ( $scripts as $src ) {
-		$url = null === $version ? $src : add_query_arg( 'ver', $version, $src );
-		printf(
-			"<script src=\"%s\"></script>\n",
-			esc_url( $url )
-		);
-	}
-}
-
 /**
  * Print footer scripts early as a fallback when interactive Elementor pages need runtime boot.
  *
@@ -14712,6 +14675,5 @@ function mcp_abilities_elementor_register_abilities(): void {
 add_action( 'wp_enqueue_scripts', 'mcp_abilities_elementor_enqueue_frontend_runtime_when_needed', 5 );
 add_action( 'elementor/frontend/after_register_scripts', 'mcp_abilities_elementor_enqueue_frontend_runtime_when_needed', 5 );
 add_action( 'wp_head', 'mcp_abilities_elementor_print_frontend_config_when_needed', 1 );
-add_action( 'wp_head', 'mcp_abilities_elementor_print_frontend_script_fallback_when_needed', 2 );
 add_action( 'wp_head', 'mcp_abilities_elementor_print_footer_scripts_early_when_needed', 999 );
 add_action( 'wp_abilities_api_init', 'mcp_abilities_elementor_register_abilities' );
