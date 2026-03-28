@@ -6,7 +6,7 @@ Elementor page builder integration for WordPress via MCP.
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 
 **Tested up to:** 6.9
-**Stable tag:** 2.2.24
+**Stable tag:** 2.2.25
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -50,7 +50,7 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 3. Upload via WordPress Admin > Plugins > Add New > Upload Plugin
 4. Activate the plugin
 
-## Abilities (62)
+## Abilities (63)
 
 ### Page/Post Data
 | Ability | Description |
@@ -82,6 +82,7 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 | `elementor/evaluate-render-context` | Inspect frontend wrapper/render context separately from Elementor content quality |
 | `elementor/audit-column-patterns` | Audit repeated column ratios such as repeated 50/50 and equal-third rows |
 | `elementor/audit-layout-mechanism-fit` | Recommend Grid instead of Flexbox for equal, symmetric column groups when Elementor’s own layout guidance points that way |
+| `elementor/audit-native-widget-opportunities` | Suggest native Elementor widgets and Pro widgets when a hand-built container pattern is recreating them |
 | `elementor/audit-column-dominance` | Flag equal column splits that may be hiding a clearly dominant side |
 | `elementor/audit-column-alignment-rhythm` | Report when similar column ratios use inconsistent gutter rhythms |
 | `elementor/audit-column-balance` | Flag asymmetric rows that may not be earning their asymmetry |
@@ -275,6 +276,10 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 ```
 
 ## Changelog
+
+### 2.2.25
+- Added: `elementor/audit-native-widget-opportunities` to identify where hand-built container patterns are better served by native Elementor widgets such as Accordion, Nested Tabs, Call to Action, or Icon List
+- Improved: `elementor/evaluate-design` and `elementor/suggest-design-fixes` now surface native-widget recommendations so Elementor is treated more like a full builder system and less like raw container JSON
 
 ### 2.2.24
 - Added: `elementor/audit-layout-mechanism-fit` to identify equal, symmetric column groups where Elementor Grid is the better mechanism than Flexbox width guessing

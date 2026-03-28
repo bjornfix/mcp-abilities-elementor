@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.2.24
+ * Version: 2.2.25
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -1946,6 +1946,160 @@ function mcp_abilities_elementor_finalize_layout_mechanism_fit_audit( array $row
 }
 
 /**
+ * Build subtree widget counts for native-widget opportunity audits.
+ *
+ * @param array $element Elementor element.
+ * @return array
+ */
+function mcp_abilities_elementor_build_subtree_widget_stats( array $element ): array {
+	$stats = array(
+		'heading'      => 0,
+		'text-editor'  => 0,
+		'button'       => 0,
+		'image'        => 0,
+		'icon'         => 0,
+		'icon-list'    => 0,
+	);
+
+	$walker = static function ( array $node ) use ( &$walker, &$stats ): void {
+		if ( 'widget' === ( $node['elType'] ?? '' ) ) {
+			$widget_type = (string) ( $node['widgetType'] ?? '' );
+			if ( isset( $stats[ $widget_type ] ) ) {
+				++$stats[ $widget_type ];
+			}
+		}
+
+		foreach ( (array) ( $node['elements'] ?? array() ) as $child ) {
+			if ( is_array( $child ) ) {
+				$walker( $child );
+			}
+		}
+	};
+
+	$walker( $element );
+
+	return $stats;
+}
+
+/**
+ * Finalize native Elementor widget opportunities.
+ *
+ * @param array $elements Root elements.
+ * @return array
+ */
+function mcp_abilities_elementor_finalize_native_widget_opportunity_audit( array $elements ): array {
+	$opportunities = array();
+	$sources       = array(
+		'accordion'      => 'https://elementor.com/old/how-to-create/business-website/',
+		'tabs'           => 'https://elementor.com/blog/new-nested-elements-tabs-custom-units/',
+		'call_to_action' => 'https://elementor.com/academy/how-to-use-the-call-to-action-widget-in-elementor-pro/',
+		'icon_list'      => 'https://elementor.com/academy/how-to-use-the-icon-list-widget-in-elementor/',
+	);
+
+	$walk = static function ( array $element ) use ( &$walk, &$opportunities, $sources ): void {
+		if ( 'container' === ( $element['elType'] ?? '' ) ) {
+			$children = array_values(
+				array_filter(
+					(array) ( $element['elements'] ?? array() ),
+					static function ( $child ) {
+						return is_array( $child ) && 'container' === ( $child['elType'] ?? '' );
+					}
+				)
+			);
+
+			if ( count( $children ) >= 3 ) {
+				$child_stats = array_map( 'mcp_abilities_elementor_build_subtree_widget_stats', $children );
+				$service_like = true;
+				$promo_like   = true;
+				$lean_list    = true;
+
+				foreach ( $child_stats as $stats ) {
+					$has_copy = ( (int) $stats['heading'] >= 1 ) && ( (int) $stats['text-editor'] >= 1 );
+					if ( ! $has_copy ) {
+						$service_like = false;
+						$promo_like   = false;
+						$lean_list    = false;
+						break;
+					}
+
+					if ( (int) $stats['button'] < 1 && (int) $stats['image'] < 1 && (int) $stats['icon'] < 1 ) {
+						$promo_like = false;
+					}
+
+					if ( (int) $stats['text-editor'] > 1 || (int) $stats['heading'] > 2 || (int) $stats['button'] > 0 || (int) $stats['image'] > 0 ) {
+						$lean_list = false;
+					}
+				}
+
+				if ( $service_like ) {
+					$opportunities[] = array(
+						'element_id'      => (string) ( $element['id'] ?? '' ),
+						'pattern'         => 'repeated_service_items',
+						'recommended_widget' => 'accordion_or_nested_tabs',
+						'reason'          => 'Repeated service items with heading+copy content are often clearer as native Accordion or Nested Tabs than as hand-built container stacks.',
+						'sources'         => array( $sources['accordion'], $sources['tabs'] ),
+					);
+				}
+
+				if ( $promo_like ) {
+					$opportunities[] = array(
+						'element_id'      => (string) ( $element['id'] ?? '' ),
+						'pattern'         => 'promo_modules',
+						'recommended_widget' => 'call_to_action',
+						'reason'          => 'Repeated promo blocks with title/copy and button or media are a better fit for Elementor Call to Action widgets than ad-hoc container compositions.',
+						'sources'         => array( $sources['call_to_action'] ),
+					);
+				}
+
+				if ( $lean_list ) {
+					$opportunities[] = array(
+						'element_id'      => (string) ( $element['id'] ?? '' ),
+						'pattern'         => 'concise_capability_list',
+						'recommended_widget' => 'icon_list',
+						'reason'          => 'Short repeated capability items are often cleaner as a native Icon List than as repeated mini containers.',
+						'sources'         => array( $sources['icon_list'] ),
+					);
+				}
+			}
+		}
+
+		foreach ( (array) ( $element['elements'] ?? array() ) as $child ) {
+			if ( is_array( $child ) ) {
+				$walk( $child );
+			}
+		}
+	};
+
+	foreach ( $elements as $element ) {
+		if ( is_array( $element ) ) {
+			$walk( $element );
+		}
+	}
+
+	$deduped = array();
+	$seen    = array();
+	foreach ( $opportunities as $opportunity ) {
+		$key = (string) ( $opportunity['element_id'] ?? '' ) . '|' . (string) ( $opportunity['recommended_widget'] ?? '' );
+		if ( isset( $seen[ $key ] ) ) {
+			continue;
+		}
+		$seen[ $key ] = true;
+		$deduped[]    = $opportunity;
+	}
+
+	$recommendations = array();
+	if ( ! empty( $deduped ) ) {
+		$recommendations[] = 'When Elementor already has a native widget pattern for the content, prefer that over rebuilding the same idea from raw containers.';
+	}
+
+	return array(
+		'opportunity_count' => count( $deduped ),
+		'opportunities'     => array_values( $deduped ),
+		'recommendations'   => array_values( array_unique( $recommendations ) ),
+	);
+}
+
+/**
  * Finalize column dominance audit.
  *
  * @param array $rows Row audit entries.
@@ -3006,6 +3160,7 @@ function mcp_abilities_elementor_evaluate_design_from_elements( array $elements 
 	$rows                  = (array) ( $column_stats['rows'] ?? array() );
 	$column_patterns_audit = mcp_abilities_elementor_finalize_column_patterns_audit( $rows );
 	$layout_mechanism_audit = mcp_abilities_elementor_finalize_layout_mechanism_fit_audit( $rows );
+	$native_widget_audit   = mcp_abilities_elementor_finalize_native_widget_opportunity_audit( $elements );
 	$column_dominance_audit = mcp_abilities_elementor_finalize_column_dominance_audit( $rows );
 	$column_alignment_audit = mcp_abilities_elementor_finalize_column_alignment_rhythm_audit( $rows );
 	$column_balance_audit   = mcp_abilities_elementor_finalize_column_balance_audit( $rows );
@@ -3080,6 +3235,13 @@ function mcp_abilities_elementor_evaluate_design_from_elements( array $elements 
 		);
 	}
 
+	if ( ! empty( $native_widget_audit['opportunities'] ) ) {
+		$issues[] = array(
+			'type'          => 'native_widget_opportunity',
+			'opportunities' => $native_widget_audit['opportunities'],
+		);
+	}
+
 	if ( ! empty( $column_alignment_audit['inconsistent_ratios'] ) ) {
 		$issues[] = array(
 			'type'                => 'column_alignment_rhythm',
@@ -3146,6 +3308,7 @@ function mcp_abilities_elementor_evaluate_design_from_elements( array $elements 
 				array_values( (array) ( $separator_audit['recommendations'] ?? array() ) ),
 				array_values( (array) ( $column_patterns_audit['recommendations'] ?? array() ) ),
 				array_values( (array) ( $layout_mechanism_audit['recommendations'] ?? array() ) ),
+				array_values( (array) ( $native_widget_audit['recommendations'] ?? array() ) ),
 				array_values( (array) ( $column_dominance_audit['recommendations'] ?? array() ) ),
 				array_values( (array) ( $column_alignment_audit['recommendations'] ?? array() ) ),
 				array_values( (array) ( $column_balance_audit['recommendations'] ?? array() ) ),
@@ -3173,6 +3336,7 @@ function mcp_abilities_elementor_evaluate_design_from_elements( array $elements 
 			'separator_discipline' => $separator_audit,
 			'column_patterns'   => $column_patterns_audit,
 			'layout_mechanism_fit' => $layout_mechanism_audit,
+			'native_widget_opportunities' => $native_widget_audit,
 			'column_dominance'  => $column_dominance_audit,
 			'column_alignment'  => $column_alignment_audit,
 			'column_balance'    => $column_balance_audit,
@@ -3281,6 +3445,16 @@ function mcp_abilities_elementor_suggest_design_fixes_from_evaluation( array $ev
 				'fixes'   => array(
 					'For equal, symmetric column groups, switch from Flexbox width-guessing to an Elementor Grid container.',
 					'Keep Flexbox for directional or intentionally uneven rows, and use Grid when comparison or equal peer columns are the point.',
+				),
+			);
+		} elseif ( 'native_widget_opportunity' === $type ) {
+			$suggestions[] = array(
+				'type'    => $type,
+				'problem' => 'A hand-built container pattern is likely recreating something Elementor already offers as a native widget.',
+				'fixes'   => array(
+					'Use Accordion or Nested Tabs when repeated service items need one native interaction pattern instead of repeated handmade rows.',
+					'Use Call to Action widgets for repeated promo blocks with title, text, and button/media instead of rebuilding the same module from raw containers.',
+					'Use Icon List when the content is really a concise capability list rather than a mini card system.',
 				),
 			);
 		} elseif ( 'column_alignment_rhythm' === $type ) {
@@ -7594,6 +7768,74 @@ function mcp_abilities_elementor_register_abilities(): void {
 					'element_id' => isset( $input['element_id'] ) && is_string( $input['element_id'] ) ? $input['element_id'] : '',
 					'audit'      => mcp_abilities_elementor_finalize_layout_mechanism_fit_audit( (array) ( $stats['rows'] ?? array() ) ),
 					'message'    => 'Layout mechanism fit audit completed successfully',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Audit Native Widget Opportunities
+	// =========================================================================
+	wp_register_ability(
+		'elementor/audit-native-widget-opportunities',
+		array(
+			'label'               => 'Audit Elementor Native Widget Opportunities',
+			'description'         => 'Checks whether a hand-built Elementor container pattern is better served by a native widget or Pro widget such as Accordion, Nested Tabs, Call to Action, or Icon List.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'id'         => array(
+						'type'        => 'integer',
+						'description' => 'Optional Post/Page ID to inspect.',
+					),
+					'element_id' => array(
+						'type'        => 'string',
+						'description' => 'Optional root element ID to restrict the audit to a subtree.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'    => array( 'type' => 'boolean' ),
+					'id'         => array( 'type' => 'integer' ),
+					'element_id' => array( 'type' => 'string' ),
+					'audit'      => array( 'type' => 'object' ),
+					'message'    => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input      = is_array( $input ) ? $input : array();
+				$post_id    = isset( $input['id'] ) ? (int) $input['id'] : 0;
+				$element_id = isset( $input['element_id'] ) && is_string( $input['element_id'] ) ? $input['element_id'] : '';
+				$elements   = array();
+
+				if ( $post_id > 0 ) {
+					$scope = mcp_abilities_elementor_resolve_audit_scope( $post_id, $element_id );
+					if ( is_wp_error( $scope ) ) {
+						return array( 'success' => false, 'message' => $scope->get_error_message() );
+					}
+					$elements = (array) ( $scope['elements'] ?? array() );
+				}
+
+				return array(
+					'success'    => true,
+					'id'         => $post_id,
+					'element_id' => $element_id,
+					'audit'      => mcp_abilities_elementor_finalize_native_widget_opportunity_audit( $elements ),
+					'message'    => 'Native widget opportunity audit completed successfully',
 				);
 			},
 			'permission_callback' => function (): bool {
