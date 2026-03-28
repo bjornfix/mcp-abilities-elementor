@@ -6,7 +6,7 @@ Elementor page builder integration for WordPress via MCP.
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 
 **Tested up to:** 6.9
-**Stable tag:** 2.2.13
+**Stable tag:** 2.2.14
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -50,7 +50,7 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 3. Upload via WordPress Admin > Plugins > Add New > Upload Plugin
 4. Activate the plugin
 
-## Abilities (48)
+## Abilities (49)
 
 ### Page/Post Data
 | Ability | Description |
@@ -66,6 +66,7 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 | `elementor/normalize-campaign-detail-page` | Apply the standard campaign-detail lane/gutter/rhythm recipe |
 | `elementor/image-widget-to-background-container` | Convert an image-widget container into a native background-image container |
 | `elementor/fix-visible-gap-rhythm` | Remove hidden leading-edge spacing that breaks visible gap rhythm |
+| `elementor/enforce-boundary-coherence` | Normalize a subtree to true full-width or coherent boxed left/right boundaries |
 | `elementor/reset-negative-margins-subtree` | Clamp negative margins in a subtree |
 | `elementor/delete-element` | Delete a specific element by ID |
 | `elementor/update-data` | Replace entire Elementor JSON for a page |
@@ -132,7 +133,7 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 - Experiments map to Elementor's experiments manager; reset to default clears the saved option.
 - Prefer `get-element`/`find-elements` + `update-element` for targeted edits, and use `update-data` only when replacing full JSON.
 - Prefer `merge-element-settings` for small spacing/width/layout adjustments when you do not need to replace an entire element payload.
-- Use `zero-container-padding-subtree`, `copy-lane-settings`, `copy-row-balance`, `normalize-campaign-detail-page`, `image-widget-to-background-container`, `fix-visible-gap-rhythm`, and `reset-negative-margins-subtree` when tracking Elementor lane drift, hidden inner padding, repeated campaign-detail cleanup, full-height image-column conversion, visible gap mismatch, or negative offset cleanup across a migrated section.
+- Use `zero-container-padding-subtree`, `copy-lane-settings`, `copy-row-balance`, `normalize-campaign-detail-page`, `image-widget-to-background-container`, `fix-visible-gap-rhythm`, `enforce-boundary-coherence`, and `reset-negative-margins-subtree` when tracking Elementor lane drift, hidden inner padding, repeated campaign-detail cleanup, full-height image-column conversion, visible gap mismatch, left/right boundary incoherence, or negative offset cleanup across a migrated section.
 - `elementor/update-element` is a full element replacement, not a deep merge. It now refuses shape-changing replacements by default (for example changing `elType`/`widgetType` or replacing a populated container with empty children) unless `force_replace=true`.
 - `elementor/update-element` now also normalizes background-image container replacements by inheriting compiler-relevant layout settings from the original container when the incoming payload omits them. This is meant to prevent Elementor from silently dropping generated background CSS on thin hand-authored payloads.
 - All Elementor data write paths now normalize top-level background-image subtrees too. When a top-level container subtree contains a native background-image container, the root container is automatically marked with `e-no-lazyload` so Elementor's lazyload descendant resets do not blank the generated background on the frontend.
@@ -247,6 +248,9 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 ```
 
 ## Changelog
+
+### 2.2.14
+- Added: `elementor/enforce-boundary-coherence` to normalize a subtree to true edge-to-edge full width or a consistent boxed lane with matching outer and inner left/right boundaries
 
 ### 2.2.13
 - Added: `elementor/normalize-campaign-detail-page` to apply the repeated `1140px` lane / zero-gutter / `18px` rhythm / widened-about-block recipe in one call

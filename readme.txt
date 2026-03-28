@@ -3,7 +3,7 @@ Contributors: devenia
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 6.9
-Stable tag: 2.2.13
+Stable tag: 2.2.14
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -55,6 +55,9 @@ Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilit
 * [All Add-on Plugins](https://devenia.com/plugins/mcp-expose-abilities/#add-ons)
 
 == Changelog ==
+
+= 2.2.14 =
+* Added: `elementor/enforce-boundary-coherence` to normalize a subtree to either true full width or a coherent boxed lane with matching outer and inner left/right boundaries
 
 = 2.2.13 =
 * Added: `elementor/normalize-campaign-detail-page` to apply the repeated campaign-detail lane/gutter/rhythm recipe in one call

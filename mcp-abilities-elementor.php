@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.2.13
+ * Version: 2.2.14
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -742,6 +742,137 @@ function mcp_abilities_elementor_zero_top_spacing_box( $spacing ): array {
 	$box['isLinked'] = false;
 
 	return $box;
+}
+
+/**
+ * Force the left/right values of a spacing box to zero.
+ *
+ * @param mixed $spacing Existing spacing structure.
+ * @return array
+ */
+function mcp_abilities_elementor_zero_horizontal_spacing_box( $spacing ): array {
+	$box = is_array( $spacing ) ? $spacing : array();
+
+	$box['unit']     = isset( $box['unit'] ) && is_string( $box['unit'] ) ? $box['unit'] : 'px';
+	$box['right']    = '0';
+	$box['left']     = '0';
+	$box['isLinked'] = false;
+
+	return $box;
+}
+
+/**
+ * Normalize horizontal boundary coherence inside an Elementor subtree.
+ *
+ * @param array       $element Elementor element.
+ * @param string      $mode Boundary mode: `full_width` or `boxed`.
+ * @param int|null    $boxed_width Boxed lane width when mode is `boxed`.
+ * @param bool        $include_root Whether to normalize the root element too.
+ * @param int         $max_depth Maximum descendant depth, -1 for unlimited.
+ * @param int         $depth Current recursion depth.
+ * @param bool        $zero_side_padding Whether to zero left/right padding.
+ * @param bool        $zero_side_margins Whether to zero left/right margins.
+ * @param bool        $normalize_nested_boxed_widths Whether to sync descendant boxed widths to the root.
+ * @param array|null  $root_boxed_setting Root boxed_width setting to inherit.
+ * @param array       $changed_ids Changed element IDs.
+ * @return array
+ */
+function mcp_abilities_elementor_enforce_boundary_coherence_subtree(
+	array $element,
+	string $mode,
+	?int $boxed_width,
+	bool $include_root,
+	int $max_depth,
+	int $depth,
+	bool $zero_side_padding,
+	bool $zero_side_margins,
+	bool $normalize_nested_boxed_widths,
+	?array $root_boxed_setting,
+	array &$changed_ids
+): array {
+	$should_touch = ( 0 === $depth && $include_root ) || ( $depth > 0 );
+	$within_depth = $max_depth < 0 || $depth <= $max_depth;
+
+	if ( $should_touch && $within_depth ) {
+		$settings = is_array( $element['settings'] ?? null ) ? $element['settings'] : array();
+		$changed  = false;
+
+		if ( 'container' === ( $element['elType'] ?? '' ) ) {
+			if ( $zero_side_padding ) {
+				$padding = mcp_abilities_elementor_zero_horizontal_spacing_box( $settings['padding'] ?? null );
+				if ( $padding !== ( $settings['padding'] ?? null ) ) {
+					$settings['padding'] = $padding;
+					$changed             = true;
+				}
+			}
+
+			if ( 0 === $depth ) {
+				$settings['content_width'] = 'full';
+				if ( 'full_width' === $mode ) {
+					if ( array_key_exists( 'boxed_width', $settings ) ) {
+						unset( $settings['boxed_width'] );
+						$changed = true;
+					}
+				} elseif ( 'boxed' === $mode && null !== $boxed_width ) {
+					$new_boxed_width = array(
+						'unit' => 'px',
+						'size' => $boxed_width,
+					);
+					if ( ! isset( $settings['boxed_width'] ) || $settings['boxed_width'] !== $new_boxed_width ) {
+						$settings['boxed_width'] = $new_boxed_width;
+						$changed                 = true;
+					}
+					$root_boxed_setting = $new_boxed_width;
+				}
+			} elseif ( 'boxed' === $mode && $normalize_nested_boxed_widths && null !== $root_boxed_setting && array_key_exists( 'boxed_width', $settings ) ) {
+				if ( $settings['boxed_width'] !== $root_boxed_setting ) {
+					$settings['boxed_width'] = $root_boxed_setting;
+					$changed                 = true;
+				}
+			}
+		}
+
+		if ( $zero_side_margins ) {
+			foreach ( array( '_margin', '_margin_tablet', '_margin_mobile' ) as $margin_key ) {
+				if ( ! array_key_exists( $margin_key, $settings ) ) {
+					continue;
+				}
+				$margin = mcp_abilities_elementor_zero_horizontal_spacing_box( $settings[ $margin_key ] );
+				if ( $margin !== $settings[ $margin_key ] ) {
+					$settings[ $margin_key ] = $margin;
+					$changed                 = true;
+				}
+			}
+		}
+
+		if ( $changed ) {
+			$element['settings'] = $settings;
+			$changed_ids[]       = (string) ( $element['id'] ?? '' );
+		}
+	}
+
+	if ( ! empty( $element['elements'] ) && is_array( $element['elements'] ) ) {
+		foreach ( $element['elements'] as $index => $child ) {
+			if ( ! is_array( $child ) ) {
+				continue;
+			}
+			$element['elements'][ $index ] = mcp_abilities_elementor_enforce_boundary_coherence_subtree(
+				$child,
+				$mode,
+				$boxed_width,
+				true,
+				$max_depth,
+				$depth + 1,
+				$zero_side_padding,
+				$zero_side_margins,
+				$normalize_nested_boxed_widths,
+				$root_boxed_setting,
+				$changed_ids
+			);
+		}
+	}
+
+	return $element;
 }
 
 /**
@@ -3390,6 +3521,239 @@ function mcp_abilities_elementor_register_abilities(): void {
 					'success'       => true,
 					'id'            => (int) $input['id'],
 					'message'       => 'Visible-gap rhythm normalized successfully',
+					'link'          => get_permalink( (int) $input['id'] ),
+					'dry_run'       => false,
+					'changed_count' => count( $changed_ids ),
+					'changed_ids'   => $changed_ids,
+					'cache'         => $cache_details,
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => false,
+					'idempotent'  => false,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Enforce Boundary Coherence
+	// =========================================================================
+	wp_register_ability(
+		'elementor/enforce-boundary-coherence',
+		array(
+			'label'               => 'Enforce Elementor Boundary Coherence',
+			'description'         => 'Normalizes a container subtree so outer and inner left/right boundaries stay coherent. Use `mode=full_width` for true edge-to-edge sections, or `mode=boxed` with `boxed_width` for consistent boxed lanes. By default it zeroes hidden left/right padding in the subtree and can also normalize nested boxed widths. Supports `dry_run`.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id', 'element_id', 'mode' ),
+				'properties'           => array(
+					'id'                           => array(
+						'type'        => 'integer',
+						'description' => 'Post/Page ID containing the subtree root.',
+					),
+					'element_id'                   => array(
+						'type'        => 'string',
+						'description' => 'Root element ID for the subtree to normalize.',
+					),
+					'mode'                         => array(
+						'type'        => 'string',
+						'enum'        => array( 'full_width', 'boxed' ),
+						'description' => 'Boundary mode to enforce.',
+					),
+					'boxed_width'                  => array(
+						'type'        => 'integer',
+						'description' => 'Required when mode=boxed. The coherent boxed lane width in pixels.',
+					),
+					'include_root'                 => array(
+						'type'        => 'boolean',
+						'default'     => true,
+						'description' => 'If true, normalize the root container too.',
+					),
+					'max_depth'                    => array(
+						'type'        => 'integer',
+						'default'     => 2,
+						'description' => 'Maximum descendant depth to normalize. Use -1 for unlimited.',
+					),
+					'zero_side_padding'            => array(
+						'type'        => 'boolean',
+						'default'     => true,
+						'description' => 'If true, zero left/right padding in the normalized subtree.',
+					),
+					'zero_side_margins'            => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'If true, also zero left/right Elementor margin settings in the normalized subtree.',
+					),
+					'normalize_nested_boxed_widths'=> array(
+						'type'        => 'boolean',
+						'default'     => true,
+						'description' => 'If true in boxed mode, descendant containers that already define boxed_width are aligned to the same boxed_width.',
+					),
+					'dry_run'                      => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'If true, return the elements that would change without writing.',
+					),
+					'cache_scope'                  => array(
+						'type'        => 'string',
+						'enum'        => array( 'none', 'post', 'site' ),
+						'default'     => 'post',
+						'description' => 'Cache invalidation scope after write. Ignored when dry_run=true.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'       => array( 'type' => 'boolean' ),
+					'id'            => array( 'type' => 'integer' ),
+					'element_id'    => array( 'type' => 'string' ),
+					'mode'          => array( 'type' => 'string' ),
+					'message'       => array( 'type' => 'string' ),
+					'link'          => array( 'type' => 'string' ),
+					'dry_run'       => array( 'type' => 'boolean' ),
+					'changed_count' => array( 'type' => 'integer' ),
+					'changed_ids'   => array( 'type' => 'array', 'items' => array( 'type' => 'string' ) ),
+					'cache'         => array( 'type' => 'object' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input = is_array( $input ) ? $input : array();
+
+				if ( empty( $input['id'] ) ) {
+					return array( 'success' => false, 'message' => 'Post/Page ID is required' );
+				}
+				if ( empty( $input['element_id'] ) ) {
+					return array( 'success' => false, 'message' => 'Element ID is required' );
+				}
+				if ( empty( $input['mode'] ) || ! is_string( $input['mode'] ) ) {
+					return array( 'success' => false, 'message' => 'mode is required' );
+				}
+
+				$mode = strtolower( trim( (string) $input['mode'] ) );
+				if ( ! in_array( $mode, array( 'full_width', 'boxed' ), true ) ) {
+					return array( 'success' => false, 'message' => 'mode must be full_width or boxed' );
+				}
+
+				$boxed_width = isset( $input['boxed_width'] ) ? (int) $input['boxed_width'] : null;
+				if ( 'boxed' === $mode && ( null === $boxed_width || $boxed_width <= 0 ) ) {
+					return array( 'success' => false, 'message' => 'boxed_width is required when mode=boxed' );
+				}
+
+				$post = get_post( (int) $input['id'] );
+				if ( ! $post ) {
+					return array( 'success' => false, 'message' => 'Post not found' );
+				}
+				if ( ! current_user_can( 'edit_post', $post->ID ) ) {
+					return array( 'success' => false, 'message' => 'You do not have permission to update this post' );
+				}
+
+				$elementor_data = get_post_meta( (int) $input['id'], '_elementor_data', true );
+				if ( empty( $elementor_data ) ) {
+					return array( 'success' => false, 'message' => 'No Elementor data found for this post' );
+				}
+
+				$data = json_decode( $elementor_data, true );
+				if ( null === $data && JSON_ERROR_NONE !== json_last_error() ) {
+					return array( 'success' => false, 'message' => 'Failed to parse existing Elementor data' );
+				}
+
+				$element_meta = mcp_abilities_elementor_find_element_meta( $data, (string) $input['element_id'] );
+				if ( ! is_array( $element_meta ) || ! is_array( $element_meta['element'] ?? null ) ) {
+					return array(
+						'success'    => false,
+						'id'         => (int) $input['id'],
+						'element_id' => (string) $input['element_id'],
+						'message'    => 'Element with ID "' . $input['element_id'] . '" not found in page structure',
+					);
+				}
+
+				$changed_ids           = array();
+				$include_root          = ! array_key_exists( 'include_root', $input ) || ! empty( $input['include_root'] );
+				$max_depth             = isset( $input['max_depth'] ) ? (int) $input['max_depth'] : 2;
+				$zero_side_padding     = ! array_key_exists( 'zero_side_padding', $input ) || ! empty( $input['zero_side_padding'] );
+				$zero_side_margins     = ! empty( $input['zero_side_margins'] );
+				$normalize_nested_boxed_widths = ! array_key_exists( 'normalize_nested_boxed_widths', $input ) || ! empty( $input['normalize_nested_boxed_widths'] );
+				$requested_cache_scope = mcp_abilities_elementor_normalize_cache_scope( $input['cache_scope'] ?? 'post', 'post' );
+				$dry_run               = ! empty( $input['dry_run'] );
+				$root_boxed_setting    = 'boxed' === $mode && null !== $boxed_width ? array(
+					'unit' => 'px',
+					'size' => $boxed_width,
+				) : null;
+
+				$updated_element = mcp_abilities_elementor_enforce_boundary_coherence_subtree(
+					$element_meta['element'],
+					$mode,
+					$boxed_width,
+					$include_root,
+					$max_depth,
+					0,
+					$zero_side_padding,
+					$zero_side_margins,
+					$normalize_nested_boxed_widths,
+					$root_boxed_setting,
+					$changed_ids
+				);
+				$changed_ids = array_values( array_unique( array_filter( $changed_ids ) ) );
+
+				if ( empty( $changed_ids ) ) {
+					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
+					$cache_details['post_id'] = (int) $input['id'];
+					return array(
+						'success'       => true,
+						'id'            => (int) $input['id'],
+						'element_id'    => (string) $input['element_id'],
+						'mode'          => $mode,
+						'message'       => 'Boundary coherence enforcement produced no change',
+						'link'          => get_permalink( (int) $input['id'] ),
+						'dry_run'       => $dry_run,
+						'changed_count' => 0,
+						'changed_ids'   => array(),
+						'cache'         => $cache_details,
+					);
+				}
+
+				if ( $dry_run ) {
+					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
+					$cache_details['post_id'] = (int) $input['id'];
+					return array(
+						'success'       => true,
+						'id'            => (int) $input['id'],
+						'element_id'    => (string) $input['element_id'],
+						'mode'          => $mode,
+						'message'       => 'Dry run: boundary coherence enforcement prepared successfully',
+						'link'          => get_permalink( (int) $input['id'] ),
+						'dry_run'       => true,
+						'changed_count' => count( $changed_ids ),
+						'changed_ids'   => $changed_ids,
+						'cache'         => $cache_details,
+					);
+				}
+
+				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['element_id'], $updated_element );
+				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
+				$json_data = wp_json_encode( $data );
+				if ( false === $json_data ) {
+					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
+				}
+
+				update_post_meta( (int) $input['id'], '_elementor_data', wp_slash( $json_data ) );
+				$cache_details = mcp_abilities_elementor_invalidate_after_write( (int) $input['id'], $requested_cache_scope );
+
+				return array(
+					'success'       => true,
+					'id'            => (int) $input['id'],
+					'element_id'    => (string) $input['element_id'],
+					'mode'          => $mode,
+					'message'       => 'Boundary coherence enforced successfully',
 					'link'          => get_permalink( (int) $input['id'] ),
 					'dry_run'       => false,
 					'changed_count' => count( $changed_ids ),
