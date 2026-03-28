@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.2.14
+ * Version: 2.2.15
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -759,6 +759,811 @@ function mcp_abilities_elementor_zero_horizontal_spacing_box( $spacing ): array 
 	$box['isLinked'] = false;
 
 	return $box;
+}
+
+/**
+ * Determine whether a value is numeric or a numeric string.
+ *
+ * @param mixed $value Value to inspect.
+ * @return bool
+ */
+function mcp_abilities_elementor_is_numeric_value( $value ): bool {
+	return is_int( $value ) || is_float( $value ) || ( is_string( $value ) && is_numeric( trim( $value ) ) );
+}
+
+/**
+ * Normalize a scalar to a stringified numeric value with no trailing zeros.
+ *
+ * @param float $value Numeric value.
+ * @return string
+ */
+function mcp_abilities_elementor_format_numeric_value( float $value ): string {
+	$rounded = round( $value, 4 );
+	if ( abs( $rounded - round( $rounded ) ) < 0.0001 ) {
+		return (string) (int) round( $rounded );
+	}
+
+	return rtrim( rtrim( sprintf( '%.4F', $rounded ), '0' ), '.' );
+}
+
+/**
+ * Snap a numeric value to the nearest rhythm step.
+ *
+ * @param mixed $value Numeric value.
+ * @param int   $step Step size in px.
+ * @return mixed
+ */
+function mcp_abilities_elementor_snap_numeric_value( $value, int $step ) {
+	if ( $step <= 0 || ! mcp_abilities_elementor_is_numeric_value( $value ) ) {
+		return $value;
+	}
+
+	$numeric = (float) $value;
+	$snapped = round( $numeric / $step ) * $step;
+
+	return mcp_abilities_elementor_format_numeric_value( (float) $snapped );
+}
+
+/**
+ * Scale a numeric value by factor.
+ *
+ * @param mixed $value Numeric value.
+ * @param float $factor Scale factor.
+ * @return mixed
+ */
+function mcp_abilities_elementor_scale_numeric_value( $value, float $factor ) {
+	if ( ! mcp_abilities_elementor_is_numeric_value( $value ) ) {
+		return $value;
+	}
+
+	$scaled = (float) $value * $factor;
+	return mcp_abilities_elementor_format_numeric_value( $scaled );
+}
+
+/**
+ * Detect whether a value looks like an Elementor size control.
+ *
+ * @param mixed $value Value to inspect.
+ * @return bool
+ */
+function mcp_abilities_elementor_is_size_control( $value ): bool {
+	return is_array( $value ) && array_key_exists( 'size', $value );
+}
+
+/**
+ * Normalize a numeric size token into Elementor control format.
+ *
+ * @param mixed  $value Incoming value.
+ * @param string $default_unit Default unit.
+ * @return array
+ */
+function mcp_abilities_elementor_make_size_control( $value, string $default_unit = 'px' ): array {
+	if ( is_array( $value ) ) {
+		$control         = $value;
+		$control['unit'] = isset( $control['unit'] ) && is_string( $control['unit'] ) ? $control['unit'] : $default_unit;
+		if ( array_key_exists( 'size', $control ) && mcp_abilities_elementor_is_numeric_value( $control['size'] ) ) {
+			$control['size'] = mcp_abilities_elementor_format_numeric_value( (float) $control['size'] );
+		}
+		return $control;
+	}
+
+	return array(
+		'size' => mcp_abilities_elementor_is_numeric_value( $value ) ? mcp_abilities_elementor_format_numeric_value( (float) $value ) : '0',
+		'unit' => $default_unit,
+	);
+}
+
+/**
+ * Snap an Elementor size control or numeric scalar to the nearest step.
+ *
+ * @param mixed $value Value to snap.
+ * @param int   $step Rhythm step in px.
+ * @return mixed
+ */
+function mcp_abilities_elementor_snap_size_value( $value, int $step ) {
+	if ( mcp_abilities_elementor_is_size_control( $value ) ) {
+		$unit = isset( $value['unit'] ) && is_string( $value['unit'] ) ? strtolower( $value['unit'] ) : 'px';
+		if ( 'px' !== $unit || ! mcp_abilities_elementor_is_numeric_value( $value['size'] ?? null ) ) {
+			return $value;
+		}
+
+		$value['size'] = mcp_abilities_elementor_snap_numeric_value( $value['size'], $step );
+		return $value;
+	}
+
+	return mcp_abilities_elementor_snap_numeric_value( $value, $step );
+}
+
+/**
+ * Scale an Elementor size control or numeric scalar.
+ *
+ * @param mixed $value Value to scale.
+ * @param float $factor Scale factor.
+ * @return mixed
+ */
+function mcp_abilities_elementor_scale_size_value( $value, float $factor ) {
+	if ( mcp_abilities_elementor_is_size_control( $value ) ) {
+		if ( ! mcp_abilities_elementor_is_numeric_value( $value['size'] ?? null ) ) {
+			return $value;
+		}
+
+		$value['size'] = mcp_abilities_elementor_scale_numeric_value( $value['size'], $factor );
+		return $value;
+	}
+
+	return mcp_abilities_elementor_scale_numeric_value( $value, $factor );
+}
+
+/**
+ * Snap spacing box sides to a rhythm.
+ *
+ * @param mixed $spacing Existing spacing structure.
+ * @param int   $step Rhythm step.
+ * @param array $sides Sides to snap.
+ * @return mixed
+ */
+function mcp_abilities_elementor_snap_spacing_box( $spacing, int $step, array $sides = array( 'top', 'right', 'bottom', 'left' ) ) {
+	if ( ! is_array( $spacing ) ) {
+		return $spacing;
+	}
+
+	$updated = $spacing;
+	foreach ( $sides as $side ) {
+		if ( ! is_string( $side ) || ! array_key_exists( $side, $updated ) ) {
+			continue;
+		}
+		$updated[ $side ] = mcp_abilities_elementor_snap_numeric_value( $updated[ $side ], $step );
+	}
+	$updated['isLinked'] = false;
+
+	return $updated;
+}
+
+/**
+ * Scale spacing box sides by factor.
+ *
+ * @param mixed $spacing Existing spacing structure.
+ * @param float $factor Scale factor.
+ * @return mixed
+ */
+function mcp_abilities_elementor_scale_spacing_box( $spacing, float $factor ) {
+	if ( ! is_array( $spacing ) ) {
+		return $spacing;
+	}
+
+	$updated = $spacing;
+	foreach ( array( 'top', 'right', 'bottom', 'left' ) as $side ) {
+		if ( ! array_key_exists( $side, $updated ) ) {
+			continue;
+		}
+		$updated[ $side ] = mcp_abilities_elementor_scale_numeric_value( $updated[ $side ], $factor );
+	}
+	$updated['isLinked'] = false;
+
+	return $updated;
+}
+
+/**
+ * Determine whether a settings key is design-relevant.
+ *
+ * @param string $key Setting key.
+ * @return bool
+ */
+function mcp_abilities_elementor_is_design_setting_key( string $key ): bool {
+	$direct_keys = array(
+		'boxed_width',
+		'content_width',
+		'width',
+		'width_tablet',
+		'width_mobile',
+		'flex_basis',
+		'flex_basis_tablet',
+		'flex_basis_mobile',
+		'flex_gap',
+		'flex_gap_tablet',
+		'flex_gap_mobile',
+		'padding',
+		'padding_tablet',
+		'padding_mobile',
+		'_margin',
+		'_margin_tablet',
+		'_margin_mobile',
+		'button_padding',
+		'button_padding_tablet',
+		'button_padding_mobile',
+		'align',
+		'align_tablet',
+		'align_mobile',
+		'text_align',
+		'min_height',
+		'min_height_tablet',
+		'min_height_mobile',
+	);
+
+	if ( in_array( $key, $direct_keys, true ) ) {
+		return true;
+	}
+
+	$patterns = array(
+		'color',
+		'typography',
+		'background',
+		'border',
+		'box_shadow',
+		'font_',
+		'line_height',
+		'letter_spacing',
+		'text_transform',
+		'text_decoration',
+	);
+
+	foreach ( $patterns as $pattern ) {
+		if ( false !== strpos( $key, $pattern ) ) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/**
+ * Filter an Elementor settings array down to design-relevant keys.
+ *
+ * @param array $settings Settings array.
+ * @param array $include_keys Additional explicit keys to include.
+ * @return array
+ */
+function mcp_abilities_elementor_filter_design_settings( array $settings, array $include_keys = array() ): array {
+	$include_lookup = array();
+	foreach ( $include_keys as $key ) {
+		if ( is_string( $key ) && '' !== $key ) {
+			$include_lookup[ $key ] = true;
+		}
+	}
+
+	$filtered = array();
+	foreach ( $settings as $key => $value ) {
+		if ( ! is_string( $key ) ) {
+			continue;
+		}
+
+		if ( isset( $include_lookup[ $key ] ) || mcp_abilities_elementor_is_design_setting_key( $key ) ) {
+			$filtered[ $key ] = $value;
+		}
+	}
+
+	return $filtered;
+}
+
+/**
+ * Collect raw design token frequencies from a settings array.
+ *
+ * @param array $settings Settings array.
+ * @param array $collector Collector by reference.
+ * @return void
+ */
+function mcp_abilities_elementor_collect_tokens_from_settings( array $settings, array &$collector ): void {
+	foreach ( $settings as $key => $value ) {
+		if ( ! is_string( $key ) ) {
+			continue;
+		}
+
+		if ( false !== strpos( $key, 'color' ) && is_string( $value ) && '' !== trim( $value ) ) {
+			$token = trim( $value );
+			$collector['colors'][ $token ] = ( $collector['colors'][ $token ] ?? 0 ) + 1;
+		}
+
+		if ( false !== strpos( $key, 'font_family' ) && is_string( $value ) && '' !== trim( $value ) ) {
+			$token = trim( $value );
+			$collector['font_families'][ $token ] = ( $collector['font_families'][ $token ] ?? 0 ) + 1;
+		}
+
+		if ( false !== strpos( $key, 'font_weight' ) && is_scalar( $value ) && '' !== trim( (string) $value ) ) {
+			$token = trim( (string) $value );
+			$collector['font_weights'][ $token ] = ( $collector['font_weights'][ $token ] ?? 0 ) + 1;
+		}
+
+		if ( false !== strpos( $key, 'font_size' ) ) {
+			$token = mcp_abilities_elementor_tokenize_dimension_value( $value );
+			if ( '' !== $token ) {
+				$collector['font_sizes'][ $token ] = ( $collector['font_sizes'][ $token ] ?? 0 ) + 1;
+			}
+		}
+
+		if ( false !== strpos( $key, 'line_height' ) ) {
+			$token = mcp_abilities_elementor_tokenize_dimension_value( $value );
+			if ( '' !== $token ) {
+				$collector['line_heights'][ $token ] = ( $collector['line_heights'][ $token ] ?? 0 ) + 1;
+			}
+		}
+
+		if ( false !== strpos( $key, 'gap' ) ) {
+			$token = mcp_abilities_elementor_tokenize_dimension_value( $value );
+			if ( '' !== $token ) {
+				$collector['gaps'][ $token ] = ( $collector['gaps'][ $token ] ?? 0 ) + 1;
+			}
+		}
+
+		if ( false !== strpos( $key, 'width' ) || false !== strpos( $key, 'basis' ) || false !== strpos( $key, 'height' ) ) {
+			$token = mcp_abilities_elementor_tokenize_dimension_value( $value );
+			if ( '' !== $token ) {
+				$collector['dimensions'][ $token ] = ( $collector['dimensions'][ $token ] ?? 0 ) + 1;
+			}
+		}
+
+		if ( is_array( $value ) && array_intersect( array_keys( $value ), array( 'top', 'right', 'bottom', 'left' ) ) ) {
+			foreach ( array( 'top', 'right', 'bottom', 'left' ) as $side ) {
+				if ( ! array_key_exists( $side, $value ) ) {
+					continue;
+				}
+				$token = mcp_abilities_elementor_tokenize_dimension_value(
+					array(
+						'size' => $value[ $side ],
+						'unit' => is_string( $value['unit'] ?? null ) ? $value['unit'] : 'px',
+					)
+				);
+				if ( '' !== $token ) {
+					$collector['spacing'][ $token ] = ( $collector['spacing'][ $token ] ?? 0 ) + 1;
+				}
+			}
+		}
+	}
+}
+
+/**
+ * Convert Elementor dimension-like values to comparable string tokens.
+ *
+ * @param mixed $value Value to normalize.
+ * @return string
+ */
+function mcp_abilities_elementor_tokenize_dimension_value( $value ): string {
+	if ( mcp_abilities_elementor_is_size_control( $value ) ) {
+		if ( ! mcp_abilities_elementor_is_numeric_value( $value['size'] ?? null ) ) {
+			return '';
+		}
+
+		$unit = isset( $value['unit'] ) && is_string( $value['unit'] ) ? $value['unit'] : 'px';
+		return mcp_abilities_elementor_format_numeric_value( (float) $value['size'] ) . $unit;
+	}
+
+	if ( mcp_abilities_elementor_is_numeric_value( $value ) ) {
+		return mcp_abilities_elementor_format_numeric_value( (float) $value ) . 'px';
+	}
+
+	if ( is_string( $value ) && '' !== trim( $value ) ) {
+		return trim( $value );
+	}
+
+	return '';
+}
+
+/**
+ * Sort token frequency maps into stable lists.
+ *
+ * @param array $map Frequency map.
+ * @return array
+ */
+function mcp_abilities_elementor_sort_token_frequency_map( array $map ): array {
+	arsort( $map );
+	$tokens = array();
+	foreach ( $map as $value => $count ) {
+		$tokens[] = array(
+			'value' => (string) $value,
+			'count' => (int) $count,
+		);
+	}
+
+	return $tokens;
+}
+
+/**
+ * Collect design token frequencies from an Elementor subtree.
+ *
+ * @param array $element Elementor element/subtree.
+ * @param array $collector Collector by reference.
+ * @param int   $max_depth Maximum depth, -1 for unlimited.
+ * @param int   $depth Current depth.
+ * @return void
+ */
+function mcp_abilities_elementor_collect_design_tokens_from_subtree( array $element, array &$collector, int $max_depth = -1, int $depth = 0 ): void {
+	if ( $max_depth >= 0 && $depth > $max_depth ) {
+		return;
+	}
+
+	$settings = is_array( $element['settings'] ?? null ) ? $element['settings'] : array();
+	mcp_abilities_elementor_collect_tokens_from_settings( $settings, $collector );
+
+	$children = $element['elements'] ?? null;
+	if ( ! is_array( $children ) ) {
+		return;
+	}
+
+	foreach ( $children as $child ) {
+		if ( is_array( $child ) ) {
+			mcp_abilities_elementor_collect_design_tokens_from_subtree( $child, $collector, $max_depth, $depth + 1 );
+		}
+	}
+}
+
+/**
+ * Prepare a normalized design token payload.
+ *
+ * @param array $collector Raw frequency collector.
+ * @return array
+ */
+function mcp_abilities_elementor_finalize_design_tokens( array $collector ): array {
+	$keys = array(
+		'colors',
+		'font_families',
+		'font_sizes',
+		'font_weights',
+		'line_heights',
+		'gaps',
+		'dimensions',
+		'spacing',
+	);
+
+	$tokens = array();
+	foreach ( $keys as $key ) {
+		$tokens[ $key ] = mcp_abilities_elementor_sort_token_frequency_map( is_array( $collector[ $key ] ?? null ) ? $collector[ $key ] : array() );
+	}
+
+	return $tokens;
+}
+
+/**
+ * Apply text hierarchy rules to a single widget element.
+ *
+ * @param array $element Elementor element.
+ * @param array $heading_scale Heading scale map.
+ * @param array $body_style Body typography.
+ * @param array $button_style Button typography.
+ * @return array
+ */
+function mcp_abilities_elementor_apply_text_hierarchy_to_widget( array $element, array $heading_scale, array $body_style, array $button_style ): array {
+	if ( 'widget' !== ( $element['elType'] ?? '' ) ) {
+		return $element;
+	}
+
+	$widget_type = (string) ( $element['widgetType'] ?? '' );
+	$settings    = is_array( $element['settings'] ?? null ) ? $element['settings'] : array();
+
+	if ( 'heading' === $widget_type ) {
+		$tag   = is_string( $settings['header_size'] ?? null ) ? strtolower( $settings['header_size'] ) : 'h2';
+		$style = is_array( $heading_scale[ $tag ] ?? null ) ? $heading_scale[ $tag ] : ( $heading_scale['default'] ?? array() );
+
+		if ( ! empty( $style['font_family'] ) ) {
+			$settings['typography_typography'] = 'custom';
+			$settings['typography_font_family'] = (string) $style['font_family'];
+		}
+		if ( isset( $style['font_size'] ) ) {
+			$settings['typography_typography'] = 'custom';
+			$settings['typography_font_size']  = mcp_abilities_elementor_make_size_control( $style['font_size'], 'px' );
+		}
+		if ( isset( $style['line_height'] ) ) {
+			$settings['typography_typography'] = 'custom';
+			$settings['typography_line_height'] = mcp_abilities_elementor_make_size_control( $style['line_height'], 'em' );
+		}
+		if ( isset( $style['font_weight'] ) ) {
+			$settings['typography_font_weight'] = (string) $style['font_weight'];
+		}
+		if ( ! empty( $style['color'] ) ) {
+			$settings['title_color'] = (string) $style['color'];
+		}
+		if ( ! empty( $style['align'] ) ) {
+			$settings['align'] = (string) $style['align'];
+		}
+	}
+
+	if ( 'text-editor' === $widget_type ) {
+		if ( ! empty( $body_style['font_family'] ) ) {
+			$settings['typography_typography'] = 'custom';
+			$settings['typography_font_family'] = (string) $body_style['font_family'];
+		}
+		if ( isset( $body_style['font_size'] ) ) {
+			$settings['typography_typography'] = 'custom';
+			$settings['typography_font_size']  = mcp_abilities_elementor_make_size_control( $body_style['font_size'], 'px' );
+		}
+		if ( isset( $body_style['line_height'] ) ) {
+			$settings['typography_typography'] = 'custom';
+			$settings['typography_line_height'] = mcp_abilities_elementor_make_size_control( $body_style['line_height'], 'em' );
+		}
+		if ( isset( $body_style['font_weight'] ) ) {
+			$settings['typography_font_weight'] = (string) $body_style['font_weight'];
+		}
+		if ( ! empty( $body_style['color'] ) ) {
+			$settings['text_color'] = (string) $body_style['color'];
+		}
+		if ( ! empty( $body_style['align'] ) ) {
+			$settings['align'] = (string) $body_style['align'];
+		}
+	}
+
+	if ( 'button' === $widget_type ) {
+		if ( ! empty( $button_style['font_family'] ) ) {
+			$settings['typography_typography'] = 'custom';
+			$settings['typography_font_family'] = (string) $button_style['font_family'];
+		}
+		if ( isset( $button_style['font_size'] ) ) {
+			$settings['typography_typography'] = 'custom';
+			$settings['typography_font_size']  = mcp_abilities_elementor_make_size_control( $button_style['font_size'], 'px' );
+		}
+		if ( isset( $button_style['line_height'] ) ) {
+			$settings['typography_typography'] = 'custom';
+			$settings['typography_line_height'] = mcp_abilities_elementor_make_size_control( $button_style['line_height'], 'em' );
+		}
+		if ( isset( $button_style['font_weight'] ) ) {
+			$settings['typography_font_weight'] = (string) $button_style['font_weight'];
+		}
+		if ( ! empty( $button_style['text_color'] ) ) {
+			$settings['button_text_color'] = (string) $button_style['text_color'];
+		}
+		if ( ! empty( $button_style['background_color'] ) ) {
+			$settings['background_color'] = (string) $button_style['background_color'];
+		}
+		if ( ! empty( $button_style['align'] ) ) {
+			$settings['align'] = (string) $button_style['align'];
+		}
+		if ( isset( $button_style['padding'] ) ) {
+			$settings['button_padding'] = is_array( $button_style['padding'] )
+				? $button_style['padding']
+				: mcp_abilities_elementor_zero_spacing_box( null );
+		}
+	}
+
+	$element['settings'] = $settings;
+	return $element;
+}
+
+/**
+ * Recursively apply text hierarchy rules through an Elementor subtree.
+ *
+ * @param array $element Elementor element.
+ * @param array $heading_scale Heading rules.
+ * @param array $body_style Body rules.
+ * @param array $button_style Button rules.
+ * @param bool  $include_root Whether to update the root element too.
+ * @param int   $max_depth Maximum depth.
+ * @param int   $depth Current depth.
+ * @param array $changed_ids Changed IDs.
+ * @return array
+ */
+function mcp_abilities_elementor_apply_text_hierarchy_subtree( array $element, array $heading_scale, array $body_style, array $button_style, bool $include_root, int $max_depth, int $depth, array &$changed_ids ): array {
+	if ( $max_depth >= 0 && $depth > $max_depth ) {
+		return $element;
+	}
+
+	$should_touch = ( 0 === $depth && $include_root ) || $depth > 0;
+	if ( $should_touch ) {
+		$updated = mcp_abilities_elementor_apply_text_hierarchy_to_widget( $element, $heading_scale, $body_style, $button_style );
+		if ( $updated !== $element && ! empty( $updated['id'] ) && is_string( $updated['id'] ) ) {
+			$changed_ids[] = $updated['id'];
+		}
+		$element = $updated;
+	}
+
+	if ( ! empty( $element['elements'] ) && is_array( $element['elements'] ) ) {
+		foreach ( $element['elements'] as $index => $child ) {
+			if ( is_array( $child ) ) {
+				$element['elements'][ $index ] = mcp_abilities_elementor_apply_text_hierarchy_subtree( $child, $heading_scale, $body_style, $button_style, true, $max_depth, $depth + 1, $changed_ids );
+			}
+		}
+	}
+
+	return $element;
+}
+
+/**
+ * Recursively normalize spacing rhythm in a subtree.
+ *
+ * @param array $element Elementor element.
+ * @param bool  $include_root Whether to include the root element.
+ * @param int   $max_depth Maximum depth.
+ * @param int   $depth Current depth.
+ * @param int   $rhythm_step Rhythm step in px.
+ * @param array $sides Sides to snap on spacing boxes.
+ * @param bool  $include_margin Whether to include margins.
+ * @param mixed $target_gap Optional explicit gap override.
+ * @param array $changed_ids Changed IDs.
+ * @return array
+ */
+function mcp_abilities_elementor_normalize_spacing_rhythm_subtree( array $element, bool $include_root, int $max_depth, int $depth, int $rhythm_step, array $sides, bool $include_margin, $target_gap, array &$changed_ids ): array {
+	if ( $max_depth >= 0 && $depth > $max_depth ) {
+		return $element;
+	}
+
+	$should_touch = ( 0 === $depth && $include_root ) || $depth > 0;
+	if ( $should_touch ) {
+		$settings = is_array( $element['settings'] ?? null ) ? $element['settings'] : array();
+		$original = $settings;
+
+		foreach ( array( 'padding', 'padding_tablet', 'padding_mobile', 'button_padding', 'button_padding_tablet', 'button_padding_mobile' ) as $key ) {
+			if ( array_key_exists( $key, $settings ) ) {
+				$settings[ $key ] = mcp_abilities_elementor_snap_spacing_box( $settings[ $key ], $rhythm_step, $sides );
+			}
+		}
+
+		if ( $include_margin ) {
+			foreach ( array( '_margin', '_margin_tablet', '_margin_mobile' ) as $key ) {
+				if ( array_key_exists( $key, $settings ) ) {
+					$settings[ $key ] = mcp_abilities_elementor_snap_spacing_box( $settings[ $key ], $rhythm_step, $sides );
+				}
+			}
+		}
+
+		foreach ( array( 'flex_gap', 'flex_gap_tablet', 'flex_gap_mobile' ) as $key ) {
+			if ( ! array_key_exists( $key, $settings ) ) {
+				continue;
+			}
+			$settings[ $key ] = null !== $target_gap ? mcp_abilities_elementor_snap_size_value( $target_gap, $rhythm_step ) : mcp_abilities_elementor_snap_size_value( $settings[ $key ], $rhythm_step );
+		}
+
+		if ( $settings !== $original ) {
+			$element['settings'] = $settings;
+			if ( ! empty( $element['id'] ) && is_string( $element['id'] ) ) {
+				$changed_ids[] = $element['id'];
+			}
+		}
+	}
+
+	if ( ! empty( $element['elements'] ) && is_array( $element['elements'] ) ) {
+		foreach ( $element['elements'] as $index => $child ) {
+			if ( is_array( $child ) ) {
+				$element['elements'][ $index ] = mcp_abilities_elementor_normalize_spacing_rhythm_subtree( $child, true, $max_depth, $depth + 1, $rhythm_step, $sides, $include_margin, $target_gap, $changed_ids );
+			}
+		}
+	}
+
+	return $element;
+}
+
+/**
+ * Recursively normalize responsive values in a subtree.
+ *
+ * @param array $element Elementor element.
+ * @param bool  $include_root Whether to include root.
+ * @param int   $max_depth Maximum depth.
+ * @param int   $depth Current depth.
+ * @param bool  $fill_missing_only Only fill missing responsive values.
+ * @param float $tablet_factor Tablet scale factor.
+ * @param float $mobile_factor Mobile scale factor.
+ * @param array $changed_ids Changed IDs.
+ * @return array
+ */
+function mcp_abilities_elementor_normalize_responsive_values_subtree( array $element, bool $include_root, int $max_depth, int $depth, bool $fill_missing_only, float $tablet_factor, float $mobile_factor, array &$changed_ids ): array {
+	if ( $max_depth >= 0 && $depth > $max_depth ) {
+		return $element;
+	}
+
+	$should_touch = ( 0 === $depth && $include_root ) || $depth > 0;
+	if ( $should_touch ) {
+		$settings = is_array( $element['settings'] ?? null ) ? $element['settings'] : array();
+		$original = $settings;
+
+		$families = array(
+			array( 'desktop' => 'width', 'tablet' => 'width_tablet', 'mobile' => 'width_mobile', 'type' => 'size' ),
+			array( 'desktop' => 'flex_basis', 'tablet' => 'flex_basis_tablet', 'mobile' => 'flex_basis_mobile', 'type' => 'size' ),
+			array( 'desktop' => 'min_height', 'tablet' => 'min_height_tablet', 'mobile' => 'min_height_mobile', 'type' => 'size' ),
+			array( 'desktop' => 'flex_gap', 'tablet' => 'flex_gap_tablet', 'mobile' => 'flex_gap_mobile', 'type' => 'size' ),
+			array( 'desktop' => 'padding', 'tablet' => 'padding_tablet', 'mobile' => 'padding_mobile', 'type' => 'spacing' ),
+			array( 'desktop' => '_margin', 'tablet' => '_margin_tablet', 'mobile' => '_margin_mobile', 'type' => 'spacing' ),
+			array( 'desktop' => 'button_padding', 'tablet' => 'button_padding_tablet', 'mobile' => 'button_padding_mobile', 'type' => 'spacing' ),
+			array( 'desktop' => 'typography_font_size', 'tablet' => 'typography_font_size_tablet', 'mobile' => 'typography_font_size_mobile', 'type' => 'size' ),
+			array( 'desktop' => 'typography_line_height', 'tablet' => 'typography_line_height_tablet', 'mobile' => 'typography_line_height_mobile', 'type' => 'size' ),
+		);
+
+		foreach ( $families as $family ) {
+			$desktop_key = $family['desktop'];
+			$tablet_key  = $family['tablet'];
+			$mobile_key  = $family['mobile'];
+
+			if ( ! array_key_exists( $desktop_key, $settings ) ) {
+				continue;
+			}
+
+			$desktop_value = $settings[ $desktop_key ];
+			$should_set_tablet = ! $fill_missing_only || ! array_key_exists( $tablet_key, $settings ) || null === $settings[ $tablet_key ] || '' === $settings[ $tablet_key ];
+			$should_set_mobile = ! $fill_missing_only || ! array_key_exists( $mobile_key, $settings ) || null === $settings[ $mobile_key ] || '' === $settings[ $mobile_key ];
+
+			if ( 'spacing' === $family['type'] ) {
+				if ( $should_set_tablet ) {
+					$settings[ $tablet_key ] = mcp_abilities_elementor_scale_spacing_box( $desktop_value, $tablet_factor );
+				}
+				if ( $should_set_mobile ) {
+					$settings[ $mobile_key ] = mcp_abilities_elementor_scale_spacing_box( $desktop_value, $mobile_factor );
+				}
+				continue;
+			}
+
+			if ( $should_set_tablet ) {
+				$settings[ $tablet_key ] = mcp_abilities_elementor_scale_size_value( $desktop_value, $tablet_factor );
+			}
+			if ( $should_set_mobile ) {
+				$settings[ $mobile_key ] = mcp_abilities_elementor_scale_size_value( $desktop_value, $mobile_factor );
+			}
+		}
+
+		if ( $settings !== $original ) {
+			$element['settings'] = $settings;
+			if ( ! empty( $element['id'] ) && is_string( $element['id'] ) ) {
+				$changed_ids[] = $element['id'];
+			}
+		}
+	}
+
+	if ( ! empty( $element['elements'] ) && is_array( $element['elements'] ) ) {
+		foreach ( $element['elements'] as $index => $child ) {
+			if ( is_array( $child ) ) {
+				$element['elements'][ $index ] = mcp_abilities_elementor_normalize_responsive_values_subtree( $child, true, $max_depth, $depth + 1, $fill_missing_only, $tablet_factor, $mobile_factor, $changed_ids );
+			}
+		}
+	}
+
+	return $element;
+}
+
+/**
+ * Sync design settings from one subtree variant to another.
+ *
+ * @param array $source_element Source subtree.
+ * @param array $target_element Target subtree.
+ * @param bool  $allow_partial Allow differing child counts.
+ * @param array $include_keys Additional settings keys to copy.
+ * @param array $changed_ids Changed IDs.
+ * @return array
+ */
+function mcp_abilities_elementor_sync_component_variant_subtree( array $source_element, array $target_element, bool $allow_partial, array $include_keys, array &$changed_ids ): array {
+	$source_settings = is_array( $source_element['settings'] ?? null ) ? $source_element['settings'] : array();
+	$target_settings = is_array( $target_element['settings'] ?? null ) ? $target_element['settings'] : array();
+	$filtered        = mcp_abilities_elementor_filter_design_settings( $source_settings, $include_keys );
+
+	if ( ! empty( $filtered ) ) {
+		$merged = mcp_abilities_elementor_merge_settings( $target_settings, $filtered );
+		if ( $merged !== $target_settings ) {
+			$target_element['settings'] = $merged;
+			if ( ! empty( $target_element['id'] ) && is_string( $target_element['id'] ) ) {
+				$changed_ids[] = $target_element['id'];
+			}
+		}
+	}
+
+	$source_children = is_array( $source_element['elements'] ?? null ) ? array_values( $source_element['elements'] ) : array();
+	$target_children = is_array( $target_element['elements'] ?? null ) ? array_values( $target_element['elements'] ) : array();
+
+	if ( count( $source_children ) !== count( $target_children ) && ! $allow_partial ) {
+		return $target_element;
+	}
+
+	$pair_count = min( count( $source_children ), count( $target_children ) );
+	for ( $index = 0; $index < $pair_count; $index++ ) {
+		if ( ! is_array( $source_children[ $index ] ) || ! is_array( $target_children[ $index ] ) ) {
+			continue;
+		}
+
+		$source_child = $source_children[ $index ];
+		$target_child = $target_children[ $index ];
+
+		if ( ( $source_child['elType'] ?? '' ) !== ( $target_child['elType'] ?? '' ) ) {
+			continue;
+		}
+		if (
+			'widget' === ( $source_child['elType'] ?? '' ) &&
+			( $source_child['widgetType'] ?? '' ) !== ( $target_child['widgetType'] ?? '' )
+		) {
+			continue;
+		}
+
+		$target_children[ $index ] = mcp_abilities_elementor_sync_component_variant_subtree(
+			$source_child,
+			$target_child,
+			$allow_partial,
+			$include_keys,
+			$changed_ids
+		);
+	}
+
+	$target_element['elements'] = $target_children;
+	return $target_element;
 }
 
 /**
@@ -3936,6 +4741,800 @@ function mcp_abilities_elementor_register_abilities(): void {
 					'changed_count' => count( $changed_ids ),
 					'changed_ids'   => $changed_ids,
 					'cache'         => $cache_details,
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => false,
+					'idempotent'  => false,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Extract Design Tokens
+	// =========================================================================
+	wp_register_ability(
+		'elementor/extract-design-tokens',
+		array(
+			'label'               => 'Extract Elementor Design Tokens',
+			'description'         => 'Extracts recurring design tokens from an Elementor page/subtree and optionally includes the active kit settings. Useful for seeing the actual colors, type styles, spacing, and dimensional rhythm already in use before normalizing a migrated page.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'id'           => array(
+						'type'        => 'integer',
+						'description' => 'Optional Post/Page ID to inspect.',
+					),
+					'element_id'   => array(
+						'type'        => 'string',
+						'description' => 'Optional root element ID to restrict extraction to a subtree.',
+					),
+					'include_kit'  => array(
+						'type'        => 'boolean',
+						'default'     => true,
+						'description' => 'If true, also extract recurring tokens from the active Elementor kit settings.',
+					),
+					'max_depth'    => array(
+						'type'        => 'integer',
+						'default'     => -1,
+						'description' => 'Optional maximum subtree depth to inspect. Use -1 for unlimited.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'  => array( 'type' => 'boolean' ),
+					'id'       => array( 'type' => 'integer' ),
+					'kit_id'   => array( 'type' => 'integer' ),
+					'tokens'   => array( 'type' => 'object' ),
+					'message'  => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input     = is_array( $input ) ? $input : array();
+				$include_kit = ! array_key_exists( 'include_kit', $input ) || ! empty( $input['include_kit'] );
+				$max_depth = isset( $input['max_depth'] ) ? (int) $input['max_depth'] : -1;
+				$post_id   = isset( $input['id'] ) ? (int) $input['id'] : 0;
+				$collector = array(
+					'colors'        => array(),
+					'font_families' => array(),
+					'font_sizes'    => array(),
+					'font_weights'  => array(),
+					'line_heights'  => array(),
+					'gaps'          => array(),
+					'dimensions'    => array(),
+					'spacing'       => array(),
+				);
+
+				if ( $post_id > 0 ) {
+					$post = get_post( $post_id );
+					if ( ! $post ) {
+						return array( 'success' => false, 'message' => 'Post not found' );
+					}
+
+					$elementor_data = get_post_meta( $post_id, '_elementor_data', true );
+					if ( empty( $elementor_data ) ) {
+						return array( 'success' => false, 'message' => 'No Elementor data found for this post' );
+					}
+
+					$data = json_decode( $elementor_data, true );
+					if ( null === $data && JSON_ERROR_NONE !== json_last_error() ) {
+						return array( 'success' => false, 'message' => 'Failed to parse existing Elementor data' );
+					}
+
+					if ( ! empty( $input['element_id'] ) && is_string( $input['element_id'] ) ) {
+						$element_meta = mcp_abilities_elementor_find_element_meta( $data, (string) $input['element_id'] );
+						if ( ! is_array( $element_meta ) || ! is_array( $element_meta['element'] ?? null ) ) {
+							return array( 'success' => false, 'message' => 'Element not found' );
+						}
+						mcp_abilities_elementor_collect_design_tokens_from_subtree( $element_meta['element'], $collector, $max_depth );
+					} else {
+						foreach ( $data as $element ) {
+							if ( is_array( $element ) ) {
+								mcp_abilities_elementor_collect_design_tokens_from_subtree( $element, $collector, $max_depth );
+							}
+						}
+					}
+				}
+
+				$kit_id = 0;
+				if ( $include_kit ) {
+					$kit_id = (int) get_option( 'elementor_active_kit' );
+					if ( $kit_id > 0 ) {
+						$kit_settings = get_post_meta( $kit_id, '_elementor_page_settings', true );
+						if ( is_array( $kit_settings ) ) {
+							mcp_abilities_elementor_collect_tokens_from_settings( $kit_settings, $collector );
+						}
+					}
+				}
+
+				return array(
+					'success' => true,
+					'id'      => $post_id,
+					'kit_id'  => $kit_id,
+					'tokens'  => mcp_abilities_elementor_finalize_design_tokens( $collector ),
+					'message' => 'Design tokens extracted successfully',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Apply Text Hierarchy
+	// =========================================================================
+	wp_register_ability(
+		'elementor/apply-text-hierarchy',
+		array(
+			'label'               => 'Apply Elementor Text Hierarchy',
+			'description'         => 'Applies a coherent text hierarchy to a subtree by normalizing heading, body-text, and button typography settings. Supports `dry_run`.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id', 'element_id' ),
+				'properties'           => array(
+					'id'            => array( 'type' => 'integer', 'description' => 'Post/Page ID containing the subtree.' ),
+					'element_id'    => array( 'type' => 'string', 'description' => 'Root element ID for the subtree.' ),
+					'include_root'  => array( 'type' => 'boolean', 'default' => true, 'description' => 'If true, include the root element.' ),
+					'max_depth'     => array( 'type' => 'integer', 'default' => -1, 'description' => 'Maximum descendant depth. Use -1 for unlimited.' ),
+					'heading_scale' => array( 'type' => 'object', 'description' => 'Optional map of heading tag (h1-h6/default) to font settings.' ),
+					'body_style'    => array( 'type' => 'object', 'description' => 'Optional body text style overrides.' ),
+					'button_style'  => array( 'type' => 'object', 'description' => 'Optional button text style overrides.' ),
+					'dry_run'       => array( 'type' => 'boolean', 'default' => false, 'description' => 'If true, return changed IDs without writing.' ),
+					'cache_scope'   => array(
+						'type'        => 'string',
+						'enum'        => array( 'none', 'post', 'site' ),
+						'default'     => 'post',
+						'description' => 'Cache invalidation scope after write. Ignored when dry_run=true.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'       => array( 'type' => 'boolean' ),
+					'id'            => array( 'type' => 'integer' ),
+					'element_id'    => array( 'type' => 'string' ),
+					'message'       => array( 'type' => 'string' ),
+					'link'          => array( 'type' => 'string' ),
+					'dry_run'       => array( 'type' => 'boolean' ),
+					'changed_count' => array( 'type' => 'integer' ),
+					'changed_ids'   => array( 'type' => 'array', 'items' => array( 'type' => 'string' ) ),
+					'cache'         => array( 'type' => 'object' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input = is_array( $input ) ? $input : array();
+
+				if ( empty( $input['id'] ) ) {
+					return array( 'success' => false, 'message' => 'Post/Page ID is required' );
+				}
+				if ( empty( $input['element_id'] ) ) {
+					return array( 'success' => false, 'message' => 'Element ID is required' );
+				}
+
+				$post = get_post( (int) $input['id'] );
+				if ( ! $post ) {
+					return array( 'success' => false, 'message' => 'Post not found' );
+				}
+				if ( ! current_user_can( 'edit_post', $post->ID ) ) {
+					return array( 'success' => false, 'message' => 'You do not have permission to update this post' );
+				}
+
+				$elementor_data = get_post_meta( (int) $input['id'], '_elementor_data', true );
+				if ( empty( $elementor_data ) ) {
+					return array( 'success' => false, 'message' => 'No Elementor data found for this post' );
+				}
+
+				$data = json_decode( $elementor_data, true );
+				if ( null === $data && JSON_ERROR_NONE !== json_last_error() ) {
+					return array( 'success' => false, 'message' => 'Failed to parse existing Elementor data' );
+				}
+
+				$element_meta = mcp_abilities_elementor_find_element_meta( $data, (string) $input['element_id'] );
+				if ( ! is_array( $element_meta ) || ! is_array( $element_meta['element'] ?? null ) ) {
+					return array( 'success' => false, 'message' => 'Element not found' );
+				}
+
+				$heading_scale = isset( $input['heading_scale'] ) && is_array( $input['heading_scale'] ) ? $input['heading_scale'] : array(
+					'h1'      => array( 'font_size' => 56, 'line_height' => 1.05, 'font_weight' => '600', 'font_family' => 'Jost' ),
+					'h2'      => array( 'font_size' => 44, 'line_height' => 1.1, 'font_weight' => '600', 'font_family' => 'Jost' ),
+					'h3'      => array( 'font_size' => 34, 'line_height' => 1.15, 'font_weight' => '600', 'font_family' => 'Jost' ),
+					'h4'      => array( 'font_size' => 28, 'line_height' => 1.2, 'font_weight' => '600', 'font_family' => 'Jost' ),
+					'h5'      => array( 'font_size' => 22, 'line_height' => 1.25, 'font_weight' => '600', 'font_family' => 'Jost' ),
+					'h6'      => array( 'font_size' => 18, 'line_height' => 1.3, 'font_weight' => '600', 'font_family' => 'Jost' ),
+					'default' => array( 'font_size' => 34, 'line_height' => 1.15, 'font_weight' => '600', 'font_family' => 'Jost' ),
+				);
+				$body_style = isset( $input['body_style'] ) && is_array( $input['body_style'] ) ? $input['body_style'] : array(
+					'font_family' => 'Jost',
+					'font_size'   => 18,
+					'line_height' => 1.6,
+					'font_weight' => '400',
+				);
+				$button_style = isset( $input['button_style'] ) && is_array( $input['button_style'] ) ? $input['button_style'] : array(
+					'font_family' => 'Jost',
+					'font_size'   => 16,
+					'line_height' => 1.2,
+					'font_weight' => '500',
+				);
+
+				$changed_ids  = array();
+				$include_root = ! array_key_exists( 'include_root', $input ) || ! empty( $input['include_root'] );
+				$max_depth    = isset( $input['max_depth'] ) ? (int) $input['max_depth'] : -1;
+				$updated      = mcp_abilities_elementor_apply_text_hierarchy_subtree(
+					$element_meta['element'],
+					$heading_scale,
+					$body_style,
+					$button_style,
+					$include_root,
+					$max_depth,
+					0,
+					$changed_ids
+				);
+				$changed_ids = array_values( array_unique( array_filter( $changed_ids ) ) );
+				$dry_run = ! empty( $input['dry_run'] );
+				$requested_cache_scope = mcp_abilities_elementor_normalize_cache_scope( $input['cache_scope'] ?? 'post', 'post' );
+
+				if ( empty( $changed_ids ) ) {
+					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
+					$cache_details['post_id'] = (int) $input['id'];
+					return array(
+						'success'       => true,
+						'id'            => (int) $input['id'],
+						'element_id'    => (string) $input['element_id'],
+						'message'       => 'Text hierarchy produced no change',
+						'link'          => get_permalink( (int) $input['id'] ),
+						'dry_run'       => $dry_run,
+						'changed_count' => 0,
+						'changed_ids'   => array(),
+						'cache'         => $cache_details,
+					);
+				}
+
+				if ( $dry_run ) {
+					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
+					$cache_details['post_id'] = (int) $input['id'];
+					return array(
+						'success'       => true,
+						'id'            => (int) $input['id'],
+						'element_id'    => (string) $input['element_id'],
+						'message'       => 'Dry run: text hierarchy would be applied',
+						'link'          => get_permalink( (int) $input['id'] ),
+						'dry_run'       => true,
+						'changed_count' => count( $changed_ids ),
+						'changed_ids'   => $changed_ids,
+						'cache'         => $cache_details,
+					);
+				}
+
+				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['element_id'], $updated );
+				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
+				$json_data = wp_json_encode( $data );
+				if ( false === $json_data ) {
+					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
+				}
+				update_post_meta( (int) $input['id'], '_elementor_data', wp_slash( $json_data ) );
+				$cache_details = mcp_abilities_elementor_invalidate_after_write( (int) $input['id'], $requested_cache_scope );
+
+				return array(
+					'success'       => true,
+					'id'            => (int) $input['id'],
+					'element_id'    => (string) $input['element_id'],
+					'message'       => 'Text hierarchy applied successfully',
+					'link'          => get_permalink( (int) $input['id'] ),
+					'dry_run'       => false,
+					'changed_count' => count( $changed_ids ),
+					'changed_ids'   => $changed_ids,
+					'cache'         => $cache_details,
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => false,
+					'idempotent'  => false,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Normalize Section Spacing Rhythm
+	// =========================================================================
+	wp_register_ability(
+		'elementor/normalize-section-spacing-rhythm',
+		array(
+			'label'               => 'Normalize Elementor Section Spacing Rhythm',
+			'description'         => 'Snaps padding, optional margins, and row gaps inside a subtree to a consistent rhythm step. Useful when migrated sections feel visually uneven even though the structure is correct. Supports `dry_run`.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id', 'element_id' ),
+				'properties'           => array(
+					'id'             => array( 'type' => 'integer', 'description' => 'Post/Page ID containing the subtree.' ),
+					'element_id'     => array( 'type' => 'string', 'description' => 'Root element ID for the subtree.' ),
+					'include_root'   => array( 'type' => 'boolean', 'default' => true, 'description' => 'If true, include the root element.' ),
+					'max_depth'      => array( 'type' => 'integer', 'default' => -1, 'description' => 'Maximum descendant depth. Use -1 for unlimited.' ),
+					'rhythm_step'    => array( 'type' => 'integer', 'default' => 8, 'description' => 'Rhythm step in px.' ),
+					'sides'          => array( 'type' => 'array', 'items' => array( 'type' => 'string' ), 'description' => 'Spacing-box sides to snap. Defaults to top and bottom.' ),
+					'include_margin' => array( 'type' => 'boolean', 'default' => false, 'description' => 'If true, snap margins too.' ),
+					'target_gap'     => array( 'description' => 'Optional explicit gap value to force after snapping.' ),
+					'dry_run'        => array( 'type' => 'boolean', 'default' => false, 'description' => 'If true, return changed IDs without writing.' ),
+					'cache_scope'    => array(
+						'type'        => 'string',
+						'enum'        => array( 'none', 'post', 'site' ),
+						'default'     => 'post',
+						'description' => 'Cache invalidation scope after write. Ignored when dry_run=true.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'       => array( 'type' => 'boolean' ),
+					'id'            => array( 'type' => 'integer' ),
+					'element_id'    => array( 'type' => 'string' ),
+					'message'       => array( 'type' => 'string' ),
+					'link'          => array( 'type' => 'string' ),
+					'dry_run'       => array( 'type' => 'boolean' ),
+					'changed_count' => array( 'type' => 'integer' ),
+					'changed_ids'   => array( 'type' => 'array', 'items' => array( 'type' => 'string' ) ),
+					'cache'         => array( 'type' => 'object' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input = is_array( $input ) ? $input : array();
+
+				if ( empty( $input['id'] ) ) {
+					return array( 'success' => false, 'message' => 'Post/Page ID is required' );
+				}
+				if ( empty( $input['element_id'] ) ) {
+					return array( 'success' => false, 'message' => 'Element ID is required' );
+				}
+
+				$post = get_post( (int) $input['id'] );
+				if ( ! $post ) {
+					return array( 'success' => false, 'message' => 'Post not found' );
+				}
+				if ( ! current_user_can( 'edit_post', $post->ID ) ) {
+					return array( 'success' => false, 'message' => 'You do not have permission to update this post' );
+				}
+
+				$elementor_data = get_post_meta( (int) $input['id'], '_elementor_data', true );
+				if ( empty( $elementor_data ) ) {
+					return array( 'success' => false, 'message' => 'No Elementor data found for this post' );
+				}
+				$data = json_decode( $elementor_data, true );
+				if ( null === $data && JSON_ERROR_NONE !== json_last_error() ) {
+					return array( 'success' => false, 'message' => 'Failed to parse existing Elementor data' );
+				}
+
+				$element_meta = mcp_abilities_elementor_find_element_meta( $data, (string) $input['element_id'] );
+				if ( ! is_array( $element_meta ) || ! is_array( $element_meta['element'] ?? null ) ) {
+					return array( 'success' => false, 'message' => 'Element not found' );
+				}
+
+				$changed_ids    = array();
+				$include_root   = ! array_key_exists( 'include_root', $input ) || ! empty( $input['include_root'] );
+				$max_depth      = isset( $input['max_depth'] ) ? (int) $input['max_depth'] : -1;
+				$rhythm_step    = isset( $input['rhythm_step'] ) ? max( 1, (int) $input['rhythm_step'] ) : 8;
+				$sides          = isset( $input['sides'] ) && is_array( $input['sides'] ) && ! empty( $input['sides'] )
+					? array_values( array_filter( $input['sides'], 'is_string' ) )
+					: array( 'top', 'bottom' );
+				$include_margin = ! empty( $input['include_margin'] );
+				$target_gap     = $input['target_gap'] ?? null;
+
+				$updated = mcp_abilities_elementor_normalize_spacing_rhythm_subtree(
+					$element_meta['element'],
+					$include_root,
+					$max_depth,
+					0,
+					$rhythm_step,
+					$sides,
+					$include_margin,
+					$target_gap,
+					$changed_ids
+				);
+				$changed_ids = array_values( array_unique( array_filter( $changed_ids ) ) );
+				$dry_run = ! empty( $input['dry_run'] );
+				$requested_cache_scope = mcp_abilities_elementor_normalize_cache_scope( $input['cache_scope'] ?? 'post', 'post' );
+
+				if ( empty( $changed_ids ) ) {
+					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
+					$cache_details['post_id'] = (int) $input['id'];
+					return array(
+						'success'       => true,
+						'id'            => (int) $input['id'],
+						'element_id'    => (string) $input['element_id'],
+						'message'       => 'Spacing rhythm produced no change',
+						'link'          => get_permalink( (int) $input['id'] ),
+						'dry_run'       => $dry_run,
+						'changed_count' => 0,
+						'changed_ids'   => array(),
+						'cache'         => $cache_details,
+					);
+				}
+
+				if ( $dry_run ) {
+					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
+					$cache_details['post_id'] = (int) $input['id'];
+					return array(
+						'success'       => true,
+						'id'            => (int) $input['id'],
+						'element_id'    => (string) $input['element_id'],
+						'message'       => 'Dry run: spacing rhythm would be normalized',
+						'link'          => get_permalink( (int) $input['id'] ),
+						'dry_run'       => true,
+						'changed_count' => count( $changed_ids ),
+						'changed_ids'   => $changed_ids,
+						'cache'         => $cache_details,
+					);
+				}
+
+				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['element_id'], $updated );
+				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
+				$json_data = wp_json_encode( $data );
+				if ( false === $json_data ) {
+					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
+				}
+				update_post_meta( (int) $input['id'], '_elementor_data', wp_slash( $json_data ) );
+				$cache_details = mcp_abilities_elementor_invalidate_after_write( (int) $input['id'], $requested_cache_scope );
+
+				return array(
+					'success'       => true,
+					'id'            => (int) $input['id'],
+					'element_id'    => (string) $input['element_id'],
+					'message'       => 'Spacing rhythm normalized successfully',
+					'link'          => get_permalink( (int) $input['id'] ),
+					'dry_run'       => false,
+					'changed_count' => count( $changed_ids ),
+					'changed_ids'   => $changed_ids,
+					'cache'         => $cache_details,
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => false,
+					'idempotent'  => false,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Normalize Responsive Values
+	// =========================================================================
+	wp_register_ability(
+		'elementor/normalize-responsive-values',
+		array(
+			'label'               => 'Normalize Elementor Responsive Values',
+			'description'         => 'Fills or normalizes tablet/mobile spacing and size values from the desktop settings in a subtree. Useful when a migrated section only has desktop values and starts drifting at breakpoints. Supports `dry_run`.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id', 'element_id' ),
+				'properties'           => array(
+					'id'                 => array( 'type' => 'integer', 'description' => 'Post/Page ID containing the subtree.' ),
+					'element_id'         => array( 'type' => 'string', 'description' => 'Root element ID for the subtree.' ),
+					'include_root'       => array( 'type' => 'boolean', 'default' => true, 'description' => 'If true, include the root element.' ),
+					'max_depth'          => array( 'type' => 'integer', 'default' => -1, 'description' => 'Maximum descendant depth. Use -1 for unlimited.' ),
+					'fill_missing_only'  => array( 'type' => 'boolean', 'default' => true, 'description' => 'If true, only fill missing tablet/mobile values.' ),
+					'tablet_factor'      => array( 'type' => 'number', 'default' => 1, 'description' => 'Scale factor for generated tablet values.' ),
+					'mobile_factor'      => array( 'type' => 'number', 'default' => 1, 'description' => 'Scale factor for generated mobile values.' ),
+					'dry_run'            => array( 'type' => 'boolean', 'default' => false, 'description' => 'If true, return changed IDs without writing.' ),
+					'cache_scope'        => array(
+						'type'        => 'string',
+						'enum'        => array( 'none', 'post', 'site' ),
+						'default'     => 'post',
+						'description' => 'Cache invalidation scope after write. Ignored when dry_run=true.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'       => array( 'type' => 'boolean' ),
+					'id'            => array( 'type' => 'integer' ),
+					'element_id'    => array( 'type' => 'string' ),
+					'message'       => array( 'type' => 'string' ),
+					'link'          => array( 'type' => 'string' ),
+					'dry_run'       => array( 'type' => 'boolean' ),
+					'changed_count' => array( 'type' => 'integer' ),
+					'changed_ids'   => array( 'type' => 'array', 'items' => array( 'type' => 'string' ) ),
+					'cache'         => array( 'type' => 'object' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input = is_array( $input ) ? $input : array();
+				if ( empty( $input['id'] ) ) {
+					return array( 'success' => false, 'message' => 'Post/Page ID is required' );
+				}
+				if ( empty( $input['element_id'] ) ) {
+					return array( 'success' => false, 'message' => 'Element ID is required' );
+				}
+
+				$post = get_post( (int) $input['id'] );
+				if ( ! $post ) {
+					return array( 'success' => false, 'message' => 'Post not found' );
+				}
+				if ( ! current_user_can( 'edit_post', $post->ID ) ) {
+					return array( 'success' => false, 'message' => 'You do not have permission to update this post' );
+				}
+
+				$elementor_data = get_post_meta( (int) $input['id'], '_elementor_data', true );
+				if ( empty( $elementor_data ) ) {
+					return array( 'success' => false, 'message' => 'No Elementor data found for this post' );
+				}
+				$data = json_decode( $elementor_data, true );
+				if ( null === $data && JSON_ERROR_NONE !== json_last_error() ) {
+					return array( 'success' => false, 'message' => 'Failed to parse existing Elementor data' );
+				}
+
+				$element_meta = mcp_abilities_elementor_find_element_meta( $data, (string) $input['element_id'] );
+				if ( ! is_array( $element_meta ) || ! is_array( $element_meta['element'] ?? null ) ) {
+					return array( 'success' => false, 'message' => 'Element not found' );
+				}
+
+				$changed_ids = array();
+				$include_root = ! array_key_exists( 'include_root', $input ) || ! empty( $input['include_root'] );
+				$max_depth = isset( $input['max_depth'] ) ? (int) $input['max_depth'] : -1;
+				$fill_missing_only = ! array_key_exists( 'fill_missing_only', $input ) || ! empty( $input['fill_missing_only'] );
+				$tablet_factor = isset( $input['tablet_factor'] ) ? (float) $input['tablet_factor'] : 1.0;
+				$mobile_factor = isset( $input['mobile_factor'] ) ? (float) $input['mobile_factor'] : 1.0;
+				$updated = mcp_abilities_elementor_normalize_responsive_values_subtree(
+					$element_meta['element'],
+					$include_root,
+					$max_depth,
+					0,
+					$fill_missing_only,
+					$tablet_factor,
+					$mobile_factor,
+					$changed_ids
+				);
+				$changed_ids = array_values( array_unique( array_filter( $changed_ids ) ) );
+				$dry_run = ! empty( $input['dry_run'] );
+				$requested_cache_scope = mcp_abilities_elementor_normalize_cache_scope( $input['cache_scope'] ?? 'post', 'post' );
+
+				if ( empty( $changed_ids ) ) {
+					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
+					$cache_details['post_id'] = (int) $input['id'];
+					return array(
+						'success'       => true,
+						'id'            => (int) $input['id'],
+						'element_id'    => (string) $input['element_id'],
+						'message'       => 'Responsive normalization produced no change',
+						'link'          => get_permalink( (int) $input['id'] ),
+						'dry_run'       => $dry_run,
+						'changed_count' => 0,
+						'changed_ids'   => array(),
+						'cache'         => $cache_details,
+					);
+				}
+
+				if ( $dry_run ) {
+					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
+					$cache_details['post_id'] = (int) $input['id'];
+					return array(
+						'success'       => true,
+						'id'            => (int) $input['id'],
+						'element_id'    => (string) $input['element_id'],
+						'message'       => 'Dry run: responsive values would be normalized',
+						'link'          => get_permalink( (int) $input['id'] ),
+						'dry_run'       => true,
+						'changed_count' => count( $changed_ids ),
+						'changed_ids'   => $changed_ids,
+						'cache'         => $cache_details,
+					);
+				}
+
+				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['element_id'], $updated );
+				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
+				$json_data = wp_json_encode( $data );
+				if ( false === $json_data ) {
+					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
+				}
+				update_post_meta( (int) $input['id'], '_elementor_data', wp_slash( $json_data ) );
+				$cache_details = mcp_abilities_elementor_invalidate_after_write( (int) $input['id'], $requested_cache_scope );
+
+				return array(
+					'success'       => true,
+					'id'            => (int) $input['id'],
+					'element_id'    => (string) $input['element_id'],
+					'message'       => 'Responsive values normalized successfully',
+					'link'          => get_permalink( (int) $input['id'] ),
+					'dry_run'       => false,
+					'changed_count' => count( $changed_ids ),
+					'changed_ids'   => $changed_ids,
+					'cache'         => $cache_details,
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => false,
+					'idempotent'  => false,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Sync Component Variant
+	// =========================================================================
+	wp_register_ability(
+		'elementor/sync-component-variant',
+		array(
+			'label'               => 'Sync Elementor Component Variant',
+			'description'         => 'Copies design-relevant settings from one component subtree to another by matching node position and type. Useful when one hero/card/CTA block is the correct visual variant and a sibling section should inherit the same design treatment. Supports `dry_run`.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id', 'source_element_id', 'target_element_id' ),
+				'properties'           => array(
+					'id'                => array( 'type' => 'integer', 'description' => 'Post/Page ID containing both component subtrees.' ),
+					'source_element_id' => array( 'type' => 'string', 'description' => 'Source component root.' ),
+					'target_element_id' => array( 'type' => 'string', 'description' => 'Target component root.' ),
+					'allow_partial'     => array( 'type' => 'boolean', 'default' => false, 'description' => 'If true, sync across the overlapping subtree shape only.' ),
+					'include_keys'      => array( 'type' => 'array', 'items' => array( 'type' => 'string' ), 'description' => 'Optional extra settings keys to include beyond the built-in design filter.' ),
+					'dry_run'           => array( 'type' => 'boolean', 'default' => false, 'description' => 'If true, return changed IDs without writing.' ),
+					'cache_scope'       => array(
+						'type'        => 'string',
+						'enum'        => array( 'none', 'post', 'site' ),
+						'default'     => 'post',
+						'description' => 'Cache invalidation scope after write. Ignored when dry_run=true.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'           => array( 'type' => 'boolean' ),
+					'id'                => array( 'type' => 'integer' ),
+					'source_element_id' => array( 'type' => 'string' ),
+					'target_element_id' => array( 'type' => 'string' ),
+					'message'           => array( 'type' => 'string' ),
+					'link'              => array( 'type' => 'string' ),
+					'dry_run'           => array( 'type' => 'boolean' ),
+					'changed_count'     => array( 'type' => 'integer' ),
+					'changed_ids'       => array( 'type' => 'array', 'items' => array( 'type' => 'string' ) ),
+					'cache'             => array( 'type' => 'object' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input = is_array( $input ) ? $input : array();
+				if ( empty( $input['id'] ) ) {
+					return array( 'success' => false, 'message' => 'Post/Page ID is required' );
+				}
+				if ( empty( $input['source_element_id'] ) || empty( $input['target_element_id'] ) ) {
+					return array( 'success' => false, 'message' => 'source_element_id and target_element_id are required' );
+				}
+
+				$post = get_post( (int) $input['id'] );
+				if ( ! $post ) {
+					return array( 'success' => false, 'message' => 'Post not found' );
+				}
+				if ( ! current_user_can( 'edit_post', $post->ID ) ) {
+					return array( 'success' => false, 'message' => 'You do not have permission to update this post' );
+				}
+
+				$elementor_data = get_post_meta( (int) $input['id'], '_elementor_data', true );
+				if ( empty( $elementor_data ) ) {
+					return array( 'success' => false, 'message' => 'No Elementor data found for this post' );
+				}
+				$data = json_decode( $elementor_data, true );
+				if ( null === $data && JSON_ERROR_NONE !== json_last_error() ) {
+					return array( 'success' => false, 'message' => 'Failed to parse existing Elementor data' );
+				}
+
+				$source_meta = mcp_abilities_elementor_find_element_meta( $data, (string) $input['source_element_id'] );
+				$target_meta = mcp_abilities_elementor_find_element_meta( $data, (string) $input['target_element_id'] );
+				if ( ! is_array( $source_meta ) || ! is_array( $source_meta['element'] ?? null ) ) {
+					return array( 'success' => false, 'message' => 'Source element not found' );
+				}
+				if ( ! is_array( $target_meta ) || ! is_array( $target_meta['element'] ?? null ) ) {
+					return array( 'success' => false, 'message' => 'Target element not found' );
+				}
+
+				$changed_ids = array();
+				$allow_partial = ! empty( $input['allow_partial'] );
+				$include_keys = isset( $input['include_keys'] ) && is_array( $input['include_keys'] ) ? array_values( array_filter( $input['include_keys'], 'is_string' ) ) : array();
+				$updated = mcp_abilities_elementor_sync_component_variant_subtree(
+					$source_meta['element'],
+					$target_meta['element'],
+					$allow_partial,
+					$include_keys,
+					$changed_ids
+				);
+				$changed_ids = array_values( array_unique( array_filter( $changed_ids ) ) );
+				$dry_run = ! empty( $input['dry_run'] );
+				$requested_cache_scope = mcp_abilities_elementor_normalize_cache_scope( $input['cache_scope'] ?? 'post', 'post' );
+
+				if ( empty( $changed_ids ) ) {
+					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
+					$cache_details['post_id'] = (int) $input['id'];
+					return array(
+						'success'           => true,
+						'id'                => (int) $input['id'],
+						'source_element_id' => (string) $input['source_element_id'],
+						'target_element_id' => (string) $input['target_element_id'],
+						'message'           => 'Component variant sync produced no change',
+						'link'              => get_permalink( (int) $input['id'] ),
+						'dry_run'           => $dry_run,
+						'changed_count'     => 0,
+						'changed_ids'       => array(),
+						'cache'             => $cache_details,
+					);
+				}
+
+				if ( $dry_run ) {
+					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
+					$cache_details['post_id'] = (int) $input['id'];
+					return array(
+						'success'           => true,
+						'id'                => (int) $input['id'],
+						'source_element_id' => (string) $input['source_element_id'],
+						'target_element_id' => (string) $input['target_element_id'],
+						'message'           => 'Dry run: component variant would be synced',
+						'link'              => get_permalink( (int) $input['id'] ),
+						'dry_run'           => true,
+						'changed_count'     => count( $changed_ids ),
+						'changed_ids'       => $changed_ids,
+						'cache'             => $cache_details,
+					);
+				}
+
+				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['target_element_id'], $updated );
+				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
+				$json_data = wp_json_encode( $data );
+				if ( false === $json_data ) {
+					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
+				}
+				update_post_meta( (int) $input['id'], '_elementor_data', wp_slash( $json_data ) );
+				$cache_details = mcp_abilities_elementor_invalidate_after_write( (int) $input['id'], $requested_cache_scope );
+
+				return array(
+					'success'           => true,
+					'id'                => (int) $input['id'],
+					'source_element_id' => (string) $input['source_element_id'],
+					'target_element_id' => (string) $input['target_element_id'],
+					'message'           => 'Component variant synced successfully',
+					'link'              => get_permalink( (int) $input['id'] ),
+					'dry_run'           => false,
+					'changed_count'     => count( $changed_ids ),
+					'changed_ids'       => $changed_ids,
+					'cache'             => $cache_details,
 				);
 			},
 			'permission_callback' => function (): bool {
