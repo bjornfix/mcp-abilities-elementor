@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.2.30
+ * Version: 2.2.36
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -4723,6 +4723,139 @@ function mcp_abilities_elementor_collect_interactive_widget_usage( array $elemen
 }
 
 /**
+ * Normalize Elementor Pro popup display settings into a frontend-safe shape.
+ *
+ * Elementor Pro popup rendering expects both `triggers` and `timing` arrays to
+ * exist once popup display settings are saved. Earlier plugin writes could
+ * persist trigger-only arrays, which then surface as frontend warnings/fatals
+ * inside Elementor Pro popup rendering.
+ *
+ * @param mixed $popup_settings Raw popup settings meta.
+ * @return array
+ */
+function mcp_abilities_elementor_normalize_popup_display_settings( $popup_settings ): array {
+	$popup_settings = is_array( $popup_settings ) ? $popup_settings : array();
+	$triggers       = is_array( $popup_settings['triggers'] ?? null ) ? $popup_settings['triggers'] : array();
+	$timing         = is_array( $popup_settings['timing'] ?? null ) ? $popup_settings['timing'] : array();
+
+	// Elementor Pro popup documents expect `timing` to exist. If page-load
+	// triggering is enabled and no explicit delay is provided, treat it as 0.
+	if ( isset( $triggers['page_load'] ) && 'yes' === $triggers['page_load'] && ! isset( $timing['page_load_delay'] ) ) {
+		$timing['page_load_delay'] = 0;
+	}
+
+	$popup_settings['triggers'] = $triggers;
+	$popup_settings['timing']   = $timing;
+
+	return $popup_settings;
+}
+
+/**
+ * Convert high-level popup display input into Elementor Pro popup settings meta.
+ *
+ * @param array $popup_display User input payload.
+ * @param array $base_settings Existing popup settings.
+ * @return array
+ */
+function mcp_abilities_elementor_build_popup_display_settings( array $popup_display, array $base_settings = array() ): array {
+	$popup_settings = mcp_abilities_elementor_normalize_popup_display_settings( $base_settings );
+
+	if ( ! empty( $popup_display['triggers'] ) && is_array( $popup_display['triggers'] ) ) {
+		$popup_settings['triggers'] = array();
+		foreach ( $popup_display['triggers'] as $trigger ) {
+			if ( 'on_page_load' === $trigger ) {
+				$popup_settings['triggers']['page_load'] = 'yes';
+			} elseif ( 'on_scroll' === $trigger ) {
+				$popup_settings['triggers']['scrolling'] = 'yes';
+				$popup_settings['triggers']['scrolling_direction'] = 'down';
+			} elseif ( 'on_exit_intent' === $trigger ) {
+				$popup_settings['triggers']['exit_intent'] = 'yes';
+			} elseif ( 'on_click' === $trigger ) {
+				$popup_settings['triggers']['click'] = 'yes';
+				$popup_settings['triggers']['click_times'] = 1;
+			} elseif ( 'after_inactivity' === $trigger ) {
+				$popup_settings['triggers']['inactivity'] = 'yes';
+				$popup_settings['triggers']['inactivity_time'] = 30;
+			}
+		}
+	}
+
+	if ( ! empty( $popup_display['timing'] ) && is_array( $popup_display['timing'] ) ) {
+		$timing = $popup_display['timing'];
+		if ( isset( $timing['show_after'] ) ) {
+			$popup_settings['timing']['page_load_delay'] = (int) $timing['show_after'];
+		}
+		if ( isset( $timing['show_times'] ) ) {
+			$popup_settings['timing']['times_count'] = (int) $timing['show_times'];
+			$popup_settings['timing']['times']       = 'yes';
+		}
+	}
+
+	return mcp_abilities_elementor_normalize_popup_display_settings( $popup_settings );
+}
+
+/**
+ * Audit published Elementor Pro popup/theme-builder documents for known
+ * frontend-breaking metadata problems.
+ *
+ * @return array<string,mixed>
+ */
+function mcp_abilities_elementor_audit_theme_builder_runtime_health(): array {
+	$query = new WP_Query(
+		array(
+			'post_type'      => 'elementor_library',
+			'post_status'    => 'publish',
+			'posts_per_page' => 100,
+			'tax_query'      => array(
+				array(
+					'taxonomy' => 'elementor_library_type',
+					'field'    => 'slug',
+					'terms'    => array( 'popup', 'header', 'footer', 'single', 'archive' ),
+				),
+			),
+			'fields'         => 'ids',
+			'no_found_rows'  => true,
+		)
+	);
+
+	$issues = array();
+	foreach ( $query->posts as $template_id ) {
+		$template_id   = (int) $template_id;
+		$template_type = (string) get_post_meta( $template_id, '_elementor_template_type', true );
+		$title         = get_the_title( $template_id );
+
+		if ( 'popup' === $template_type ) {
+			$popup_settings = get_post_meta( $template_id, '_elementor_popup_display_settings', true );
+			$raw_is_array   = is_array( $popup_settings );
+			$triggers       = $raw_is_array && is_array( $popup_settings['triggers'] ?? null ) ? $popup_settings['triggers'] : array();
+			$timing         = $raw_is_array && is_array( $popup_settings['timing'] ?? null ) ? $popup_settings['timing'] : null;
+
+			if ( ! $raw_is_array || null === $timing || ( isset( $triggers['page_load'] ) && 'yes' === $triggers['page_load'] && ! isset( $timing['page_load_delay'] ) ) ) {
+				$issues[] = array(
+					'id'           => $template_id,
+					'title'        => $title,
+					'type'         => $template_type,
+					'issue'        => 'popup_display_settings_incomplete',
+					'details'      => array(
+						'has_settings_array' => $raw_is_array,
+						'has_triggers'       => ! empty( $triggers ),
+						'has_timing_array'   => is_array( $timing ),
+						'page_load_trigger'  => isset( $triggers['page_load'] ) && 'yes' === $triggers['page_load'],
+						'has_page_load_delay'=> is_array( $timing ) && isset( $timing['page_load_delay'] ),
+					),
+					'recommendation'=> 'Normalize popup display settings so both triggers and timing arrays exist before relying on interactive frontend runtime.',
+				);
+			}
+		}
+	}
+
+	return array(
+		'healthy' => empty( $issues ),
+		'issues'  => $issues,
+	);
+}
+
+/**
  * Audit whether the published page includes Elementor frontend runtime when needed.
  *
  * @param int   $post_id Post ID.
@@ -4810,6 +4943,16 @@ function mcp_abilities_elementor_audit_frontend_runtime_readiness( int $post_id,
 		}
 	}
 
+	$theme_builder_health = mcp_abilities_elementor_audit_theme_builder_runtime_health();
+	if ( ! empty( $theme_builder_health['healthy'] ) ) {
+		$theme_builder_health = array(
+			'healthy' => true,
+			'issues'  => array(),
+		);
+	} else {
+		$issues[] = 'theme_builder_runtime_health';
+	}
+
 	return array(
 		'required'                => true,
 		'ready'                   => empty( $issues ),
@@ -4817,6 +4960,7 @@ function mcp_abilities_elementor_audit_frontend_runtime_readiness( int $post_id,
 		'status_code'             => (int) wp_remote_retrieve_response_code( $response ),
 		'checks'                  => $checks,
 		'issues'                  => $issues,
+		'theme_builder_health'    => $theme_builder_health,
 		'interactive_widget_ids'  => array_values( array_map( static fn( array $item ): string => $item['id'], $interactive_usage ) ),
 		'interactive_widget_types'=> array_values( array_unique( array_map( static fn( array $item ): string => $item['widget_type'], $interactive_usage ) ) ),
 	);
@@ -4836,7 +4980,13 @@ function mcp_abilities_elementor_apply_frontend_runtime_guard( array $response, 
 
 	if ( ! empty( $guard['required'] ) && empty( $guard['ready'] ) ) {
 		$response['success'] = false;
-		$response['message'] = rtrim( (string) ( $response['message'] ?? 'Elementor write completed' ), '.' ) . '. Frontend runtime guard failed: interactive widgets are present but Elementor frontend assets/config are missing on the published page.';
+		$message = rtrim( (string) ( $response['message'] ?? 'Elementor write completed' ), '.' );
+		if ( ! empty( $guard['theme_builder_health']['issues'] ) ) {
+			$message .= '. Frontend runtime guard failed: interactive widgets are present, and one or more published Elementor Pro popup/theme-builder documents are in a frontend-breaking state.';
+		} else {
+			$message .= '. Frontend runtime guard failed: interactive widgets are present but Elementor frontend assets/config are missing on the published page.';
+		}
+		$response['message'] = $message;
 		$response['guard_failed'] = true;
 	}
 
@@ -4871,13 +5021,31 @@ function mcp_abilities_elementor_get_post_elements( int $post_id ): array {
  * @return int
  */
 function mcp_abilities_elementor_get_current_frontend_post_id(): int {
-	if ( ! is_singular() ) {
-		return 0;
+	$post_id = get_queried_object_id();
+	if ( is_numeric( $post_id ) && (int) $post_id > 0 ) {
+		return (int) $post_id;
 	}
 
-	$post_id = get_queried_object_id();
+	if ( is_front_page() ) {
+		$front_page_id = (int) get_option( 'page_on_front' );
+		if ( $front_page_id > 0 ) {
+			return $front_page_id;
+		}
+	}
 
-	return is_numeric( $post_id ) ? (int) $post_id : 0;
+	if ( is_home() ) {
+		$posts_page_id = (int) get_option( 'page_for_posts' );
+		if ( $posts_page_id > 0 ) {
+			return $posts_page_id;
+		}
+	}
+
+	global $post;
+	if ( $post instanceof WP_Post && $post->ID > 0 ) {
+		return (int) $post->ID;
+	}
+
+	return 0;
 }
 
 /**
@@ -4888,37 +5056,46 @@ function mcp_abilities_elementor_get_current_frontend_post_id(): int {
 function mcp_abilities_elementor_get_current_frontend_runtime_context(): array {
 	static $context = null;
 
-	if ( null !== $context ) {
-		return $context;
-	}
-
-	$context = array(
+	$default = array(
 		'needed'                   => false,
 		'post_id'                  => 0,
 		'interactive_widget_types' => array(),
 		'interactive_widget_ids'   => array(),
 	);
 
-	if ( is_admin() || wp_doing_ajax() || wp_doing_cron() || ! did_action( 'elementor/loaded' ) ) {
+	if ( null !== $context ) {
 		return $context;
+	}
+
+	if ( is_admin() || wp_doing_ajax() || wp_doing_cron() || ! did_action( 'elementor/loaded' ) ) {
+		return $default;
+	}
+
+	// Avoid caching a false negative before the main query is ready.
+	if ( ! did_action( 'wp' ) ) {
+		return $default;
 	}
 
 	$post_id = mcp_abilities_elementor_get_current_frontend_post_id();
 	if ( $post_id <= 0 ) {
+		$context = $default;
 		return $context;
 	}
 
 	if ( 'builder' !== get_post_meta( $post_id, '_elementor_edit_mode', true ) ) {
+		$context = $default;
 		return $context;
 	}
 
 	$elements = mcp_abilities_elementor_get_post_elements( $post_id );
 	if ( empty( $elements ) ) {
+		$context = $default;
 		return $context;
 	}
 
 	$interactive_usage = mcp_abilities_elementor_collect_interactive_widget_usage( $elements );
 	if ( empty( $interactive_usage ) ) {
+		$context = $default;
 		return $context;
 	}
 
@@ -4966,10 +5143,13 @@ function mcp_abilities_elementor_enqueue_frontend_runtime_when_needed(): void {
 		}
 	}
 
-	foreach ( array( 'elementor-frontend', 'elementor-pro-frontend' ) as $handle ) {
+	foreach ( array( 'elementor-webpack-runtime', 'elementor-frontend-modules', 'elementor-frontend', 'elementor-pro-frontend' ) as $handle ) {
 		if ( wp_script_is( $handle, 'registered' ) ) {
 			wp_enqueue_script( $handle );
 		}
+	}
+
+	foreach ( array( 'elementor-frontend', 'elementor-pro-frontend' ) as $handle ) {
 		if ( wp_style_is( $handle, 'registered' ) ) {
 			wp_enqueue_style( $handle );
 		}
@@ -4997,6 +5177,42 @@ function mcp_abilities_elementor_print_frontend_config_when_needed(): void {
 		if ( has_action( 'wp_footer', array( $elementor->frontend, 'print_config' ) ) ) {
 			remove_action( 'wp_footer', array( $elementor->frontend, 'print_config' ) );
 		}
+	}
+}
+
+/**
+ * Print a direct Elementor core runtime fallback when script handles never materialize.
+ *
+ * Some canvas/front-page setups expose Elementor config and CSS but never emit
+ * the core JS runtime handles. In that case, print the three core Elementor JS
+ * runtime assets directly so interactive widgets can still bootstrap.
+ *
+ * @return void
+ */
+function mcp_abilities_elementor_print_frontend_script_fallback_when_needed(): void {
+	$context = mcp_abilities_elementor_get_current_frontend_runtime_context();
+	if ( empty( $context['needed'] ) ) {
+		return;
+	}
+
+	$base_url = defined( 'ELEMENTOR_URL' ) ? trailingslashit( ELEMENTOR_URL ) : '';
+	if ( '' === $base_url ) {
+		return;
+	}
+
+	$version = defined( 'ELEMENTOR_VERSION' ) ? ELEMENTOR_VERSION : null;
+	$scripts = array(
+		$base_url . 'assets/js/webpack.runtime.min.js',
+		$base_url . 'assets/js/frontend-modules.min.js',
+		$base_url . 'assets/js/frontend.min.js',
+	);
+
+	foreach ( $scripts as $src ) {
+		$url = null === $version ? $src : add_query_arg( 'ver', $version, $src );
+		printf(
+			"<script src=\"%s\"></script>\n",
+			esc_url( $url )
+		);
 	}
 }
 
@@ -11598,60 +11814,8 @@ function mcp_abilities_elementor_register_abilities(): void {
 
 				// Set popup display settings (for popups).
 				if ( 'popup' === $input['type'] && ! empty( $input['popup_display'] ) && is_array( $input['popup_display'] ) ) {
-					$popup_settings = array();
-
-					// Process triggers.
-					if ( ! empty( $input['popup_display']['triggers'] ) ) {
-						foreach ( $input['popup_display']['triggers'] as $trigger ) {
-							if ( 'on_page_load' === $trigger ) {
-								$popup_settings['triggers'] = array_merge(
-									$popup_settings['triggers'] ?? array(),
-									array( 'page_load' => 'yes' )
-								);
-							} elseif ( 'on_scroll' === $trigger ) {
-								$popup_settings['triggers'] = array_merge(
-									$popup_settings['triggers'] ?? array(),
-									array( 'scrolling' => 'yes', 'scrolling_direction' => 'down' )
-								);
-							} elseif ( 'on_exit_intent' === $trigger ) {
-								$popup_settings['triggers'] = array_merge(
-									$popup_settings['triggers'] ?? array(),
-									array( 'exit_intent' => 'yes' )
-								);
-							} elseif ( 'on_click' === $trigger ) {
-								$popup_settings['triggers'] = array_merge(
-									$popup_settings['triggers'] ?? array(),
-									array( 'click' => 'yes', 'click_times' => 1 )
-								);
-							} elseif ( 'after_inactivity' === $trigger ) {
-								$popup_settings['triggers'] = array_merge(
-									$popup_settings['triggers'] ?? array(),
-									array( 'inactivity' => 'yes', 'inactivity_time' => 30 )
-								);
-							}
-						}
-					}
-
-					// Process timing.
-					if ( ! empty( $input['popup_display']['timing'] ) ) {
-						$timing = $input['popup_display']['timing'];
-						if ( isset( $timing['show_after'] ) ) {
-							$popup_settings['timing'] = array_merge(
-								$popup_settings['timing'] ?? array(),
-								array( 'page_load_delay' => (int) $timing['show_after'] )
-							);
-						}
-						if ( isset( $timing['show_times'] ) ) {
-							$popup_settings['timing'] = array_merge(
-								$popup_settings['timing'] ?? array(),
-								array( 'times_count' => (int) $timing['show_times'], 'times' => 'yes' )
-							);
-						}
-					}
-
-					if ( ! empty( $popup_settings ) ) {
-						update_post_meta( $post_id, '_elementor_popup_display_settings', $popup_settings );
-					}
+					$popup_settings = mcp_abilities_elementor_build_popup_display_settings( $input['popup_display'] );
+					update_post_meta( $post_id, '_elementor_popup_display_settings', $popup_settings );
 				}
 
 				// Set taxonomy term for template type (Elementor uses this for filtering).
@@ -11834,40 +11998,11 @@ function mcp_abilities_elementor_register_abilities(): void {
 
 				// Update popup display settings if provided.
 				if ( 'popup' === $template_type && ! empty( $input['popup_display'] ) && is_array( $input['popup_display'] ) ) {
-					$popup_settings = get_post_meta( $post->ID, '_elementor_popup_display_settings', true );
-					$popup_settings = is_array( $popup_settings ) ? $popup_settings : array();
-
-					if ( ! empty( $input['popup_display']['triggers'] ) ) {
-						$popup_settings['triggers'] = array();
-						foreach ( $input['popup_display']['triggers'] as $trigger ) {
-							if ( 'on_page_load' === $trigger ) {
-								$popup_settings['triggers']['page_load'] = 'yes';
-							} elseif ( 'on_scroll' === $trigger ) {
-								$popup_settings['triggers']['scrolling'] = 'yes';
-								$popup_settings['triggers']['scrolling_direction'] = 'down';
-							} elseif ( 'on_exit_intent' === $trigger ) {
-								$popup_settings['triggers']['exit_intent'] = 'yes';
-							} elseif ( 'on_click' === $trigger ) {
-								$popup_settings['triggers']['click'] = 'yes';
-								$popup_settings['triggers']['click_times'] = 1;
-							} elseif ( 'after_inactivity' === $trigger ) {
-								$popup_settings['triggers']['inactivity'] = 'yes';
-								$popup_settings['triggers']['inactivity_time'] = 30;
-							}
-						}
-					}
-
-					if ( ! empty( $input['popup_display']['timing'] ) ) {
-						$timing = $input['popup_display']['timing'];
-						if ( isset( $timing['show_after'] ) ) {
-							$popup_settings['timing']['page_load_delay'] = (int) $timing['show_after'];
-						}
-						if ( isset( $timing['show_times'] ) ) {
-							$popup_settings['timing']['times_count'] = (int) $timing['show_times'];
-							$popup_settings['timing']['times'] = 'yes';
-						}
-					}
-
+					$existing_popup_settings = get_post_meta( $post->ID, '_elementor_popup_display_settings', true );
+					$popup_settings = mcp_abilities_elementor_build_popup_display_settings(
+						$input['popup_display'],
+						is_array( $existing_popup_settings ) ? $existing_popup_settings : array()
+					);
 					update_post_meta( $post->ID, '_elementor_popup_display_settings', $popup_settings );
 				}
 
@@ -14575,6 +14710,8 @@ function mcp_abilities_elementor_register_abilities(): void {
 	);
 }
 add_action( 'wp_enqueue_scripts', 'mcp_abilities_elementor_enqueue_frontend_runtime_when_needed', 5 );
+add_action( 'elementor/frontend/after_register_scripts', 'mcp_abilities_elementor_enqueue_frontend_runtime_when_needed', 5 );
 add_action( 'wp_head', 'mcp_abilities_elementor_print_frontend_config_when_needed', 1 );
+add_action( 'wp_head', 'mcp_abilities_elementor_print_frontend_script_fallback_when_needed', 2 );
 add_action( 'wp_head', 'mcp_abilities_elementor_print_footer_scripts_early_when_needed', 999 );
 add_action( 'wp_abilities_api_init', 'mcp_abilities_elementor_register_abilities' );

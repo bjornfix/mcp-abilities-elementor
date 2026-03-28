@@ -6,7 +6,7 @@ Elementor page builder integration for WordPress via MCP.
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 
 **Tested up to:** 6.9
-**Stable tag:** 2.2.30
+**Stable tag:** 2.2.36
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -281,6 +281,26 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 ```
 
 ## Changelog
+
+### 2.2.36
+
+- Normalize Elementor Pro popup display settings so `triggers` and `timing` stay frontend-safe on popup writes.
+- Extend the interactive frontend runtime guard to surface broken published popup/theme-builder documents when they are the likely root cause of missing interactive JS.
+
+### 2.2.35
+- Fixed: the direct JS fallback no longer skips itself just because Elementor marked script handles as enqueued on templates that still never print those handles.
+
+### 2.2.34
+- Fixed: when Elementor config/CSS load but the JS runtime handles still never emit, runtime repair now prints the core Elementor JS assets directly as a last-resort frontend fallback for interactive documents.
+
+### 2.2.33
+- Fixed: runtime repair now explicitly enqueues Elementor JS runtime handles and re-runs at Elementor's script-registration stage, closing the gap where config and CSS loaded but `window.elementorFrontend` never booted.
+
+### 2.2.32
+- Fixed: runtime repair now resolves the current frontend document more reliably on static front-page and posts-page requests instead of depending only on `is_singular()`.
+
+### 2.2.31
+- Fixed: frontend runtime repair no longer caches a false negative before the main WordPress query is ready, so interactive Elementor pages can actually bootstrap their runtime on the frontend.
 
 ### 2.2.30
 - Added: frontend runtime guard diagnostics on Elementor write abilities so interactive-widget documents fail loudly when the published page is missing Elementor runtime.
