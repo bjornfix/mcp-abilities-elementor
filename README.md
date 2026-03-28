@@ -6,7 +6,7 @@ Elementor page builder integration for WordPress via MCP.
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 
 **Tested up to:** 6.9
-**Stable tag:** 2.2.29
+**Stable tag:** 2.2.30
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -281,6 +281,10 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 ```
 
 ## Changelog
+
+### 2.2.30
+- Added: frontend runtime guard diagnostics on Elementor write abilities so interactive-widget documents fail loudly when the published page is missing Elementor runtime.
+- Added: conditional frontend runtime repair hooks that enqueue Elementor frontend assets, print `elementorFrontendConfig`, and print queued runtime scripts early for interactive Elementor documents on canvas-like templates.
 
 ### 2.2.29
 - Added: `elementor/get-official-widget-catalog` to fetch the full official widget catalog from `https://elementor.com/widgets`, grouped into Basic, Pro, Theme, and WooCommerce categories

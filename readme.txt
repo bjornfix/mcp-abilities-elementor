@@ -3,7 +3,7 @@ Contributors: devenia
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 6.9
-Stable tag: 2.2.29
+Stable tag: 2.2.30
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -62,6 +62,10 @@ Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilit
 
 = 2.2.28 =
 * Improved: `elementor/get-theme-context`, `elementor/get-style-guide`, `elementor/evaluate-design`, and `elementor/suggest-design-fixes` now expose `guidance_basis` alongside `source_policy`, explicitly separating official Elementor-doc-backed topics from plugin heuristic audits
+
+= 2.2.30 =
+* Added: frontend runtime guard diagnostics on Elementor write abilities so interactive-widget documents fail loudly when the published page is missing Elementor runtime.
+* Added: conditional frontend runtime repair hooks that enqueue Elementor frontend assets, print `elementorFrontendConfig`, and print queued runtime scripts early for interactive Elementor documents on canvas-like templates.
 
 = 2.2.29 =
 * Added: `elementor/get-official-widget-catalog` to fetch the full official widget catalog from `https://elementor.com/widgets`, grouped into Basic, Pro, Theme, and WooCommerce categories

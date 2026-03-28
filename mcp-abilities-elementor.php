@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.2.29
+ * Version: 2.2.30
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -4644,6 +4644,388 @@ function mcp_abilities_elementor_invalidate_after_write( int $post_id, string $c
 }
 
 /**
+ * Collect widget usage from an Elementor document tree.
+ *
+ * @param array $elements Elementor elements tree.
+ * @return array<int, array{id:string, widget_type:string}>
+ */
+function mcp_abilities_elementor_collect_widget_usage( array $elements ): array {
+	$usage = array();
+
+	$walk = function ( array $nodes ) use ( &$walk, &$usage ): void {
+		foreach ( $nodes as $node ) {
+			if ( ! is_array( $node ) ) {
+				continue;
+			}
+
+			if ( 'widget' === ( $node['elType'] ?? null ) && ! empty( $node['widgetType'] ) ) {
+				$usage[] = array(
+					'id'          => (string) ( $node['id'] ?? '' ),
+					'widget_type' => (string) $node['widgetType'],
+				);
+			}
+
+			if ( ! empty( $node['elements'] ) && is_array( $node['elements'] ) ) {
+				$walk( $node['elements'] );
+			}
+		}
+	};
+
+	$walk( $elements );
+
+	return $usage;
+}
+
+/**
+ * Return interactive widget usage that depends on Elementor frontend runtime.
+ *
+ * @param array $elements Elementor elements tree.
+ * @return array<int, array{id:string, widget_type:string}>
+ */
+function mcp_abilities_elementor_collect_interactive_widget_usage( array $elements ): array {
+	$interactive_widget_types = array(
+		'accordion',
+		'tabs',
+		'toggle',
+		'nested-tabs',
+		'nested-accordion',
+		'image-carousel',
+		'media-carousel',
+		'testimonial-carousel',
+		'slides',
+		'loop-carousel',
+		'loop-grid',
+		'video',
+		'animated-headline',
+		'nav-menu',
+		'search-form',
+		'posts',
+		'portfolio',
+		'gallery',
+		'form',
+		'login',
+		'lottie',
+		'price-table',
+		'hotspot',
+		'flip-box',
+	);
+
+	$usage = mcp_abilities_elementor_collect_widget_usage( $elements );
+
+	return array_values(
+		array_filter(
+			$usage,
+			static function ( array $item ) use ( $interactive_widget_types ): bool {
+				return in_array( $item['widget_type'], $interactive_widget_types, true );
+			}
+		)
+	);
+}
+
+/**
+ * Audit whether the published page includes Elementor frontend runtime when needed.
+ *
+ * @param int   $post_id Post ID.
+ * @param array $elements Elementor elements tree after write.
+ * @return array<string,mixed>
+ */
+function mcp_abilities_elementor_audit_frontend_runtime_readiness( int $post_id, array $elements ): array {
+	$post = get_post( $post_id );
+	if ( ! $post ) {
+		return array(
+			'required' => false,
+			'ready'    => false,
+			'skipped'  => true,
+			'reason'   => 'post_not_found',
+		);
+	}
+
+	$interactive_usage = mcp_abilities_elementor_collect_interactive_widget_usage( $elements );
+	if ( empty( $interactive_usage ) ) {
+		return array(
+			'required' => false,
+			'ready'    => true,
+			'skipped'  => true,
+			'reason'   => 'no_interactive_widgets',
+		);
+	}
+
+	if ( 'publish' !== $post->post_status ) {
+		return array(
+			'required'                => true,
+			'ready'                   => true,
+			'skipped'                 => true,
+			'reason'                  => 'post_not_published',
+			'interactive_widget_ids'  => array_values( array_map( static fn( array $item ): string => $item['id'], $interactive_usage ) ),
+			'interactive_widget_types'=> array_values( array_unique( array_map( static fn( array $item ): string => $item['widget_type'], $interactive_usage ) ) ),
+		);
+	}
+
+	$url = get_permalink( $post_id );
+	if ( empty( $url ) ) {
+		return array(
+			'required'                => true,
+			'ready'                   => false,
+			'skipped'                 => true,
+			'reason'                  => 'missing_permalink',
+			'interactive_widget_ids'  => array_values( array_map( static fn( array $item ): string => $item['id'], $interactive_usage ) ),
+			'interactive_widget_types'=> array_values( array_unique( array_map( static fn( array $item ): string => $item['widget_type'], $interactive_usage ) ) ),
+		);
+	}
+
+	$response = wp_remote_get(
+		$url,
+		array(
+			'timeout' => 15,
+			'headers' => array(
+				'Cache-Control' => 'no-cache',
+				'Pragma'        => 'no-cache',
+			),
+		)
+	);
+
+	if ( is_wp_error( $response ) ) {
+		return array(
+			'required'                => true,
+			'ready'                   => false,
+			'url'                     => $url,
+			'fetch_error'             => $response->get_error_message(),
+			'interactive_widget_ids'  => array_values( array_map( static fn( array $item ): string => $item['id'], $interactive_usage ) ),
+			'interactive_widget_types'=> array_values( array_unique( array_map( static fn( array $item ): string => $item['widget_type'], $interactive_usage ) ) ),
+		);
+	}
+
+	$body = (string) wp_remote_retrieve_body( $response );
+	$checks = array(
+		'has_frontend_config'  => false !== strpos( $body, 'elementorFrontendConfig' ),
+		'has_webpack_runtime'  => false !== strpos( $body, '/elementor/assets/js/webpack.runtime.min.js' ),
+		'has_frontend_modules' => false !== strpos( $body, '/elementor/assets/js/frontend-modules.min.js' ),
+		'has_frontend_script'  => false !== strpos( $body, '/elementor/assets/js/frontend.min.js' ),
+	);
+
+	$issues = array();
+	foreach ( $checks as $key => $passed ) {
+		if ( ! $passed ) {
+			$issues[] = $key;
+		}
+	}
+
+	return array(
+		'required'                => true,
+		'ready'                   => empty( $issues ),
+		'url'                     => $url,
+		'status_code'             => (int) wp_remote_retrieve_response_code( $response ),
+		'checks'                  => $checks,
+		'issues'                  => $issues,
+		'interactive_widget_ids'  => array_values( array_map( static fn( array $item ): string => $item['id'], $interactive_usage ) ),
+		'interactive_widget_types'=> array_values( array_unique( array_map( static fn( array $item ): string => $item['widget_type'], $interactive_usage ) ) ),
+	);
+}
+
+/**
+ * Attach frontend runtime guard results to a write response.
+ *
+ * @param array $response Write response.
+ * @param int   $post_id Post ID.
+ * @param array $elements Elementor elements tree after write.
+ * @return array
+ */
+function mcp_abilities_elementor_apply_frontend_runtime_guard( array $response, int $post_id, array $elements ): array {
+	$guard = mcp_abilities_elementor_audit_frontend_runtime_readiness( $post_id, $elements );
+	$response['frontend_runtime'] = $guard;
+
+	if ( ! empty( $guard['required'] ) && empty( $guard['ready'] ) ) {
+		$response['success'] = false;
+		$response['message'] = rtrim( (string) ( $response['message'] ?? 'Elementor write completed' ), '.' ) . '. Frontend runtime guard failed: interactive widgets are present but Elementor frontend assets/config are missing on the published page.';
+		$response['guard_failed'] = true;
+	}
+
+	return $response;
+}
+
+/**
+ * Decode Elementor document data for a post.
+ *
+ * @param int $post_id Post ID.
+ * @return array<int,mixed>
+ */
+function mcp_abilities_elementor_get_post_elements( int $post_id ): array {
+	$raw = get_post_meta( $post_id, '_elementor_data', true );
+
+	if ( is_array( $raw ) ) {
+		return $raw;
+	}
+
+	if ( ! is_string( $raw ) || '' === trim( $raw ) ) {
+		return array();
+	}
+
+	$data = json_decode( wp_unslash( $raw ), true );
+
+	return is_array( $data ) ? $data : array();
+}
+
+/**
+ * Return the currently queried singular post ID when available.
+ *
+ * @return int
+ */
+function mcp_abilities_elementor_get_current_frontend_post_id(): int {
+	if ( ! is_singular() ) {
+		return 0;
+	}
+
+	$post_id = get_queried_object_id();
+
+	return is_numeric( $post_id ) ? (int) $post_id : 0;
+}
+
+/**
+ * Detect whether the current frontend request needs Elementor runtime repair.
+ *
+ * @return array<string,mixed>
+ */
+function mcp_abilities_elementor_get_current_frontend_runtime_context(): array {
+	static $context = null;
+
+	if ( null !== $context ) {
+		return $context;
+	}
+
+	$context = array(
+		'needed'                   => false,
+		'post_id'                  => 0,
+		'interactive_widget_types' => array(),
+		'interactive_widget_ids'   => array(),
+	);
+
+	if ( is_admin() || wp_doing_ajax() || wp_doing_cron() || ! did_action( 'elementor/loaded' ) ) {
+		return $context;
+	}
+
+	$post_id = mcp_abilities_elementor_get_current_frontend_post_id();
+	if ( $post_id <= 0 ) {
+		return $context;
+	}
+
+	if ( 'builder' !== get_post_meta( $post_id, '_elementor_edit_mode', true ) ) {
+		return $context;
+	}
+
+	$elements = mcp_abilities_elementor_get_post_elements( $post_id );
+	if ( empty( $elements ) ) {
+		return $context;
+	}
+
+	$interactive_usage = mcp_abilities_elementor_collect_interactive_widget_usage( $elements );
+	if ( empty( $interactive_usage ) ) {
+		return $context;
+	}
+
+	$context = array(
+		'needed'                   => true,
+		'post_id'                  => $post_id,
+		'interactive_widget_types' => array_values( array_unique( array_map( static fn( array $item ): string => $item['widget_type'], $interactive_usage ) ) ),
+		'interactive_widget_ids'   => array_values( array_map( static fn( array $item ): string => $item['id'], $interactive_usage ) ),
+	);
+
+	return $context;
+}
+
+/**
+ * Conditionally enqueue Elementor frontend runtime for interactive Elementor documents.
+ *
+ * @return void
+ */
+function mcp_abilities_elementor_enqueue_frontend_runtime_when_needed(): void {
+	$context = mcp_abilities_elementor_get_current_frontend_runtime_context();
+	if ( empty( $context['needed'] ) || ! class_exists( '\Elementor\Plugin' ) ) {
+		return;
+	}
+
+	$elementor = \Elementor\Plugin::instance();
+
+	if ( isset( $elementor->frontend ) ) {
+		if ( method_exists( $elementor->frontend, 'enqueue_styles' ) ) {
+			$elementor->frontend->enqueue_styles();
+		}
+		if ( method_exists( $elementor->frontend, 'enqueue_scripts' ) ) {
+			$elementor->frontend->enqueue_scripts();
+		}
+	}
+
+	if ( class_exists( '\ElementorPro\Plugin' ) ) {
+		$elementor_pro = \ElementorPro\Plugin::instance();
+		if ( isset( $elementor_pro->frontend ) ) {
+			if ( method_exists( $elementor_pro->frontend, 'enqueue_styles' ) ) {
+				$elementor_pro->frontend->enqueue_styles();
+			}
+			if ( method_exists( $elementor_pro->frontend, 'enqueue_scripts' ) ) {
+				$elementor_pro->frontend->enqueue_scripts();
+			}
+		}
+	}
+
+	foreach ( array( 'elementor-frontend', 'elementor-pro-frontend' ) as $handle ) {
+		if ( wp_script_is( $handle, 'registered' ) ) {
+			wp_enqueue_script( $handle );
+		}
+		if ( wp_style_is( $handle, 'registered' ) ) {
+			wp_enqueue_style( $handle );
+		}
+	}
+}
+
+/**
+ * Print Elementor frontend config early when interactive widgets require runtime bootstrap.
+ *
+ * @return void
+ */
+function mcp_abilities_elementor_print_frontend_config_when_needed(): void {
+	$context = mcp_abilities_elementor_get_current_frontend_runtime_context();
+	if ( empty( $context['needed'] ) || ! class_exists( '\Elementor\Plugin' ) ) {
+		return;
+	}
+
+	$elementor = \Elementor\Plugin::instance();
+	if ( ! isset( $elementor->frontend ) ) {
+		return;
+	}
+
+	if ( method_exists( $elementor->frontend, 'print_config' ) ) {
+		$elementor->frontend->print_config();
+		if ( has_action( 'wp_footer', array( $elementor->frontend, 'print_config' ) ) ) {
+			remove_action( 'wp_footer', array( $elementor->frontend, 'print_config' ) );
+		}
+	}
+}
+
+/**
+ * Print footer scripts early as a fallback when interactive Elementor pages need runtime boot.
+ *
+ * Canvas-like templates can omit the usual footer script output, so print the
+ * queued runtime in-head as a last resort when Elementor frontend handles are enqueued.
+ *
+ * @return void
+ */
+function mcp_abilities_elementor_print_footer_scripts_early_when_needed(): void {
+	$context = mcp_abilities_elementor_get_current_frontend_runtime_context();
+	if ( empty( $context['needed'] ) || did_action( 'wp_print_footer_scripts' ) ) {
+		return;
+	}
+
+	if ( ! wp_script_is( 'elementor-frontend', 'enqueued' ) && ! wp_script_is( 'elementor-pro-frontend', 'enqueued' ) ) {
+		return;
+	}
+
+	wp_print_footer_scripts();
+
+	if ( has_action( 'wp_footer', 'wp_print_footer_scripts' ) ) {
+		remove_action( 'wp_footer', 'wp_print_footer_scripts', 20 );
+	}
+}
+
+/**
  * Normalize theme builder conditions into Elementor's string format.
  *
  * @param array $conditions Raw conditions array.
@@ -5011,13 +5393,19 @@ function mcp_abilities_elementor_register_abilities(): void {
 					$requested_cache_scope
 				);
 
-				return array(
+				$response = array(
 					'success'   => true,
 					'id'        => $input['id'],
 					'message'   => 'Elementor data updated successfully',
 					'link'      => get_permalink( $input['id'] ),
 					'unchanged' => false,
 					'cache'     => $cache_details,
+				);
+
+				return mcp_abilities_elementor_apply_frontend_runtime_guard(
+					$response,
+					(int) $input['id'],
+					$normalized_data
 				);
 			},
 			'permission_callback' => function (): bool {
@@ -5166,7 +5554,7 @@ function mcp_abilities_elementor_register_abilities(): void {
 					$requested_cache_scope
 				);
 
-				return array(
+				$response = array(
 					'success'   => true,
 					'source_id' => $source->ID,
 					'target_id' => $target->ID,
@@ -5174,6 +5562,12 @@ function mcp_abilities_elementor_register_abilities(): void {
 					'link'      => get_permalink( $target->ID ),
 					'unchanged' => false,
 					'cache'     => $cache_details,
+				);
+
+				return mcp_abilities_elementor_apply_frontend_runtime_guard(
+					$response,
+					(int) $target->ID,
+					$normalized_source_data
 				);
 			},
 			'permission_callback' => function (): bool {
@@ -5314,13 +5708,19 @@ function mcp_abilities_elementor_register_abilities(): void {
 					mcp_abilities_elementor_normalize_cache_scope( $input['cache_scope'] ?? 'post', 'post' )
 				);
 
-				return array(
+				$response = array(
 					'success'      => true,
 					'id'           => $input['id'],
 					'replacements' => $count,
 					'message'      => "Successfully replaced {$count} occurrence(s) in Elementor data",
 					'link'         => get_permalink( $input['id'] ),
 					'cache'        => $cache_details,
+				);
+
+				return mcp_abilities_elementor_apply_frontend_runtime_guard(
+					$response,
+					(int) $input['id'],
+					$normalized_data
 				);
 			},
 			'permission_callback' => function (): bool {
@@ -5561,7 +5961,7 @@ function mcp_abilities_elementor_register_abilities(): void {
 					$requested_cache_scope
 				);
 
-				return array(
+				$response = array(
 					'success'    => true,
 					'id'         => $input['id'],
 					'element_id' => $input['element_id'],
@@ -5569,6 +5969,12 @@ function mcp_abilities_elementor_register_abilities(): void {
 					'link'       => get_permalink( $input['id'] ),
 					'unchanged'  => false,
 					'cache'      => $cache_details,
+				);
+
+				return mcp_abilities_elementor_apply_frontend_runtime_guard(
+					$response,
+					(int) $input['id'],
+					$data
 				);
 			},
 			'permission_callback' => function (): bool {
@@ -14168,4 +14574,7 @@ function mcp_abilities_elementor_register_abilities(): void {
 		)
 	);
 }
+add_action( 'wp_enqueue_scripts', 'mcp_abilities_elementor_enqueue_frontend_runtime_when_needed', 5 );
+add_action( 'wp_head', 'mcp_abilities_elementor_print_frontend_config_when_needed', 1 );
+add_action( 'wp_head', 'mcp_abilities_elementor_print_footer_scripts_early_when_needed', 999 );
 add_action( 'wp_abilities_api_init', 'mcp_abilities_elementor_register_abilities' );
