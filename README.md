@@ -6,7 +6,7 @@ Elementor page builder integration for WordPress via MCP.
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 
 **Tested up to:** 6.9
-**Stable tag:** 2.2.25
+**Stable tag:** 2.2.26
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -276,6 +276,9 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 ```
 
 ## Changelog
+
+### 2.2.26
+- Fixed: `elementor/audit-native-widget-opportunities` is now narrower and no longer treats editorial trios or mixed case-study sections as generic Accordion/Tabs candidates just because they contain repeated heading+copy content
 
 ### 2.2.25
 - Added: `elementor/audit-native-widget-opportunities` to identify where hand-built container patterns are better served by native Elementor widgets such as Accordion, Nested Tabs, Call to Action, or Icon List

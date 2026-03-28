@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.2.25
+ * Version: 2.2.26
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -1998,6 +1998,8 @@ function mcp_abilities_elementor_finalize_native_widget_opportunity_audit( array
 
 	$walk = static function ( array $element ) use ( &$walk, &$opportunities, $sources ): void {
 		if ( 'container' === ( $element['elType'] ?? '' ) ) {
+			$element_settings = is_array( $element['settings'] ?? null ) ? $element['settings'] : array();
+			$parent_direction = strtolower( (string) ( $element_settings['flex_direction'] ?? '' ) );
 			$children = array_values(
 				array_filter(
 					(array) ( $element['elements'] ?? array() ),
@@ -2008,7 +2010,29 @@ function mcp_abilities_elementor_finalize_native_widget_opportunity_audit( array
 			);
 
 			if ( count( $children ) >= 3 ) {
-				$child_stats = array_map( 'mcp_abilities_elementor_build_subtree_widget_stats', $children );
+				$substantive_children = array();
+				$child_stats          = array();
+
+				foreach ( $children as $child ) {
+					$stats      = mcp_abilities_elementor_build_subtree_widget_stats( $child );
+					$word_count = mcp_abilities_elementor_count_subtree_words( $child );
+					$total_bits = array_sum( $stats ) + $word_count;
+					if ( $total_bits <= 0 ) {
+						continue;
+					}
+					$substantive_children[] = $child;
+					$child_stats[]          = $stats;
+				}
+
+				if ( count( $substantive_children ) < 3 ) {
+					foreach ( (array) ( $element['elements'] ?? array() ) as $child ) {
+						if ( is_array( $child ) ) {
+							$walk( $child );
+						}
+					}
+					return;
+				}
+
 				$service_like = true;
 				$promo_like   = true;
 				$lean_list    = true;
@@ -2031,7 +2055,7 @@ function mcp_abilities_elementor_finalize_native_widget_opportunity_audit( array
 					}
 				}
 
-				if ( $service_like ) {
+				if ( $service_like && 'column' === $parent_direction && count( $substantive_children ) >= 4 ) {
 					$opportunities[] = array(
 						'element_id'      => (string) ( $element['id'] ?? '' ),
 						'pattern'         => 'repeated_service_items',
@@ -2041,7 +2065,7 @@ function mcp_abilities_elementor_finalize_native_widget_opportunity_audit( array
 					);
 				}
 
-				if ( $promo_like ) {
+				if ( $promo_like && count( $substantive_children ) >= 3 ) {
 					$opportunities[] = array(
 						'element_id'      => (string) ( $element['id'] ?? '' ),
 						'pattern'         => 'promo_modules',
@@ -2051,7 +2075,7 @@ function mcp_abilities_elementor_finalize_native_widget_opportunity_audit( array
 					);
 				}
 
-				if ( $lean_list ) {
+				if ( $lean_list && 'column' === $parent_direction && count( $substantive_children ) >= 4 ) {
 					$opportunities[] = array(
 						'element_id'      => (string) ( $element['id'] ?? '' ),
 						'pattern'         => 'concise_capability_list',
