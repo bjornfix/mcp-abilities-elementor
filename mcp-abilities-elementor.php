@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.2.26
+ * Version: 2.2.29
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -61,6 +61,257 @@ function mcp_abilities_elementor_normalize_cache_scope( $raw, string $default = 
 	}
 
 	return $default;
+}
+
+/**
+ * Return the official Elementor guidance catalog used by design audits.
+ *
+ * Pattern and widget recommendations should be grounded in Elementor's own
+ * documentation first. Site-local payloads are only fallback implementation
+ * references when a recommendation has already been chosen from official docs.
+ *
+ * @return array
+ */
+function mcp_abilities_elementor_get_official_guidance_catalog(): array {
+	return array(
+		'policy'  => array(
+			'pattern_source_of_truth'      => 'official_elementor_docs_first',
+			'implementation_fallback_only' => 'site_local_payloads_after_pattern_choice',
+			'description'                  => 'Use Elementor.com as the canonical source for widget/layout pattern recommendations. Inspect local Elementor payloads only after the official pattern choice is clear, and only to satisfy serialization or implementation details.',
+		),
+		'layout'  => array(
+			'grid_for_symmetric_columns' => array(
+				'label' => 'Grid for equal symmetric columns',
+				'url'   => 'https://elementor.com/help/create-a-grid-container/',
+			),
+			'grid_vs_flex' => array(
+				'label' => 'Grid vs Flex layout options',
+				'url'   => 'https://elementor.com/help/grid-container-layout-options/',
+			),
+		),
+		'widgets' => array(
+			'accordion' => array(
+				'label' => 'Accordion widget',
+				'url'   => 'https://elementor.com/help/accordion-widget/',
+			),
+			'tabs' => array(
+				'label' => 'Tabs widget with nested containers',
+				'url'   => 'https://elementor.com/help/tabs-with-nested-containers/',
+			),
+			'call_to_action' => array(
+				'label' => 'Call to Action widget',
+				'url'   => 'https://elementor.com/help/call-to-action-widget/',
+			),
+			'icon_list' => array(
+				'label' => 'Icon List widget',
+				'url'   => 'https://elementor.com/help/icon-list-widget/',
+			),
+		),
+	);
+}
+
+/**
+ * Return which design topics are grounded in official Elementor docs versus
+ * internal plugin heuristics.
+ *
+ * @return array
+ */
+function mcp_abilities_elementor_get_design_guidance_basis(): array {
+	return array(
+		'official_elementor_topics' => array(
+			'layout_mechanism_fit',
+			'native_widget_opportunities',
+		),
+		'plugin_heuristic_topics'   => array(
+			'generic_layout',
+			'distinctiveness',
+			'component_overuse',
+			'surface_overuse',
+			'emphasis_drift',
+			'section_rivalry',
+			'composition_rhythm',
+			'separator_discipline',
+			'column_patterns',
+			'column_dominance',
+			'column_alignment',
+			'column_balance',
+			'column_necessity',
+		),
+		'description'               => 'Official Elementor.com guidance should drive widget/layout pattern choice where Elementor explicitly documents the mechanism or widget fit. The remaining design audits are plugin heuristics intended to review composition, pacing, emphasis, and repetition without pretending they are official Elementor rules.',
+	);
+}
+
+/**
+ * Normalize a widget name into a stable slug-like token.
+ *
+ * @param string $name Widget name.
+ * @return string
+ */
+function mcp_abilities_elementor_normalize_widget_catalog_slug( string $name ): string {
+	$slug = strtolower( trim( $name ) );
+	$slug = preg_replace( '/[^a-z0-9]+/', '-', $slug ) ?? $slug;
+	$slug = trim( $slug, '-' );
+
+	return $slug;
+}
+
+/**
+ * Fetch the official Elementor widget catalog from elementor.com/widgets.
+ *
+ * This provides the canonical availability surface for Elementor widgets.
+ * Per-widget help pages can still be layered on later, but the catalog itself
+ * should come from Elementor's official widgets index rather than from our own
+ * sites or a hand-maintained shortlist.
+ *
+ * @param bool $force_refresh Whether to bypass transient cache.
+ * @return array|\WP_Error
+ */
+function mcp_abilities_elementor_fetch_official_widget_catalog( bool $force_refresh = false ) {
+	$transient_key = 'mcp_elem_official_widget_catalog_v1';
+
+	if ( ! $force_refresh ) {
+		$cached = get_transient( $transient_key );
+		if ( is_array( $cached ) && ! empty( $cached['categories'] ) ) {
+			return $cached;
+		}
+	}
+
+	$response = wp_remote_get(
+		'https://elementor.com/widgets',
+		array(
+			'timeout'     => 20,
+			'redirection' => 5,
+			'headers'     => array(
+				'Accept' => 'text/html',
+			),
+		)
+	);
+
+	if ( is_wp_error( $response ) ) {
+		return $response;
+	}
+
+	$status = (int) wp_remote_retrieve_response_code( $response );
+	if ( $status < 200 || $status >= 300 ) {
+		return new WP_Error( 'widget_catalog_fetch_failed', 'Failed to fetch official Elementor widget catalog' );
+	}
+
+	$html = (string) wp_remote_retrieve_body( $response );
+	if ( '' === trim( $html ) ) {
+		return new WP_Error( 'widget_catalog_empty', 'Official Elementor widget catalog response was empty' );
+	}
+
+	$recognized_h2s = array(
+		'Basic Widgets'       => 'basic',
+		'Pro Widgets'         => 'pro',
+		'Theme Elements'      => 'theme',
+		'WooCommerce Widgets' => 'woocommerce',
+	);
+	$category_labels = array(
+		'basic'       => 'Basic Widgets',
+		'pro'         => 'Pro Widgets',
+		'theme'       => 'Theme Elements',
+		'woocommerce' => 'WooCommerce Widgets',
+	);
+	$categories = array(
+		'basic'       => array(),
+		'pro'         => array(),
+		'theme'       => array(),
+		'woocommerce' => array(),
+	);
+
+	if ( class_exists( 'DOMDocument' ) && class_exists( 'DOMXPath' ) ) {
+		$dom = new DOMDocument();
+		libxml_use_internal_errors( true );
+		$loaded = $dom->loadHTML( $html, LIBXML_NOERROR | LIBXML_NOWARNING );
+		libxml_clear_errors();
+
+		if ( ! $loaded ) {
+			return new WP_Error( 'widget_catalog_parse_failed', 'Failed to parse official Elementor widget catalog HTML' );
+		}
+
+		$xpath            = new DOMXPath( $dom );
+		$current_category = '';
+		$nodes            = $xpath->query( '//h2 | //h3' );
+		if ( false === $nodes ) {
+			return new WP_Error( 'widget_catalog_xpath_failed', 'Failed to inspect official Elementor widget catalog structure' );
+		}
+
+		foreach ( $nodes as $node ) {
+			$text = trim( preg_replace( '/\s+/', ' ', (string) $node->textContent ) ?? '' );
+			if ( '' === $text ) {
+				continue;
+			}
+
+			if ( 'h2' === strtolower( $node->nodeName ) ) {
+				$current_category = $recognized_h2s[ $text ] ?? '';
+				continue;
+			}
+
+			if ( '' === $current_category || 'h3' !== strtolower( $node->nodeName ) ) {
+				continue;
+			}
+
+			$categories[ $current_category ][ $text ] = array(
+				'name'               => $text,
+				'slug'               => mcp_abilities_elementor_normalize_widget_catalog_slug( $text ),
+				'category'           => $current_category,
+				'category_label'     => $category_labels[ $current_category ],
+				'catalog_source_url' => 'https://elementor.com/widgets',
+			);
+		}
+	} else {
+		$heading_order = array_keys( $recognized_h2s );
+		foreach ( $heading_order as $index => $heading_label ) {
+			$current_category = $recognized_h2s[ $heading_label ];
+			$pattern          = '#<h2[^>]*>\s*' . preg_quote( $heading_label, '#' ) . '\s*</h2>(.*?)(?=<h2[^>]*>|$)#si';
+
+			if ( ! preg_match( $pattern, $html, $matches ) ) {
+				continue;
+			}
+
+			$section_html = (string) ( $matches[1] ?? '' );
+			if ( '' === $section_html ) {
+				continue;
+			}
+
+			if ( preg_match_all( '#<h3[^>]*>(.*?)</h3>#si', $section_html, $heading_matches ) ) {
+				foreach ( (array) ( $heading_matches[1] ?? array() ) as $raw_widget_name ) {
+					$text = trim( preg_replace( '/\s+/', ' ', wp_strip_all_tags( (string) $raw_widget_name ) ) ?? '' );
+					if ( '' === $text ) {
+						continue;
+					}
+
+					$categories[ $current_category ][ $text ] = array(
+						'name'               => $text,
+						'slug'               => mcp_abilities_elementor_normalize_widget_catalog_slug( $text ),
+						'category'           => $current_category,
+						'category_label'     => $category_labels[ $current_category ],
+						'catalog_source_url' => 'https://elementor.com/widgets',
+					);
+				}
+			}
+		}
+	}
+
+	$normalized_categories = array();
+	$total_widgets         = 0;
+	foreach ( $categories as $key => $widgets ) {
+		$normalized_categories[ $key ] = array_values( $widgets );
+		$total_widgets += count( $normalized_categories[ $key ] );
+	}
+
+	$result = array(
+		'source_policy'     => mcp_abilities_elementor_get_official_guidance_catalog()['policy'],
+		'catalog_source_url'=> 'https://elementor.com/widgets',
+		'fetched_at'        => gmdate( 'c' ),
+		'total_widgets'     => $total_widgets,
+		'categories'        => $normalized_categories,
+	);
+
+	set_transient( $transient_key, $result, 12 * HOUR_IN_SECONDS );
+
+	return $result;
 }
 
 /**
@@ -1903,9 +2154,16 @@ function mcp_abilities_elementor_finalize_column_patterns_audit( array $rows ): 
 function mcp_abilities_elementor_finalize_layout_mechanism_fit_audit( array $rows ): array {
 	$grid_candidates  = array();
 	$recommendations  = array();
-	$guidance_sources = array(
-		'https://elementor.com/help/create-a-grid-container/',
-		'https://elementor.com/help/grid-container-layout-options/',
+	$guidance_catalog = mcp_abilities_elementor_get_official_guidance_catalog();
+	$guidance_sources = array_values(
+		array_filter(
+			array_map(
+				static function ( array $entry ): string {
+					return (string) ( $entry['url'] ?? '' );
+				},
+				(array) ( $guidance_catalog['layout'] ?? array() )
+			)
+		)
 	);
 
 	foreach ( $rows as $row ) {
@@ -1938,6 +2196,7 @@ function mcp_abilities_elementor_finalize_layout_mechanism_fit_audit( array $row
 	}
 
 	return array(
+		'source_policy'         => $guidance_catalog['policy'],
 		'grid_candidate_count' => count( $grid_candidates ),
 		'grid_candidates'      => array_values( $grid_candidates ),
 		'guidance_sources'     => $guidance_sources,
@@ -1989,11 +2248,12 @@ function mcp_abilities_elementor_build_subtree_widget_stats( array $element ): a
  */
 function mcp_abilities_elementor_finalize_native_widget_opportunity_audit( array $elements ): array {
 	$opportunities = array();
-	$sources       = array(
-		'accordion'      => 'https://elementor.com/old/how-to-create/business-website/',
-		'tabs'           => 'https://elementor.com/blog/new-nested-elements-tabs-custom-units/',
-		'call_to_action' => 'https://elementor.com/academy/how-to-use-the-call-to-action-widget-in-elementor-pro/',
-		'icon_list'      => 'https://elementor.com/academy/how-to-use-the-icon-list-widget-in-elementor/',
+	$guidance_catalog = mcp_abilities_elementor_get_official_guidance_catalog();
+	$sources          = array(
+		'accordion'      => (string) ( $guidance_catalog['widgets']['accordion']['url'] ?? '' ),
+		'tabs'           => (string) ( $guidance_catalog['widgets']['tabs']['url'] ?? '' ),
+		'call_to_action' => (string) ( $guidance_catalog['widgets']['call_to_action']['url'] ?? '' ),
+		'icon_list'      => (string) ( $guidance_catalog['widgets']['icon_list']['url'] ?? '' ),
 	);
 
 	$walk = static function ( array $element ) use ( &$walk, &$opportunities, $sources ): void {
@@ -2117,6 +2377,7 @@ function mcp_abilities_elementor_finalize_native_widget_opportunity_audit( array
 	}
 
 	return array(
+		'source_policy'      => $guidance_catalog['policy'],
 		'opportunity_count' => count( $deduped ),
 		'opportunities'     => array_values( $deduped ),
 		'recommendations'   => array_values( array_unique( $recommendations ) ),
@@ -3348,6 +3609,8 @@ function mcp_abilities_elementor_evaluate_design_from_elements( array $elements 
 		'passes'               => 0 === count( $blocking_issue_types ),
 		'blocking_issue_count' => count( $blocking_issue_types ),
 		'blocking_issue_types' => $blocking_issue_types,
+		'source_policy'        => mcp_abilities_elementor_get_official_guidance_catalog()['policy'],
+		'guidance_basis'       => mcp_abilities_elementor_get_design_guidance_basis(),
 		'recommendations'      => $recommendations,
 		'audits'               => array(
 			'generic_layout'    => $generic_audit,
@@ -3379,6 +3642,7 @@ function mcp_abilities_elementor_suggest_design_fixes_from_evaluation( array $ev
 	$issues       = is_array( $evaluation['issues'] ?? null ) ? $evaluation['issues'] : array();
 	$suggestions  = array();
 	$seen_types   = array();
+	$source_policy = mcp_abilities_elementor_get_official_guidance_catalog()['policy'];
 
 	foreach ( $issues as $issue ) {
 		$type = (string) ( $issue['type'] ?? '' );
@@ -3470,8 +3734,18 @@ function mcp_abilities_elementor_suggest_design_fixes_from_evaluation( array $ev
 					'For equal, symmetric column groups, switch from Flexbox width-guessing to an Elementor Grid container.',
 					'Keep Flexbox for directional or intentionally uneven rows, and use Grid when comparison or equal peer columns are the point.',
 				),
+				'source_policy' => $source_policy,
+				'sources' => array_values( (array) ( $issue['guidance_sources'] ?? array() ) ),
 			);
 		} elseif ( 'native_widget_opportunity' === $type ) {
+			$sources = array();
+			foreach ( (array) ( $issue['opportunities'] ?? array() ) as $opportunity ) {
+				foreach ( (array) ( $opportunity['sources'] ?? array() ) as $source ) {
+					if ( is_string( $source ) && '' !== $source ) {
+						$sources[] = $source;
+					}
+				}
+			}
 			$suggestions[] = array(
 				'type'    => $type,
 				'problem' => 'A hand-built container pattern is likely recreating something Elementor already offers as a native widget.',
@@ -3480,6 +3754,8 @@ function mcp_abilities_elementor_suggest_design_fixes_from_evaluation( array $ev
 					'Use Call to Action widgets for repeated promo blocks with title, text, and button/media instead of rebuilding the same module from raw containers.',
 					'Use Icon List when the content is really a concise capability list rather than a mini card system.',
 				),
+				'source_policy' => $source_policy,
+				'sources' => array_values( array_unique( $sources ) ),
 			);
 		} elseif ( 'column_alignment_rhythm' === $type ) {
 			$suggestions[] = array(
@@ -3526,6 +3802,8 @@ function mcp_abilities_elementor_suggest_design_fixes_from_evaluation( array $ev
 		'passes'               => (bool) ( $evaluation['passes'] ?? false ),
 		'blocking_issue_count' => (int) ( $evaluation['blocking_issue_count'] ?? 0 ),
 		'blocking_issue_types' => array_values( array_map( 'strval', (array) ( $evaluation['blocking_issue_types'] ?? array() ) ) ),
+		'source_policy'        => $source_policy,
+		'guidance_basis'       => mcp_abilities_elementor_get_design_guidance_basis(),
 		'issues'               => $issues,
 		'suggestions'          => $suggestions,
 	);
@@ -8777,6 +9055,8 @@ function mcp_abilities_elementor_register_abilities(): void {
 				'properties' => array(
 					'success' => array( 'type' => 'boolean' ),
 					'context' => array( 'type' => 'object' ),
+					'source_policy' => array( 'type' => 'object' ),
+					'guidance_basis' => array( 'type' => 'object' ),
 					'message' => array( 'type' => 'string' ),
 				),
 			),
@@ -8790,7 +9070,139 @@ function mcp_abilities_elementor_register_abilities(): void {
 				return array(
 					'success' => true,
 					'context' => $context,
+					'source_policy' => mcp_abilities_elementor_get_official_guidance_catalog()['policy'],
+					'guidance_basis' => mcp_abilities_elementor_get_design_guidance_basis(),
 					'message' => 'Theme context retrieved successfully',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Get Official Widget Catalog
+	// =========================================================================
+	wp_register_ability(
+		'elementor/get-official-widget-catalog',
+		array(
+			'label'               => 'Get Elementor Official Widget Catalog',
+			'description'         => 'Fetches the official Elementor widget catalog from Elementor.com so the plugin can know the full Basic, Pro, Theme, and WooCommerce widget surface instead of relying on a hand-maintained shortlist.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'force_refresh' => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'If true, bypass the cached catalog and fetch it again from Elementor.com.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'catalog' => array( 'type' => 'object' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input   = is_array( $input ) ? $input : array();
+				$catalog = mcp_abilities_elementor_fetch_official_widget_catalog( ! empty( $input['force_refresh'] ) );
+
+				if ( is_wp_error( $catalog ) ) {
+					return array(
+						'success' => false,
+						'message' => $catalog->get_error_message(),
+					);
+				}
+
+				return array(
+					'success' => true,
+					'catalog' => $catalog,
+					'message' => 'Official Elementor widget catalog retrieved successfully',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => false,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Get Official Pattern Guidance
+	// =========================================================================
+	wp_register_ability(
+		'elementor/get-official-pattern-guidance',
+		array(
+			'label'               => 'Get Elementor Official Pattern Guidance',
+			'description'         => 'Returns the official Elementor.com guidance catalog used by the design audits so pattern and widget recommendations stay grounded in Elementor docs instead of site-local guesswork.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'topic' => array(
+						'type'        => 'string',
+						'enum'        => array( 'all', 'layout', 'widgets', 'policy' ),
+						'default'     => 'all',
+						'description' => 'Optional guidance subset to return.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'  => array( 'type' => 'boolean' ),
+					'topic'    => array( 'type' => 'string' ),
+					'guidance' => array( 'type' => 'object' ),
+					'message'  => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input    = is_array( $input ) ? $input : array();
+				$topic    = isset( $input['topic'] ) && is_string( $input['topic'] ) ? strtolower( $input['topic'] ) : 'all';
+				$catalog  = mcp_abilities_elementor_get_official_guidance_catalog();
+				$guidance = $catalog;
+
+				if ( 'layout' === $topic ) {
+					$guidance = array(
+						'policy' => $catalog['policy'],
+						'layout' => $catalog['layout'],
+					);
+				} elseif ( 'widgets' === $topic ) {
+					$guidance = array(
+						'policy'  => $catalog['policy'],
+						'widgets' => $catalog['widgets'],
+					);
+				} elseif ( 'policy' === $topic ) {
+					$guidance = array(
+						'policy' => $catalog['policy'],
+					);
+				}
+
+				return array(
+					'success'  => true,
+					'topic'    => $topic,
+					'guidance' => $guidance,
+					'message'  => 'Official Elementor guidance retrieved successfully',
 				);
 			},
 			'permission_callback' => function (): bool {
@@ -8830,6 +9242,8 @@ function mcp_abilities_elementor_register_abilities(): void {
 				'type'       => 'object',
 				'properties' => array(
 					'success'     => array( 'type' => 'boolean' ),
+					'source_policy' => array( 'type' => 'object' ),
+					'guidance_basis' => array( 'type' => 'object' ),
 					'style_guide' => array( 'type' => 'object' ),
 					'message'     => array( 'type' => 'string' ),
 				),
@@ -8843,6 +9257,8 @@ function mcp_abilities_elementor_register_abilities(): void {
 
 				return array(
 					'success'     => true,
+					'source_policy' => mcp_abilities_elementor_get_official_guidance_catalog()['policy'],
+					'guidance_basis' => mcp_abilities_elementor_get_design_guidance_basis(),
 					'style_guide' => $style_guide,
 					'message'     => 'Style guide retrieved successfully',
 				);
@@ -8890,6 +9306,8 @@ function mcp_abilities_elementor_register_abilities(): void {
 					'success'    => array( 'type' => 'boolean' ),
 					'id'         => array( 'type' => 'integer' ),
 					'element_id' => array( 'type' => 'string' ),
+					'source_policy' => array( 'type' => 'object' ),
+					'guidance_basis' => array( 'type' => 'object' ),
 					'evaluation' => array( 'type' => 'object' ),
 					'message'    => array( 'type' => 'string' ),
 				),
@@ -8912,6 +9330,8 @@ function mcp_abilities_elementor_register_abilities(): void {
 					'success'    => true,
 					'id'         => $post_id,
 					'element_id' => $element_id,
+					'source_policy' => mcp_abilities_elementor_get_official_guidance_catalog()['policy'],
+					'guidance_basis' => mcp_abilities_elementor_get_design_guidance_basis(),
 					'evaluation' => mcp_abilities_elementor_evaluate_design_from_elements( (array) ( $scope['elements'] ?? array() ) ),
 					'message'    => 'Design evaluation completed successfully',
 				);
@@ -8959,6 +9379,8 @@ function mcp_abilities_elementor_register_abilities(): void {
 					'success'     => array( 'type' => 'boolean' ),
 					'id'          => array( 'type' => 'integer' ),
 					'element_id'  => array( 'type' => 'string' ),
+					'source_policy' => array( 'type' => 'object' ),
+					'guidance_basis' => array( 'type' => 'object' ),
 					'evaluation'  => array( 'type' => 'object' ),
 					'suggestions' => array( 'type' => 'object' ),
 					'message'     => array( 'type' => 'string' ),
@@ -8984,6 +9406,8 @@ function mcp_abilities_elementor_register_abilities(): void {
 					'success'     => true,
 					'id'          => $post_id,
 					'element_id'  => $element_id,
+					'source_policy' => mcp_abilities_elementor_get_official_guidance_catalog()['policy'],
+					'guidance_basis' => mcp_abilities_elementor_get_design_guidance_basis(),
 					'evaluation'  => $evaluation,
 					'suggestions' => mcp_abilities_elementor_suggest_design_fixes_from_evaluation( $evaluation ),
 					'message'     => 'Design fix suggestions generated successfully',

@@ -3,7 +3,7 @@ Contributors: devenia
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 6.9
-Stable tag: 2.2.26
+Stable tag: 2.2.29
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -55,6 +55,17 @@ Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilit
 * [All Add-on Plugins](https://devenia.com/plugins/mcp-expose-abilities/#add-ons)
 
 == Changelog ==
+
+= 2.2.27 =
+* Added: `elementor/get-official-pattern-guidance` to expose the official Elementor.com layout/widget guidance catalog directly through the plugin
+* Improved: `elementor/audit-layout-mechanism-fit`, `elementor/audit-native-widget-opportunities`, `elementor/evaluate-design`, and `elementor/suggest-design-fixes` now surface an explicit source policy so recommendations stay grounded in Elementor.com first instead of site-local guesswork
+
+= 2.2.28 =
+* Improved: `elementor/get-theme-context`, `elementor/get-style-guide`, `elementor/evaluate-design`, and `elementor/suggest-design-fixes` now expose `guidance_basis` alongside `source_policy`, explicitly separating official Elementor-doc-backed topics from plugin heuristic audits
+
+= 2.2.29 =
+* Added: `elementor/get-official-widget-catalog` to fetch the full official widget catalog from `https://elementor.com/widgets`, grouped into Basic, Pro, Theme, and WooCommerce categories
+* Improved: the plugin now has an official availability surface for all Elementor widgets instead of only a hand-maintained shortlist of widget docs
 
 = 2.2.26 =
 * Fixed: `elementor/audit-native-widget-opportunities` is now narrower and no longer treats editorial trios or mixed case-study sections as generic Accordion/Tabs candidates just because they contain repeated heading+copy content

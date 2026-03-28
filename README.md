@@ -6,7 +6,7 @@ Elementor page builder integration for WordPress via MCP.
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 
 **Tested up to:** 6.9
-**Stable tag:** 2.2.26
+**Stable tag:** 2.2.29
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -50,7 +50,7 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 3. Upload via WordPress Admin > Plugins > Add New > Upload Plugin
 4. Activate the plugin
 
-## Abilities (63)
+## Abilities (65)
 
 ### Page/Post Data
 | Ability | Description |
@@ -76,6 +76,8 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 | `elementor/audit-composition-rhythm` | Inspect top-level tonal runs and pacing without punishing restrained design |
 | `elementor/audit-separator-discipline` | Warn when separators start flattening major-section hierarchy instead of helping section families |
 | `elementor/get-theme-context` | Summarize active theme, Elementor version, active kit, and viewport settings |
+| `elementor/get-official-widget-catalog` | Fetch the full official Elementor widget catalog from Elementor.com/widgets |
+| `elementor/get-official-pattern-guidance` | Return the official Elementor.com guidance catalog used for widget and layout recommendations |
 | `elementor/get-style-guide` | Build a style-guide summary from the active Elementor kit and token set |
 | `elementor/evaluate-design` | Aggregate the main design audits into one score, issue list, and recommendations |
 | `elementor/suggest-design-fixes` | Turn the aggregated evaluation into concrete design-fix suggestions |
@@ -159,6 +161,9 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 - Prefer `get-element`/`find-elements` + `update-element` for targeted edits, and use `update-data` only when replacing full JSON.
 - Prefer `merge-element-settings` for small spacing/width/layout adjustments when you do not need to replace an entire element payload.
 - Use `get-theme-context` and `get-style-guide` before design work when you need the actual theme/kit context.
+- Use `get-official-pattern-guidance` when the question is which Elementor-native pattern or widget should be preferred. Pattern choice should come from Elementor.com first; site-local payloads are only fallback implementation references after that choice is clear.
+- Use `get-official-widget-catalog` when the plugin needs to know the full official Elementor widget surface, not just a curated shortlist. The source of truth for availability is Elementor's own widgets index.
+- `get-theme-context`, `get-style-guide`, `evaluate-design`, and `suggest-design-fixes` now also expose `source_policy` and `guidance_basis` so clients can tell which recommendations are grounded in official Elementor docs and which are plugin heuristics.
 - Prefer `evaluate-design` and `suggest-design-fixes` as the main entry point when the narrow design audits start to feel noisy or overlapping.
 - Use `evaluate-render-context` when the problem may live in the rendered wrapper/theme chrome rather than in Elementor content itself.
 - Use `zero-container-padding-subtree`, `copy-lane-settings`, `copy-row-balance`, `normalize-campaign-detail-page`, `image-widget-to-background-container`, `fix-visible-gap-rhythm`, `enforce-boundary-coherence`, `reset-negative-margins-subtree`, `extract-design-tokens`, `apply-text-hierarchy`, `normalize-section-spacing-rhythm`, `normalize-responsive-values`, `sync-component-variant`, `audit-emphasis-drift`, `audit-section-rivalry`, and `audit-composition-rhythm` when tracking Elementor lane drift, hidden inner padding, repeated campaign-detail cleanup, full-height image-column conversion, visible gap mismatch, left/right boundary incoherence, negative offset cleanup, design-token drift, typography inconsistency, rhythm mismatch, breakpoint drift, component-variant mismatch, flat section hierarchy, or pages where too many sections are competing for the same spotlight.
@@ -276,6 +281,17 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 ```
 
 ## Changelog
+
+### 2.2.29
+- Added: `elementor/get-official-widget-catalog` to fetch the full official widget catalog from `https://elementor.com/widgets`, grouped into Basic, Pro, Theme, and WooCommerce categories
+- Improved: the plugin now has an official availability surface for all Elementor widgets instead of only a hand-maintained shortlist of widget docs
+
+### 2.2.27
+- Added: `elementor/get-official-pattern-guidance` to expose the official Elementor.com layout/widget guidance catalog directly through the plugin
+- Improved: `elementor/audit-layout-mechanism-fit`, `elementor/audit-native-widget-opportunities`, `elementor/evaluate-design`, and `elementor/suggest-design-fixes` now surface an explicit source policy so recommendations stay grounded in Elementor.com first instead of site-local guesswork
+
+### 2.2.28
+- Improved: `elementor/get-theme-context`, `elementor/get-style-guide`, `elementor/evaluate-design`, and `elementor/suggest-design-fixes` now expose `guidance_basis` alongside `source_policy`, explicitly separating official Elementor-doc-backed topics from plugin heuristic audits
 
 ### 2.2.26
 - Fixed: `elementor/audit-native-widget-opportunities` is now narrower and no longer treats editorial trios or mixed case-study sections as generic Accordion/Tabs candidates just because they contain repeated heading+copy content
