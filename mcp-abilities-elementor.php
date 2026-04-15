@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.2.37
+ * Version: 2.2.38
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -4801,28 +4801,30 @@ function mcp_abilities_elementor_build_popup_display_settings( array $popup_disp
  * @return array<string,mixed>
  */
 function mcp_abilities_elementor_audit_theme_builder_runtime_health(): array {
-	$query = new WP_Query(
+	$template_ids = get_posts(
 		array(
-			'post_type'      => 'elementor_library',
-			'post_status'    => 'publish',
-			'posts_per_page' => 100,
-			'tax_query'      => array(
-				array(
-					'taxonomy' => 'elementor_library_type',
-					'field'    => 'slug',
-					'terms'    => array( 'popup', 'header', 'footer', 'single', 'archive' ),
-				),
-			),
-			'fields'         => 'ids',
-			'no_found_rows'  => true,
+			'post_type'              => 'elementor_library',
+			'post_status'            => 'publish',
+			'posts_per_page'         => 200,
+			'fields'                 => 'ids',
+			'no_found_rows'          => true,
+			'orderby'                => 'ID',
+			'order'                  => 'DESC',
+			'update_post_meta_cache' => true,
+			'update_post_term_cache' => false,
 		)
 	);
+	$target_template_types = array( 'popup', 'header', 'footer', 'single', 'archive' );
 
 	$issues = array();
-	foreach ( $query->posts as $template_id ) {
+	foreach ( $template_ids as $template_id ) {
 		$template_id   = (int) $template_id;
 		$template_type = (string) get_post_meta( $template_id, '_elementor_template_type', true );
 		$title         = get_the_title( $template_id );
+
+		if ( ! in_array( $template_type, $target_template_types, true ) ) {
+			continue;
+		}
 
 		if ( 'popup' === $template_type ) {
 			$popup_settings = get_post_meta( $template_id, '_elementor_popup_display_settings', true );
@@ -5172,7 +5174,7 @@ function mcp_abilities_elementor_print_frontend_config_when_needed(): void {
 		return;
 	}
 
-	if ( method_exists( $elementor->frontend, 'print_config' ) ) {
+	if ( is_callable( array( $elementor->frontend, 'print_config' ) ) ) {
 		$elementor->frontend->print_config();
 		if ( has_action( 'wp_footer', array( $elementor->frontend, 'print_config' ) ) ) {
 			remove_action( 'wp_footer', array( $elementor->frontend, 'print_config' ) );

@@ -6,7 +6,7 @@ Elementor page builder integration for WordPress via MCP.
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 
 **Tested up to:** 6.9
-**Stable tag:** 2.2.37
+**Stable tag:** 2.2.38
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -281,6 +281,11 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 ```
 
 ## Changelog
+
+### 2.2.38
+
+- Fixed: frontend runtime repair no longer fatals on Elementor versions where `print_config()` is a protected method.
+- Fixed: runtime health audit no longer uses a taxonomy query that triggers a Plugin Check slow-query warning.
 
 ### 2.2.37
 

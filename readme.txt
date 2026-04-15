@@ -3,7 +3,7 @@ Contributors: devenia
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 6.9
-Stable tag: 2.2.37
+Stable tag: 2.2.38
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -62,6 +62,11 @@ Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilit
 
 = 2.2.28 =
 * Improved: `elementor/get-theme-context`, `elementor/get-style-guide`, `elementor/evaluate-design`, and `elementor/suggest-design-fixes` now expose `guidance_basis` alongside `source_policy`, explicitly separating official Elementor-doc-backed topics from plugin heuristic audits
+
+= 2.2.38 =
+
+* Fixed: frontend runtime repair no longer fatals on Elementor versions where `print_config()` is a protected method.
+* Fixed: runtime health audit no longer uses a taxonomy query that triggers a Plugin Check slow-query warning.
 
 = 2.2.37 =
 
