@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.2.38
+ * Version: 2.3.0
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -661,6 +661,369 @@ function mcp_abilities_elementor_replace_element_in_tree( array &$elements, stri
 	}
 
 	return false;
+}
+
+/**
+ * Generate a short Elementor-like element ID.
+ *
+ * Elementor stores IDs as short hex-ish strings. A random 7 character token is
+ * enough for practical uniqueness inside one page, and we still collision-check
+ * before writing.
+ *
+ * @return string
+ */
+function mcp_abilities_elementor_generate_element_id(): string {
+	try {
+		return substr( bin2hex( random_bytes( 4 ) ), 0, 7 );
+	} catch ( \Throwable $e ) {
+		return substr( str_replace( '-', '', wp_generate_uuid4() ), 0, 7 );
+	}
+}
+
+/**
+ * Collect all element IDs from a tree.
+ *
+ * @param array $elements Elementor tree.
+ * @param array $ids Existing IDs.
+ * @return array
+ */
+function mcp_abilities_elementor_collect_element_ids( array $elements, array $ids = array() ): array {
+	foreach ( $elements as $element ) {
+		if ( ! is_array( $element ) ) {
+			continue;
+		}
+
+		if ( isset( $element['id'] ) && is_string( $element['id'] ) && '' !== $element['id'] ) {
+			$ids[] = $element['id'];
+		}
+
+		if ( isset( $element['elements'] ) && is_array( $element['elements'] ) ) {
+			$ids = mcp_abilities_elementor_collect_element_ids( $element['elements'], $ids );
+		}
+	}
+
+	return array_values( array_unique( $ids ) );
+}
+
+/**
+ * Generate an element ID that is not already present in the tree.
+ *
+ * @param array       $elements Elementor tree.
+ * @param string|null $requested_id Optional caller-provided ID.
+ * @return string
+ */
+function mcp_abilities_elementor_unique_element_id( array $elements, ?string $requested_id = null ): string {
+	$existing = mcp_abilities_elementor_collect_element_ids( $elements );
+	$requested_id = is_string( $requested_id ) ? sanitize_key( $requested_id ) : '';
+
+	if ( '' !== $requested_id && ! in_array( $requested_id, $existing, true ) ) {
+		return $requested_id;
+	}
+
+	do {
+		$id = mcp_abilities_elementor_generate_element_id();
+	} while ( in_array( $id, $existing, true ) );
+
+	return $id;
+}
+
+/**
+ * Create a minimal Elementor container element.
+ *
+ * @param array       $settings Container settings.
+ * @param array       $children Child elements.
+ * @param string|null $id Optional ID.
+ * @return array
+ */
+function mcp_abilities_elementor_build_container_element( array $settings = array(), array $children = array(), ?string $id = null ): array {
+	return array(
+		'id'       => $id ?: mcp_abilities_elementor_generate_element_id(),
+		'elType'   => 'container',
+		'settings' => $settings,
+		'elements' => array_values( array_filter( $children, 'is_array' ) ),
+	);
+}
+
+/**
+ * Create a minimal Elementor widget element.
+ *
+ * @param string      $widget_type Elementor widget type.
+ * @param array       $settings Widget settings.
+ * @param string|null $id Optional ID.
+ * @return array
+ */
+function mcp_abilities_elementor_build_widget_element( string $widget_type, array $settings = array(), ?string $id = null ): array {
+	return array(
+		'id'         => $id ?: mcp_abilities_elementor_generate_element_id(),
+		'elType'     => 'widget',
+		'widgetType' => sanitize_key( $widget_type ),
+		'settings'   => $settings,
+		'elements'   => array(),
+	);
+}
+
+/**
+ * Insert an element into an Elementor tree.
+ *
+ * @param array       $elements Elementor tree by reference.
+ * @param array       $new_element Element to insert.
+ * @param string|null $parent_id Parent element ID, or empty for top level.
+ * @param int         $position Position, -1 to append.
+ * @return bool
+ */
+function mcp_abilities_elementor_insert_element_in_tree( array &$elements, array $new_element, ?string $parent_id = null, int $position = -1 ): bool {
+	$parent_id = is_string( $parent_id ) ? trim( $parent_id ) : '';
+
+	if ( '' === $parent_id ) {
+		$insert_at = ( $position >= 0 ) ? min( $position, count( $elements ) ) : count( $elements );
+		array_splice( $elements, $insert_at, 0, array( $new_element ) );
+		return true;
+	}
+
+	foreach ( $elements as &$element ) {
+		if ( ! is_array( $element ) ) {
+			continue;
+		}
+
+		if ( ( $element['id'] ?? null ) === $parent_id ) {
+			if ( ! isset( $element['elements'] ) || ! is_array( $element['elements'] ) ) {
+				$element['elements'] = array();
+			}
+			$insert_at = ( $position >= 0 ) ? min( $position, count( $element['elements'] ) ) : count( $element['elements'] );
+			array_splice( $element['elements'], $insert_at, 0, array( $new_element ) );
+			return true;
+		}
+
+		if ( isset( $element['elements'] ) && is_array( $element['elements'] ) ) {
+			if ( mcp_abilities_elementor_insert_element_in_tree( $element['elements'], $new_element, $parent_id, $position ) ) {
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
+/**
+ * Remove an element from an Elementor tree and return the removed element.
+ *
+ * @param array  $elements Elementor tree by reference.
+ * @param string $target_id Element ID.
+ * @param array  $removed Removed element output.
+ * @param int    $depth Current depth.
+ * @return bool
+ */
+function mcp_abilities_elementor_remove_element_from_tree( array &$elements, string $target_id, array &$removed = array(), int $depth = 0 ): bool {
+	foreach ( $elements as $index => &$element ) {
+		if ( ! is_array( $element ) ) {
+			continue;
+		}
+
+		if ( ( $element['id'] ?? null ) === $target_id ) {
+			$removed = array(
+				'element' => $element,
+				'depth'   => $depth,
+				'index'   => $index,
+			);
+			unset( $elements[ $index ] );
+			$elements = array_values( $elements );
+			return true;
+		}
+
+		if ( isset( $element['elements'] ) && is_array( $element['elements'] ) ) {
+			if ( mcp_abilities_elementor_remove_element_from_tree( $element['elements'], $target_id, $removed, $depth + 1 ) ) {
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
+/**
+ * Check whether a subtree contains an element ID.
+ *
+ * @param array  $element Elementor element.
+ * @param string $target_id Target ID.
+ * @return bool
+ */
+function mcp_abilities_elementor_subtree_contains_element_id( array $element, string $target_id ): bool {
+	if ( ( $element['id'] ?? null ) === $target_id ) {
+		return true;
+	}
+
+	$children = isset( $element['elements'] ) && is_array( $element['elements'] ) ? $element['elements'] : array();
+	foreach ( $children as $child ) {
+		if ( is_array( $child ) && mcp_abilities_elementor_subtree_contains_element_id( $child, $target_id ) ) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/**
+ * Reassign all IDs in a duplicated Elementor subtree.
+ *
+ * @param array $element Elementor element.
+ * @param array $existing Existing IDs.
+ * @return array
+ */
+function mcp_abilities_elementor_reassign_subtree_ids( array $element, array &$existing ): array {
+	$id = mcp_abilities_elementor_generate_element_id();
+	while ( in_array( $id, $existing, true ) ) {
+		$id = mcp_abilities_elementor_generate_element_id();
+	}
+	$existing[] = $id;
+	$element['id'] = $id;
+
+	if ( isset( $element['elements'] ) && is_array( $element['elements'] ) ) {
+		foreach ( $element['elements'] as $index => $child ) {
+			if ( is_array( $child ) ) {
+				$element['elements'][ $index ] = mcp_abilities_elementor_reassign_subtree_ids( $child, $existing );
+			}
+		}
+	}
+
+	return $element;
+}
+
+/**
+ * Reorder direct children under a parent, or top-level elements when parent is empty.
+ *
+ * @param array       $elements Elementor tree by reference.
+ * @param array       $ordered_ids Desired child order.
+ * @param string|null $parent_id Parent element ID.
+ * @return bool
+ */
+function mcp_abilities_elementor_reorder_children_in_tree( array &$elements, array $ordered_ids, ?string $parent_id = null ): bool {
+	$parent_id = is_string( $parent_id ) ? trim( $parent_id ) : '';
+
+	if ( '' === $parent_id ) {
+		$lookup = array();
+		$rest   = array();
+		foreach ( $elements as $element ) {
+			if ( is_array( $element ) && isset( $element['id'] ) && in_array( $element['id'], $ordered_ids, true ) ) {
+				$lookup[ $element['id'] ] = $element;
+			} else {
+				$rest[] = $element;
+			}
+		}
+		$ordered = array();
+		foreach ( $ordered_ids as $id ) {
+			if ( isset( $lookup[ $id ] ) ) {
+				$ordered[] = $lookup[ $id ];
+			}
+		}
+		$elements = array_values( array_merge( $ordered, $rest ) );
+		return true;
+	}
+
+	foreach ( $elements as &$element ) {
+		if ( ! is_array( $element ) ) {
+			continue;
+		}
+
+		if ( ( $element['id'] ?? null ) === $parent_id ) {
+			if ( ! isset( $element['elements'] ) || ! is_array( $element['elements'] ) ) {
+				return false;
+			}
+			return mcp_abilities_elementor_reorder_children_in_tree( $element['elements'], $ordered_ids, null );
+		}
+
+		if ( isset( $element['elements'] ) && is_array( $element['elements'] ) ) {
+			if ( mcp_abilities_elementor_reorder_children_in_tree( $element['elements'], $ordered_ids, $parent_id ) ) {
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
+/**
+ * Save Elementor data for a post and apply common cache/runtime handling.
+ *
+ * @param int    $post_id Post ID.
+ * @param array  $data Elementor data.
+ * @param string $cache_scope Cache scope.
+ * @return array
+ */
+function mcp_abilities_elementor_save_document_data( int $post_id, array $data, string $cache_scope = 'post' ): array {
+	$normalized_data = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
+	$json_data       = wp_json_encode( $normalized_data );
+
+	if ( false === $json_data ) {
+		return array( 'success' => false, 'message' => 'Failed to encode Elementor data to JSON' );
+	}
+
+	update_post_meta( $post_id, '_elementor_data', wp_slash( $json_data ) );
+	update_post_meta( $post_id, '_elementor_edit_mode', 'builder' );
+
+	$cache_details = mcp_abilities_elementor_invalidate_after_write(
+		$post_id,
+		mcp_abilities_elementor_normalize_cache_scope( $cache_scope, 'post' )
+	);
+
+	return array(
+		'success' => true,
+		'cache'   => $cache_details,
+		'data'    => $normalized_data,
+	);
+}
+
+/**
+ * Build settings for common convenience widgets.
+ *
+ * @param string $widget_type Elementor widget type.
+ * @param array  $input Raw ability input.
+ * @return array
+ */
+function mcp_abilities_elementor_build_convenience_widget_settings( string $widget_type, array $input ): array {
+	$settings = isset( $input['settings'] ) && is_array( $input['settings'] ) ? $input['settings'] : array();
+	$skip     = array( 'id', 'parent_element_id', 'position', 'element_id', 'widget_type', 'settings', 'cache_scope' );
+
+	foreach ( $input as $key => $value ) {
+		if ( in_array( $key, $skip, true ) ) {
+			continue;
+		}
+		$settings[ $key ] = $value;
+	}
+
+	if ( 'heading' === $widget_type && isset( $input['title'] ) ) {
+		$settings['title'] = (string) $input['title'];
+		$settings['header_size'] = isset( $settings['header_size'] ) ? (string) $settings['header_size'] : 'h2';
+	}
+
+	if ( 'text-editor' === $widget_type && isset( $input['editor'] ) ) {
+		$settings['editor'] = (string) $input['editor'];
+	}
+
+	if ( 'button' === $widget_type ) {
+		if ( isset( $input['text'] ) ) {
+			$settings['text'] = (string) $input['text'];
+		}
+		if ( isset( $input['url'] ) && ! isset( $settings['link'] ) ) {
+			$settings['link'] = array( 'url' => esc_url_raw( (string) $input['url'] ) );
+		}
+	}
+
+	if ( 'image' === $widget_type ) {
+		if ( isset( $input['image_id'] ) ) {
+			$attachment_id = (int) $input['image_id'];
+			$settings['image'] = array(
+				'id'  => $attachment_id,
+				'url' => wp_get_attachment_url( $attachment_id ) ?: '',
+			);
+		} elseif ( isset( $input['image_url'] ) ) {
+			$settings['image'] = array(
+				'id'  => 0,
+				'url' => esc_url_raw( (string) $input['image_url'] ),
+			);
+		}
+	}
+
+	return $settings;
 }
 
 /**
@@ -5599,6 +5962,603 @@ function mcp_abilities_elementor_register_abilities(): void {
 						'idempotent'  => false,
 					),
 			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Create Page
+	// =========================================================================
+	wp_register_ability(
+		'elementor/create-page',
+		array(
+			'label'               => 'Create Elementor Page',
+			'description'         => 'Creates a new WordPress page or post with Elementor builder mode enabled and optional initial Elementor data.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'title' ),
+				'properties'           => array(
+					'title'     => array( 'type' => 'string', 'description' => 'Post/page title.' ),
+					'content'   => array( 'type' => 'string', 'description' => 'Optional WordPress post content.' ),
+					'status'    => array( 'type' => 'string', 'enum' => array( 'draft', 'publish', 'pending', 'private' ), 'default' => 'draft' ),
+					'post_type' => array( 'type' => 'string', 'default' => 'page', 'description' => 'Post type to create. Defaults to page.' ),
+					'slug'      => array( 'type' => 'string', 'description' => 'Optional post slug.' ),
+					'data'      => array( 'type' => 'array', 'description' => 'Optional initial Elementor data array.' ),
+					'page_settings' => array( 'type' => 'object', 'description' => 'Optional Elementor page settings.' ),
+					'cache_scope'   => array( 'type' => 'string', 'enum' => array( 'none', 'post', 'site' ), 'default' => 'post' ),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'id'      => array( 'type' => 'integer' ),
+					'title'   => array( 'type' => 'string' ),
+					'status'  => array( 'type' => 'string' ),
+					'link'    => array( 'type' => 'string' ),
+					'message' => array( 'type' => 'string' ),
+					'cache'   => array( 'type' => 'object' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input = is_array( $input ) ? $input : array();
+				$title = isset( $input['title'] ) ? sanitize_text_field( (string) $input['title'] ) : '';
+				if ( '' === $title ) {
+					return array( 'success' => false, 'message' => 'Title is required' );
+				}
+
+				$post_type = isset( $input['post_type'] ) ? sanitize_key( (string) $input['post_type'] ) : 'page';
+				if ( '' === $post_type || ! post_type_exists( $post_type ) ) {
+					return array( 'success' => false, 'message' => 'Invalid post_type' );
+				}
+
+				$post_type_object = get_post_type_object( $post_type );
+				$capability = ( $post_type_object && isset( $post_type_object->cap->create_posts ) ) ? $post_type_object->cap->create_posts : 'edit_posts';
+				if ( ! current_user_can( $capability ) ) {
+					return array( 'success' => false, 'message' => 'You do not have permission to create this post type' );
+				}
+
+				$status = isset( $input['status'] ) ? sanitize_key( (string) $input['status'] ) : 'draft';
+				if ( ! in_array( $status, array( 'draft', 'publish', 'pending', 'private' ), true ) ) {
+					$status = 'draft';
+				}
+
+				$post_id = wp_insert_post(
+					array(
+						'post_title'   => $title,
+						'post_content' => isset( $input['content'] ) ? wp_kses_post( (string) $input['content'] ) : '',
+						'post_status'  => $status,
+						'post_type'    => $post_type,
+						'post_name'    => isset( $input['slug'] ) ? sanitize_title( (string) $input['slug'] ) : '',
+					),
+					true
+				);
+
+				if ( is_wp_error( $post_id ) ) {
+					return array( 'success' => false, 'message' => $post_id->get_error_message() );
+				}
+
+				$data = isset( $input['data'] ) && is_array( $input['data'] ) ? $input['data'] : array();
+				$save = mcp_abilities_elementor_save_document_data(
+					(int) $post_id,
+					$data,
+					mcp_abilities_elementor_normalize_cache_scope( $input['cache_scope'] ?? 'post', 'post' )
+				);
+				if ( empty( $save['success'] ) ) {
+					return array(
+						'success' => false,
+						'id'      => (int) $post_id,
+						'message' => (string) ( $save['message'] ?? 'Failed to initialize Elementor data' ),
+					);
+				}
+
+				if ( isset( $input['page_settings'] ) && is_array( $input['page_settings'] ) ) {
+					update_post_meta( (int) $post_id, '_elementor_page_settings', $input['page_settings'] );
+				}
+
+				return array(
+					'success' => true,
+					'id'      => (int) $post_id,
+					'title'   => get_the_title( (int) $post_id ),
+					'status'  => get_post_status( (int) $post_id ) ?: $status,
+					'link'    => get_permalink( (int) $post_id ) ?: '',
+					'message' => 'Elementor page created successfully',
+					'cache'   => $save['cache'] ?? array(),
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => false,
+					'idempotent'  => false,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Add Container
+	// =========================================================================
+	wp_register_ability(
+		'elementor/add-container',
+		array(
+			'label'               => 'Add Elementor Container',
+			'description'         => 'Adds a new Elementor container at the top level or inside an existing container.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id' ),
+				'properties'           => array(
+					'id'                => array( 'type' => 'integer', 'description' => 'Post/Page ID.' ),
+					'parent_element_id' => array( 'type' => 'string', 'description' => 'Optional parent element ID. Omit for top-level insertion.' ),
+					'position'          => array( 'type' => 'integer', 'default' => -1, 'description' => 'Insert position. -1 appends.' ),
+					'element_id'        => array( 'type' => 'string', 'description' => 'Optional explicit element ID.' ),
+					'settings'          => array( 'type' => 'object', 'description' => 'Container settings.' ),
+					'cache_scope'       => array( 'type' => 'string', 'enum' => array( 'none', 'post', 'site' ), 'default' => 'post' ),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'    => array( 'type' => 'boolean' ),
+					'id'         => array( 'type' => 'integer' ),
+					'element_id' => array( 'type' => 'string' ),
+					'message'    => array( 'type' => 'string' ),
+					'link'       => array( 'type' => 'string' ),
+					'cache'      => array( 'type' => 'object' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input = is_array( $input ) ? $input : array();
+				$post_id = (int) ( $input['id'] ?? 0 );
+				if ( $post_id <= 0 ) {
+					return array( 'success' => false, 'message' => 'Post/Page ID is required' );
+				}
+				$post = get_post( $post_id );
+				if ( ! $post ) {
+					return array( 'success' => false, 'message' => 'Post not found' );
+				}
+				if ( ! current_user_can( 'edit_post', $post->ID ) ) {
+					return array( 'success' => false, 'message' => 'You do not have permission to update this post' );
+				}
+
+				$data = mcp_abilities_elementor_get_post_elements( $post_id );
+				$element_id = mcp_abilities_elementor_unique_element_id( $data, isset( $input['element_id'] ) ? (string) $input['element_id'] : null );
+				$container = mcp_abilities_elementor_build_container_element(
+					isset( $input['settings'] ) && is_array( $input['settings'] ) ? $input['settings'] : array(),
+					array(),
+					$element_id
+				);
+
+				$inserted = mcp_abilities_elementor_insert_element_in_tree(
+					$data,
+					$container,
+					isset( $input['parent_element_id'] ) ? (string) $input['parent_element_id'] : null,
+					isset( $input['position'] ) ? (int) $input['position'] : -1
+				);
+				if ( ! $inserted ) {
+					return array( 'success' => false, 'message' => 'Parent element not found' );
+				}
+
+				$save = mcp_abilities_elementor_save_document_data( $post_id, $data, (string) ( $input['cache_scope'] ?? 'post' ) );
+				if ( empty( $save['success'] ) ) {
+					return array( 'success' => false, 'message' => (string) ( $save['message'] ?? 'Failed to save Elementor data' ) );
+				}
+
+				return array(
+					'success'    => true,
+					'id'         => $post_id,
+					'element_id' => $element_id,
+					'message'    => 'Elementor container added successfully',
+					'link'       => get_permalink( $post_id ) ?: '',
+					'cache'      => $save['cache'] ?? array(),
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => false,
+					'idempotent'  => false,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Add Widget
+	// =========================================================================
+	$register_add_widget_ability = static function ( string $ability_name, string $label, string $widget_type, array $extra_properties = array(), array $required = array() ): void {
+		wp_register_ability(
+			$ability_name,
+			array(
+				'label'               => $label,
+				'description'         => 'Adds an Elementor widget into an existing container or top-level document.',
+				'category'            => 'site',
+				'input_schema'        => array(
+					'type'                 => 'object',
+					'required'             => array_values( array_unique( array_merge( array( 'id' ), $required ) ) ),
+					'properties'           => array_merge(
+						array(
+							'id'                => array( 'type' => 'integer', 'description' => 'Post/Page ID.' ),
+							'parent_element_id' => array( 'type' => 'string', 'description' => 'Optional parent container ID. Omit for top-level insertion.' ),
+							'position'          => array( 'type' => 'integer', 'default' => -1, 'description' => 'Insert position. -1 appends.' ),
+							'element_id'        => array( 'type' => 'string', 'description' => 'Optional explicit element ID.' ),
+							'settings'          => array( 'type' => 'object', 'description' => 'Widget settings merged with convenience inputs.' ),
+							'cache_scope'       => array( 'type' => 'string', 'enum' => array( 'none', 'post', 'site' ), 'default' => 'post' ),
+						),
+						$extra_properties
+					),
+					'additionalProperties' => true,
+				),
+				'output_schema'       => array(
+					'type'       => 'object',
+					'properties' => array(
+						'success'     => array( 'type' => 'boolean' ),
+						'id'          => array( 'type' => 'integer' ),
+						'element_id'  => array( 'type' => 'string' ),
+						'widget_type' => array( 'type' => 'string' ),
+						'message'     => array( 'type' => 'string' ),
+						'link'        => array( 'type' => 'string' ),
+						'cache'       => array( 'type' => 'object' ),
+					),
+				),
+				'execute_callback'    => function ( $input = array() ) use ( $widget_type ): array {
+					$input = is_array( $input ) ? $input : array();
+					$post_id = (int) ( $input['id'] ?? 0 );
+					if ( $post_id <= 0 ) {
+						return array( 'success' => false, 'message' => 'Post/Page ID is required' );
+					}
+					$post = get_post( $post_id );
+					if ( ! $post ) {
+						return array( 'success' => false, 'message' => 'Post not found' );
+					}
+					if ( ! current_user_can( 'edit_post', $post->ID ) ) {
+						return array( 'success' => false, 'message' => 'You do not have permission to update this post' );
+					}
+
+					$effective_widget_type = 'elementor/add-widget' === current_filter() && isset( $input['widget_type'] ) ? sanitize_key( (string) $input['widget_type'] ) : $widget_type;
+					if ( '' === $effective_widget_type && isset( $input['widget_type'] ) ) {
+						$effective_widget_type = sanitize_key( (string) $input['widget_type'] );
+					}
+					if ( '' === $effective_widget_type ) {
+						return array( 'success' => false, 'message' => 'widget_type is required' );
+					}
+
+					$data = mcp_abilities_elementor_get_post_elements( $post_id );
+					$element_id = mcp_abilities_elementor_unique_element_id( $data, isset( $input['element_id'] ) ? (string) $input['element_id'] : null );
+					$settings = mcp_abilities_elementor_build_convenience_widget_settings( $effective_widget_type, $input );
+					$widget = mcp_abilities_elementor_build_widget_element( $effective_widget_type, $settings, $element_id );
+
+					$inserted = mcp_abilities_elementor_insert_element_in_tree(
+						$data,
+						$widget,
+						isset( $input['parent_element_id'] ) ? (string) $input['parent_element_id'] : null,
+						isset( $input['position'] ) ? (int) $input['position'] : -1
+					);
+					if ( ! $inserted ) {
+						return array( 'success' => false, 'message' => 'Parent element not found' );
+					}
+
+					$save = mcp_abilities_elementor_save_document_data( $post_id, $data, (string) ( $input['cache_scope'] ?? 'post' ) );
+					if ( empty( $save['success'] ) ) {
+						return array( 'success' => false, 'message' => (string) ( $save['message'] ?? 'Failed to save Elementor data' ) );
+					}
+
+					return array(
+						'success'     => true,
+						'id'          => $post_id,
+						'element_id'  => $element_id,
+						'widget_type' => $effective_widget_type,
+						'message'     => 'Elementor widget added successfully',
+						'link'        => get_permalink( $post_id ) ?: '',
+						'cache'       => $save['cache'] ?? array(),
+					);
+				},
+				'permission_callback' => function (): bool {
+					return current_user_can( 'edit_posts' );
+				},
+				'meta'                => array(
+					'annotations' => array(
+						'readonly'    => false,
+						'destructive' => false,
+						'idempotent'  => false,
+					),
+				),
+			)
+		);
+	};
+
+	$register_add_widget_ability(
+		'elementor/add-widget',
+		'Add Elementor Widget',
+		'',
+		array(
+			'widget_type' => array( 'type' => 'string', 'description' => 'Elementor widget type, for example heading, text-editor, image, button.' ),
+		),
+		array( 'widget_type' )
+	);
+	$register_add_widget_ability(
+		'elementor/add-heading',
+		'Add Elementor Heading',
+		'heading',
+		array(
+			'title'       => array( 'type' => 'string', 'description' => 'Heading text.' ),
+			'header_size' => array( 'type' => 'string', 'enum' => array( 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'div', 'span', 'p' ), 'default' => 'h2' ),
+			'align'       => array( 'type' => 'string', 'enum' => array( 'left', 'center', 'right', 'justify' ) ),
+			'title_color' => array( 'type' => 'string', 'description' => 'Heading color.' ),
+		),
+		array( 'title' )
+	);
+	$register_add_widget_ability(
+		'elementor/add-text-editor',
+		'Add Elementor Text Editor',
+		'text-editor',
+		array(
+			'editor'     => array( 'type' => 'string', 'description' => 'Rich text/HTML content.' ),
+			'align'      => array( 'type' => 'string', 'enum' => array( 'left', 'center', 'right', 'justify' ) ),
+			'text_color' => array( 'type' => 'string', 'description' => 'Text color.' ),
+		),
+		array( 'editor' )
+	);
+	$register_add_widget_ability(
+		'elementor/add-image',
+		'Add Elementor Image',
+		'image',
+		array(
+			'image_id'   => array( 'type' => 'integer', 'description' => 'Attachment ID.' ),
+			'image_url'  => array( 'type' => 'string', 'description' => 'Image URL when no attachment ID is available.' ),
+			'image_size' => array( 'type' => 'string', 'default' => 'large' ),
+			'align'      => array( 'type' => 'string', 'enum' => array( 'left', 'center', 'right' ) ),
+		)
+	);
+	$register_add_widget_ability(
+		'elementor/add-button',
+		'Add Elementor Button',
+		'button',
+		array(
+			'text'       => array( 'type' => 'string', 'description' => 'Button text.' ),
+			'url'        => array( 'type' => 'string', 'description' => 'Button URL.' ),
+			'align'      => array( 'type' => 'string', 'enum' => array( 'left', 'center', 'right', 'justify' ) ),
+			'button_type'=> array( 'type' => 'string', 'description' => 'Elementor button type/style.' ),
+		),
+		array( 'text' )
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Move / Remove / Duplicate / Reorder Elements
+	// =========================================================================
+	wp_register_ability(
+		'elementor/move-element',
+		array(
+			'label'               => 'Move Elementor Element',
+			'description'         => 'Moves an Elementor element to a new parent/position without changing its data.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id', 'element_id' ),
+				'properties'           => array(
+					'id'                    => array( 'type' => 'integer' ),
+					'element_id'            => array( 'type' => 'string' ),
+					'new_parent_element_id' => array( 'type' => 'string', 'description' => 'New parent ID. Omit for top-level.' ),
+					'position'              => array( 'type' => 'integer', 'default' => -1 ),
+					'cache_scope'           => array( 'type' => 'string', 'enum' => array( 'none', 'post', 'site' ), 'default' => 'post' ),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'    => array( 'type' => 'boolean' ),
+					'id'         => array( 'type' => 'integer' ),
+					'element_id' => array( 'type' => 'string' ),
+					'message'    => array( 'type' => 'string' ),
+					'link'       => array( 'type' => 'string' ),
+					'cache'      => array( 'type' => 'object' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input = is_array( $input ) ? $input : array();
+				$post_id = (int) ( $input['id'] ?? 0 );
+				$element_id = isset( $input['element_id'] ) ? (string) $input['element_id'] : '';
+				if ( $post_id <= 0 || '' === $element_id ) {
+					return array( 'success' => false, 'message' => 'id and element_id are required' );
+				}
+				$post = get_post( $post_id );
+				if ( ! $post || ! current_user_can( 'edit_post', $post->ID ) ) {
+					return array( 'success' => false, 'message' => 'Post not found or permission denied' );
+				}
+				$data = mcp_abilities_elementor_get_post_elements( $post_id );
+				$target_meta = mcp_abilities_elementor_find_element_meta( $data, $element_id );
+				if ( ! is_array( $target_meta ) || ! is_array( $target_meta['element'] ?? null ) ) {
+					return array( 'success' => false, 'message' => 'Element not found' );
+				}
+				$new_parent_id = isset( $input['new_parent_element_id'] ) ? trim( (string) $input['new_parent_element_id'] ) : '';
+				if ( '' !== $new_parent_id && mcp_abilities_elementor_subtree_contains_element_id( $target_meta['element'], $new_parent_id ) ) {
+					return array( 'success' => false, 'message' => 'Cannot move an element inside itself or one of its descendants' );
+				}
+				$removed = array();
+				mcp_abilities_elementor_remove_element_from_tree( $data, $element_id, $removed );
+				$inserted = mcp_abilities_elementor_insert_element_in_tree( $data, $removed['element'], $new_parent_id, isset( $input['position'] ) ? (int) $input['position'] : -1 );
+				if ( ! $inserted ) {
+					return array( 'success' => false, 'message' => 'New parent element not found' );
+				}
+				$save = mcp_abilities_elementor_save_document_data( $post_id, $data, (string) ( $input['cache_scope'] ?? 'post' ) );
+				if ( empty( $save['success'] ) ) {
+					return array( 'success' => false, 'message' => (string) ( $save['message'] ?? 'Failed to save Elementor data' ) );
+				}
+				return array( 'success' => true, 'id' => $post_id, 'element_id' => $element_id, 'message' => 'Element moved successfully', 'link' => get_permalink( $post_id ) ?: '', 'cache' => $save['cache'] ?? array() );
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array( 'annotations' => array( 'readonly' => false, 'destructive' => false, 'idempotent' => false ) ),
+		)
+	);
+
+	wp_register_ability(
+		'elementor/remove-element',
+		array(
+			'label'               => 'Remove Elementor Element',
+			'description'         => 'Removes an Elementor element. Top-level or populated elements require force_delete=true.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id', 'element_id' ),
+				'properties'           => array(
+					'id'           => array( 'type' => 'integer' ),
+					'element_id'   => array( 'type' => 'string' ),
+					'force_delete' => array( 'type' => 'boolean', 'default' => false ),
+					'cache_scope'  => array( 'type' => 'string', 'enum' => array( 'none', 'post', 'site' ), 'default' => 'post' ),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array( 'type' => 'object', 'properties' => array( 'success' => array( 'type' => 'boolean' ), 'id' => array( 'type' => 'integer' ), 'element_id' => array( 'type' => 'string' ), 'message' => array( 'type' => 'string' ), 'link' => array( 'type' => 'string' ), 'cache' => array( 'type' => 'object' ) ) ),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input = is_array( $input ) ? $input : array();
+				$post_id = (int) ( $input['id'] ?? 0 );
+				$element_id = isset( $input['element_id'] ) ? (string) $input['element_id'] : '';
+				if ( $post_id <= 0 || '' === $element_id ) {
+					return array( 'success' => false, 'message' => 'id and element_id are required' );
+				}
+				$post = get_post( $post_id );
+				if ( ! $post || ! current_user_can( 'edit_post', $post->ID ) ) {
+					return array( 'success' => false, 'message' => 'Post not found or permission denied' );
+				}
+				$data = mcp_abilities_elementor_get_post_elements( $post_id );
+				$meta = mcp_abilities_elementor_find_element_meta( $data, $element_id );
+				if ( ! is_array( $meta ) || ! is_array( $meta['element'] ?? null ) ) {
+					return array( 'success' => false, 'message' => 'Element not found' );
+				}
+				$children = isset( $meta['element']['elements'] ) && is_array( $meta['element']['elements'] ) ? $meta['element']['elements'] : array();
+				if ( empty( $input['force_delete'] ) && ( 0 === (int) ( $meta['depth'] ?? 0 ) || ! empty( $children ) ) ) {
+					return array( 'success' => false, 'message' => 'Refusing to remove a top-level or populated Elementor element without force_delete=true' );
+				}
+				$removed = array();
+				mcp_abilities_elementor_remove_element_from_tree( $data, $element_id, $removed );
+				$save = mcp_abilities_elementor_save_document_data( $post_id, $data, (string) ( $input['cache_scope'] ?? 'post' ) );
+				if ( empty( $save['success'] ) ) {
+					return array( 'success' => false, 'message' => (string) ( $save['message'] ?? 'Failed to save Elementor data' ) );
+				}
+				return array( 'success' => true, 'id' => $post_id, 'element_id' => $element_id, 'message' => 'Element removed successfully', 'link' => get_permalink( $post_id ) ?: '', 'cache' => $save['cache'] ?? array() );
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array( 'annotations' => array( 'readonly' => false, 'destructive' => false, 'idempotent' => false ) ),
+		)
+	);
+
+	wp_register_ability(
+		'elementor/duplicate-element',
+		array(
+			'label'               => 'Duplicate Elementor Element',
+			'description'         => 'Duplicates an Elementor element subtree with fresh IDs.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id', 'element_id' ),
+				'properties'           => array(
+					'id'                => array( 'type' => 'integer' ),
+					'element_id'        => array( 'type' => 'string' ),
+					'parent_element_id' => array( 'type' => 'string', 'description' => 'Optional destination parent. Omit to duplicate beside source at top level when possible.' ),
+					'position'          => array( 'type' => 'integer', 'default' => -1 ),
+					'cache_scope'       => array( 'type' => 'string', 'enum' => array( 'none', 'post', 'site' ), 'default' => 'post' ),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array( 'type' => 'object', 'properties' => array( 'success' => array( 'type' => 'boolean' ), 'id' => array( 'type' => 'integer' ), 'element_id' => array( 'type' => 'string' ), 'new_element_id' => array( 'type' => 'string' ), 'message' => array( 'type' => 'string' ), 'link' => array( 'type' => 'string' ), 'cache' => array( 'type' => 'object' ) ) ),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input = is_array( $input ) ? $input : array();
+				$post_id = (int) ( $input['id'] ?? 0 );
+				$element_id = isset( $input['element_id'] ) ? (string) $input['element_id'] : '';
+				if ( $post_id <= 0 || '' === $element_id ) {
+					return array( 'success' => false, 'message' => 'id and element_id are required' );
+				}
+				$post = get_post( $post_id );
+				if ( ! $post || ! current_user_can( 'edit_post', $post->ID ) ) {
+					return array( 'success' => false, 'message' => 'Post not found or permission denied' );
+				}
+				$data = mcp_abilities_elementor_get_post_elements( $post_id );
+				$meta = mcp_abilities_elementor_find_element_meta( $data, $element_id );
+				if ( ! is_array( $meta ) || ! is_array( $meta['element'] ?? null ) ) {
+					return array( 'success' => false, 'message' => 'Element not found' );
+				}
+				$existing = mcp_abilities_elementor_collect_element_ids( $data );
+				$duplicate = mcp_abilities_elementor_reassign_subtree_ids( $meta['element'], $existing );
+				$inserted = mcp_abilities_elementor_insert_element_in_tree(
+					$data,
+					$duplicate,
+					isset( $input['parent_element_id'] ) ? (string) $input['parent_element_id'] : null,
+					isset( $input['position'] ) ? (int) $input['position'] : -1
+				);
+				if ( ! $inserted ) {
+					return array( 'success' => false, 'message' => 'Destination parent not found' );
+				}
+				$save = mcp_abilities_elementor_save_document_data( $post_id, $data, (string) ( $input['cache_scope'] ?? 'post' ) );
+				if ( empty( $save['success'] ) ) {
+					return array( 'success' => false, 'message' => (string) ( $save['message'] ?? 'Failed to save Elementor data' ) );
+				}
+				return array( 'success' => true, 'id' => $post_id, 'element_id' => $element_id, 'new_element_id' => (string) $duplicate['id'], 'message' => 'Element duplicated successfully', 'link' => get_permalink( $post_id ) ?: '', 'cache' => $save['cache'] ?? array() );
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array( 'annotations' => array( 'readonly' => false, 'destructive' => false, 'idempotent' => false ) ),
+		)
+	);
+
+	wp_register_ability(
+		'elementor/reorder-elements',
+		array(
+			'label'               => 'Reorder Elementor Elements',
+			'description'         => 'Reorders direct children under a parent container, or top-level elements when no parent is provided.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id', 'element_ids' ),
+				'properties'           => array(
+					'id'                => array( 'type' => 'integer' ),
+					'parent_element_id' => array( 'type' => 'string' ),
+					'element_ids'       => array( 'type' => 'array', 'items' => array( 'type' => 'string' ), 'description' => 'Element IDs in desired leading order. Unmentioned siblings stay after them.' ),
+					'cache_scope'       => array( 'type' => 'string', 'enum' => array( 'none', 'post', 'site' ), 'default' => 'post' ),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array( 'type' => 'object', 'properties' => array( 'success' => array( 'type' => 'boolean' ), 'id' => array( 'type' => 'integer' ), 'message' => array( 'type' => 'string' ), 'link' => array( 'type' => 'string' ), 'cache' => array( 'type' => 'object' ) ) ),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input = is_array( $input ) ? $input : array();
+				$post_id = (int) ( $input['id'] ?? 0 );
+				$ordered_ids = isset( $input['element_ids'] ) && is_array( $input['element_ids'] ) ? array_values( array_filter( array_map( 'strval', $input['element_ids'] ) ) ) : array();
+				if ( $post_id <= 0 || empty( $ordered_ids ) ) {
+					return array( 'success' => false, 'message' => 'id and element_ids are required' );
+				}
+				$post = get_post( $post_id );
+				if ( ! $post || ! current_user_can( 'edit_post', $post->ID ) ) {
+					return array( 'success' => false, 'message' => 'Post not found or permission denied' );
+				}
+				$data = mcp_abilities_elementor_get_post_elements( $post_id );
+				$reordered = mcp_abilities_elementor_reorder_children_in_tree( $data, $ordered_ids, isset( $input['parent_element_id'] ) ? (string) $input['parent_element_id'] : null );
+				if ( ! $reordered ) {
+					return array( 'success' => false, 'message' => 'Parent element not found or has no children' );
+				}
+				$save = mcp_abilities_elementor_save_document_data( $post_id, $data, (string) ( $input['cache_scope'] ?? 'post' ) );
+				if ( empty( $save['success'] ) ) {
+					return array( 'success' => false, 'message' => (string) ( $save['message'] ?? 'Failed to save Elementor data' ) );
+				}
+				return array( 'success' => true, 'id' => $post_id, 'message' => 'Elements reordered successfully', 'link' => get_permalink( $post_id ) ?: '', 'cache' => $save['cache'] ?? array() );
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array( 'annotations' => array( 'readonly' => false, 'destructive' => false, 'idempotent' => false ) ),
 		)
 	);
 

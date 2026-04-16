@@ -6,7 +6,7 @@ Elementor page builder integration for WordPress via MCP.
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 
 **Tested up to:** 6.9
-**Stable tag:** 2.2.38
+**Stable tag:** 2.3.0
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -50,7 +50,7 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 3. Upload via WordPress Admin > Plugins > Add New > Upload Plugin
 4. Activate the plugin
 
-## Abilities (65)
+## Abilities (75)
 
 ### Page/Post Data
 | Ability | Description |
@@ -99,6 +99,21 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 | `elementor/update-data` | Replace entire Elementor JSON for a page |
 | `elementor/patch-data` | Find/replace text within Elementor JSON |
 | `elementor/update-page-settings` | Update Elementor page settings |
+
+### Authoring Primitives
+| Ability | Description |
+|---------|-------------|
+| `elementor/create-page` | Create a new page/post with Elementor builder mode enabled |
+| `elementor/add-container` | Add a top-level or nested Elementor container |
+| `elementor/add-widget` | Add any Elementor widget type with raw settings |
+| `elementor/add-heading` | Add a heading widget |
+| `elementor/add-text-editor` | Add a text editor widget |
+| `elementor/add-image` | Add an image widget from an attachment ID or URL |
+| `elementor/add-button` | Add a button widget |
+| `elementor/move-element` | Move an element to a new parent/position |
+| `elementor/remove-element` | Remove an element with safety guards |
+| `elementor/duplicate-element` | Duplicate an element subtree with fresh IDs |
+| `elementor/reorder-elements` | Reorder direct children under a parent or at the top level |
 
 ### Template Management
 | Ability | Description |
@@ -281,6 +296,12 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 ```
 
 ## Changelog
+
+### 2.3.0
+
+- Added: first abilities-only page-authoring pass inspired by the requested `elementor-mcp` comparison.
+- Added: `elementor/create-page`, `elementor/add-container`, `elementor/add-widget`, `elementor/add-heading`, `elementor/add-text-editor`, `elementor/add-image`, `elementor/add-button`, `elementor/move-element`, `elementor/remove-element`, `elementor/duplicate-element`, and `elementor/reorder-elements`.
+- Kept the implementation inside the existing `elementor/*` ability namespace without adding a separate MCP server or proxy layer.
 
 ### 2.2.38
 

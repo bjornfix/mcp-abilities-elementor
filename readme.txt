@@ -3,7 +3,7 @@ Contributors: devenia
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 6.9
-Stable tag: 2.2.38
+Stable tag: 2.3.0
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -25,6 +25,8 @@ Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilit
 = Abilities Included =
 
 **Page/Post data** - Get, patch, update, delete, and clone Elementor JSON and page settings.
+
+**Authoring primitives** - Create Elementor pages, add containers and widgets, move/remove/duplicate/reorder elements, and add common heading, text, image, and button widgets.
 
 **Templates** - List, create, update, duplicate, delete, export, and import Elementor templates.
 
@@ -55,6 +57,11 @@ Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilit
 * [All Add-on Plugins](https://devenia.com/plugins/mcp-expose-abilities/#add-ons)
 
 == Changelog ==
+
+= 2.3.0 =
+* Added: first abilities-only page-authoring pass inspired by the requested `elementor-mcp` comparison.
+* Added: `elementor/create-page`, `elementor/add-container`, `elementor/add-widget`, `elementor/add-heading`, `elementor/add-text-editor`, `elementor/add-image`, `elementor/add-button`, `elementor/move-element`, `elementor/remove-element`, `elementor/duplicate-element`, and `elementor/reorder-elements`.
+* Kept the implementation inside the existing `elementor/*` ability namespace without adding a separate MCP server or proxy layer.
 
 = 2.2.27 =
 * Added: `elementor/get-official-pattern-guidance` to expose the official Elementor.com layout/widget guidance catalog directly through the plugin
