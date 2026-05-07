@@ -299,8 +299,11 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 
 ### 2.3.2
 
+- Added: global validation guard for `_elementor_data` and `_elementor_page_settings` writes so malformed Elementor control values are blocked before save.
 - Added: read-time validation payloads to `elementor/get-data` and `elementor/get-element` so existing malformed Elementor settings are visible during inspection.
 - Added: `elementor/audit-invalid-settings` readonly prescan ability for one exact document or a bounded scan of recently modified published candidate documents.
+- Added: clearer validation errors for invalid responsive/unit/spacing values, including accidental percent-encoded strings such as `%20` in design fields.
+- Fixed: valid Elementor media values such as image/background image `size: "full"`, carousel item `size: "full"`, and responsive `size: "auto"` are preserved instead of being reported as invalid numeric controls.
 
 ### 2.3.1
 
