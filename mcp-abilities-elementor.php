@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.3.3
+ * Version: 2.3.4
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -1913,28 +1913,11 @@ function mcp_abilities_elementor_persist_data_meta_verified( int $post_id, strin
 		);
 	}
 
-	$deleted = delete_post_meta( $post_id, '_elementor_data' );
-	$added   = add_post_meta( $post_id, '_elementor_data', wp_slash( $json_data ), true );
-	clean_post_cache( $post_id );
-	wp_cache_delete( $post_id, 'post_meta' );
-
-	$readback = mcp_abilities_elementor_get_raw_data_meta( $post_id );
-	if ( mcp_abilities_elementor_json_payloads_match( $readback, $json_data ) ) {
-		return array(
-			'success' => true,
-			'method'  => 'delete_add_post_meta',
-			'deleted' => (bool) $deleted,
-			'added'   => (bool) $added,
-		);
-	}
-
 	return array(
 		'success' => false,
 		'method'  => 'wordpress_meta_api',
 		'updated' => false !== $updated,
-		'deleted' => (bool) $deleted,
-		'added'   => (bool) $added,
-		'message' => 'Readback did not match after WordPress meta API update and delete/add retry.',
+		'message' => 'Readback did not match after WordPress meta API update; no destructive retry was attempted.',
 	);
 }
 
@@ -2719,8 +2702,8 @@ function mcp_abilities_elementor_finalize_generic_layout_audit( array $stats ): 
 				return array(
 					'signature' => (string) $signature,
 					'count'     => (int) $count,
-				);
-			},
+					);
+				},
 			array_keys( $top_repeated ),
 			array_values( $top_repeated )
 		),
@@ -3406,8 +3389,8 @@ function mcp_abilities_elementor_finalize_column_alignment_rhythm_audit( array $
 					'gap_token'   => (string) $gap,
 					'count'       => count( array_unique( $ids ) ),
 					'element_ids' => array_values( array_unique( array_map( 'strval', $ids ) ) ),
-				);
-			},
+					);
+				},
 			array_keys( $gap_map ),
 			array_values( $gap_map )
 		),
@@ -6447,7 +6430,8 @@ function mcp_abilities_elementor_register_abilities(): void {
 				}
 
 				$post_ids = array();
-				if ( ! empty( $input['id'] ) ) {
+				$exact_id = ! empty( $input['id'] );
+				if ( $exact_id ) {
 					$post = get_post( (int) $input['id'] );
 					if ( ! $post ) {
 						return array( 'success' => false, 'message' => 'Post not found' );
@@ -6494,6 +6478,21 @@ function mcp_abilities_elementor_register_abilities(): void {
 
 					$raw_data = mcp_abilities_elementor_get_raw_data_meta( $post_id );
 					if ( '' === $raw_data ) {
+						if ( $exact_id ) {
+							$validation = mcp_abilities_elementor_build_validation_payload(
+								array( 'post.' . $post_id . '._elementor_data is missing or empty.' )
+							);
+							++$invalid_count;
+							$items[] = array(
+								'id'                 => $post_id,
+								'title'              => get_the_title( $post_id ),
+								'post_type'          => $post->post_type,
+								'status'             => $post->post_status,
+								'link'               => get_permalink( $post_id ),
+								'has_elementor_data' => false,
+								'validation'         => $validation,
+							);
+						}
 						continue;
 					}
 
@@ -6557,28 +6556,22 @@ function mcp_abilities_elementor_register_abilities(): void {
 		'elementor/repair-invalid-settings',
 		array(
 			'label'               => 'Repair Elementor Invalid Settings',
-			'description'         => 'Repairs existing malformed Elementor numeric control values found by audit-invalid-settings, such as size strings with embedded units. Validates and verifies readback before reporting success.',
+			'description'         => 'Dry-run only preview for repairing malformed Elementor numeric control values found by audit-invalid-settings, such as size strings with embedded units. Writes are disabled in this safety release.',
 			'category'            => 'site',
 			'input_schema'        => array(
 				'type'                 => 'object',
 				'required'             => array( 'id' ),
-				'properties'           => array(
-					'id'          => array(
-						'type'        => 'integer',
-						'description' => 'Post/Page/Template ID to repair.',
+					'properties'           => array(
+						'id'          => array(
+							'type'        => 'integer',
+							'description' => 'Post/Page/Template ID to repair.',
+						),
+						'dry_run'     => array(
+							'type'        => 'boolean',
+							'default'     => true,
+							'description' => 'Preview repairs without writing.',
+						),
 					),
-					'dry_run'     => array(
-						'type'        => 'boolean',
-						'default'     => true,
-						'description' => 'Preview repairs without writing.',
-					),
-					'cache_scope' => array(
-						'type'        => 'string',
-						'enum'        => array( 'none', 'post', 'site' ),
-						'default'     => 'post',
-						'description' => 'Cache invalidation scope after write.',
-					),
-				),
 				'additionalProperties' => false,
 			),
 			'output_schema'       => array(
@@ -6587,13 +6580,11 @@ function mcp_abilities_elementor_register_abilities(): void {
 					'success'     => array( 'type' => 'boolean' ),
 					'id'          => array( 'type' => 'integer' ),
 					'dry_run'     => array( 'type' => 'boolean' ),
-					'changed'     => array( 'type' => 'boolean' ),
-					'changes'     => array( 'type' => 'array' ),
-					'validation'  => array( 'type' => 'object' ),
-					'persistence' => array( 'type' => 'object' ),
-					'cache'       => array( 'type' => 'object' ),
-					'message'     => array( 'type' => 'string' ),
-				),
+						'changed'     => array( 'type' => 'boolean' ),
+						'changes'     => array( 'type' => 'array' ),
+						'validation'  => array( 'type' => 'object' ),
+						'message'     => array( 'type' => 'string' ),
+					),
 			),
 			'execute_callback'    => function ( $input = array() ): array {
 				$input = is_array( $input ) ? $input : array();
@@ -6636,7 +6627,6 @@ function mcp_abilities_elementor_register_abilities(): void {
 				);
 
 				$dry_run = ! array_key_exists( 'dry_run', $input ) || ! empty( $input['dry_run'] );
-				$requested_cache_scope = mcp_abilities_elementor_normalize_cache_scope( $input['cache_scope'] ?? 'post', 'post' );
 
 				if ( empty( $changes ) ) {
 					return array(
@@ -6679,33 +6669,14 @@ function mcp_abilities_elementor_register_abilities(): void {
 					);
 				}
 
-				$persistence = mcp_abilities_elementor_persist_data_meta_verified( $post_id, $json_data );
-				if ( empty( $persistence['success'] ) ) {
-					return array(
-						'success'     => false,
-						'id'          => $post_id,
-						'dry_run'     => false,
-						'changed'     => false,
-						'changes'     => $changes,
-						'validation'  => $validation,
-						'persistence' => $persistence,
-						'message'     => $persistence['message'] ?? 'Failed to persist repaired Elementor data.',
-					);
-				}
-
-				update_post_meta( $post_id, '_elementor_edit_mode', 'builder' );
-				$cache_details = mcp_abilities_elementor_invalidate_after_write( $post_id, $requested_cache_scope );
-
 				return array(
-					'success'     => true,
-					'id'          => $post_id,
-					'dry_run'     => false,
-					'changed'     => true,
-					'changes'     => $changes,
-					'validation'  => $validation,
-					'persistence' => $persistence,
-					'cache'       => $cache_details,
-					'message'     => 'Invalid Elementor settings repaired successfully.',
+					'success'    => false,
+					'id'         => $post_id,
+					'dry_run'    => false,
+					'changed'    => false,
+					'changes'    => $changes,
+					'validation' => $validation,
+					'message'    => 'Write repair is disabled in this safety release. Run dry_run=true and apply any repair manually after review.',
 				);
 			},
 			'permission_callback' => function (): bool {
@@ -6728,7 +6699,7 @@ function mcp_abilities_elementor_register_abilities(): void {
 		'elementor/restore-data-from-revision',
 		array(
 			'label'               => 'Restore Elementor Data From Revision',
-			'description'         => 'Restores Elementor data from a revision to a target document, repairs known invalid numeric control values, validates the result, and verifies readback.',
+			'description'         => 'Dry-run only preview for restoring Elementor data from a revision to a target document. Writes are disabled in this safety release.',
 			'category'            => 'site',
 			'input_schema'        => array(
 				'type'                 => 'object',
@@ -6742,18 +6713,12 @@ function mcp_abilities_elementor_register_abilities(): void {
 						'type'        => 'integer',
 						'description' => 'Revision ID to read Elementor data from.',
 					),
-					'dry_run'     => array(
-						'type'        => 'boolean',
-						'default'     => true,
-						'description' => 'Preview restore without writing.',
+						'dry_run'     => array(
+							'type'        => 'boolean',
+							'default'     => true,
+							'description' => 'Preview restore without writing.',
+						),
 					),
-					'cache_scope' => array(
-						'type'        => 'string',
-						'enum'        => array( 'none', 'post', 'site' ),
-						'default'     => 'post',
-						'description' => 'Cache invalidation scope after write.',
-					),
-				),
 				'additionalProperties' => false,
 			),
 			'output_schema'       => array(
@@ -6763,13 +6728,11 @@ function mcp_abilities_elementor_register_abilities(): void {
 					'id'          => array( 'type' => 'integer' ),
 					'revision_id' => array( 'type' => 'integer' ),
 					'dry_run'     => array( 'type' => 'boolean' ),
-					'changed'     => array( 'type' => 'boolean' ),
-					'changes'     => array( 'type' => 'array' ),
-					'validation'  => array( 'type' => 'object' ),
-					'persistence' => array( 'type' => 'object' ),
-					'cache'       => array( 'type' => 'object' ),
-					'message'     => array( 'type' => 'string' ),
-				),
+						'changed'     => array( 'type' => 'boolean' ),
+						'changes'     => array( 'type' => 'array' ),
+						'validation'  => array( 'type' => 'object' ),
+						'message'     => array( 'type' => 'string' ),
+					),
 			),
 			'execute_callback'    => function ( $input = array() ): array {
 				$input       = is_array( $input ) ? $input : array();
@@ -6846,38 +6809,15 @@ function mcp_abilities_elementor_register_abilities(): void {
 					);
 				}
 
-				$persistence = mcp_abilities_elementor_persist_data_meta_verified( $post_id, $json_data );
-				if ( empty( $persistence['success'] ) ) {
-					return array(
-						'success'     => false,
-						'id'          => $post_id,
-						'revision_id' => $revision_id,
-						'dry_run'     => false,
-						'changed'     => false,
-						'changes'     => $changes,
-						'validation'  => $validation,
-						'persistence' => $persistence,
-						'message'     => $persistence['message'] ?? 'Failed to persist restored Elementor data.',
-					);
-				}
-
-				update_post_meta( $post_id, '_elementor_edit_mode', 'builder' );
-				$cache_details = mcp_abilities_elementor_invalidate_after_write(
-					$post_id,
-					mcp_abilities_elementor_normalize_cache_scope( $input['cache_scope'] ?? 'post', 'post' )
-				);
-
 				return array(
-					'success'     => true,
+					'success'     => false,
 					'id'          => $post_id,
 					'revision_id' => $revision_id,
 					'dry_run'     => false,
-					'changed'     => $changed,
+					'changed'     => false,
 					'changes'     => $changes,
 					'validation'  => $validation,
-					'persistence' => $persistence,
-					'cache'       => $cache_details,
-					'message'     => 'Elementor data restored from revision successfully.',
+					'message'     => 'Revision restore writes are disabled in this safety release. Run dry_run=true and restore manually after review.',
 				);
 			},
 			'permission_callback' => function (): bool {
@@ -16776,6 +16716,4 @@ add_action( 'wp_enqueue_scripts', 'mcp_abilities_elementor_enqueue_frontend_runt
 add_action( 'elementor/frontend/after_register_scripts', 'mcp_abilities_elementor_enqueue_frontend_runtime_when_needed', 5 );
 add_action( 'wp_head', 'mcp_abilities_elementor_print_frontend_config_when_needed', 1 );
 add_action( 'wp_head', 'mcp_abilities_elementor_print_footer_scripts_early_when_needed', 999 );
-add_filter( 'add_post_metadata', 'mcp_abilities_elementor_prevent_invalid_meta_write', 10, 4 );
-add_filter( 'update_post_metadata', 'mcp_abilities_elementor_prevent_invalid_meta_write', 10, 4 );
 add_action( 'wp_abilities_api_init', 'mcp_abilities_elementor_register_abilities' );

@@ -6,7 +6,7 @@ Elementor page builder integration for WordPress via MCP.
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 
 **Tested up to:** 6.9
-**Stable tag:** 2.3.3
+**Stable tag:** 2.3.4
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -297,16 +297,20 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 
 ## Changelog
 
+### 2.3.4
+
+- Safety: removed the global `_elementor_data` / `_elementor_page_settings` metadata write guard; validation is now read/audit surfaced instead of intercepting all WordPress metadata writes.
+- Safety: `elementor/repair-invalid-settings` and `elementor/restore-data-from-revision` are dry-run only in this release.
+- Fixed: Elementor data persistence verification no longer attempts a destructive delete/add metadata retry after a readback mismatch.
+- Fixed: exact `elementor/audit-invalid-settings` checks now report missing or empty `_elementor_data` instead of silently skipping the requested document.
+
 ### 2.3.3
 
-- Added: `elementor/repair-invalid-settings` to repair existing malformed Elementor numeric control values after audit findings, such as `size: "20px"` into `unit: "px", size: 20`.
-- Added: `elementor/restore-data-from-revision` to restore Elementor data from a revision through validated WordPress API writes.
-- Changed: repair writes now verify readback through WordPress meta APIs only.
-- Improved: repair writes verify the saved `_elementor_data` readback semantically so failed persistence is surfaced without treating harmless JSON serialization differences as failures.
+- Added: dry-run previews for malformed Elementor numeric control repairs and revision restore candidates.
+- Improved: dry-run previews validate generated Elementor data semantically before reporting a candidate as usable.
 
 ### 2.3.2
 
-- Added: global validation guard for `_elementor_data` and `_elementor_page_settings` writes so malformed Elementor control values are blocked before save.
 - Added: read-time validation payloads to `elementor/get-data` and `elementor/get-element` so existing malformed Elementor settings are visible during inspection.
 - Added: `elementor/audit-invalid-settings` readonly prescan ability for one exact document or a bounded scan of recently modified published candidate documents.
 - Added: clearer validation errors for invalid responsive/unit/spacing values, including accidental percent-encoded strings such as `%20` in design fields.
@@ -314,7 +318,7 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 
 ### 2.3.1
 
-- Added: global validation guard for `_elementor_data` and `_elementor_page_settings` writes so malformed Elementor control values are blocked before save.
+- Added: internal Elementor settings validation helpers.
 - Added: clearer validation errors for invalid responsive/unit/spacing values, including accidental percent-encoded strings such as `%20` in design fields.
 - Preserved encoded URLs, HTML, CSS, shortcode, and text fields as freeform content so valid content payloads continue to work.
 
