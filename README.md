@@ -6,7 +6,7 @@ Elementor page builder integration for WordPress via MCP.
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 
 **Tested up to:** 6.9
-**Stable tag:** 2.3.0
+**Stable tag:** 2.3.2
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -296,6 +296,17 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 ```
 
 ## Changelog
+
+### 2.3.2
+
+- Added: read-time validation payloads to `elementor/get-data` and `elementor/get-element` so existing malformed Elementor settings are visible during inspection.
+- Added: `elementor/audit-invalid-settings` readonly prescan ability for one exact document or a bounded scan of recently modified published candidate documents.
+
+### 2.3.1
+
+- Added: global validation guard for `_elementor_data` and `_elementor_page_settings` writes so malformed Elementor control values are blocked before save.
+- Added: clearer validation errors for invalid responsive/unit/spacing values, including accidental percent-encoded strings such as `%20` in design fields.
+- Preserved encoded URLs, HTML, CSS, shortcode, and text fields as freeform content so valid content payloads continue to work.
 
 ### 2.3.0
 

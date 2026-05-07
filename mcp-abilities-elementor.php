@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.3.0
+ * Version: 2.3.2
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -951,6 +951,17 @@ function mcp_abilities_elementor_reorder_children_in_tree( array &$elements, arr
  */
 function mcp_abilities_elementor_save_document_data( int $post_id, array $data, string $cache_scope = 'post' ): array {
 	$normalized_data = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
+	$validation      = mcp_abilities_elementor_validate_document_settings( $normalized_data, 'post.' . $post_id . '._elementor_data' );
+	if ( empty( $validation['valid'] ) ) {
+		$errors = is_array( $validation['errors'] ?? null ) ? $validation['errors'] : array();
+		mcp_abilities_elementor_set_last_meta_validation_errors( $errors );
+		return array(
+			'success' => false,
+			'message' => mcp_abilities_elementor_format_validation_errors( $errors ),
+			'errors'  => $errors,
+		);
+	}
+
 	$json_data       = wp_json_encode( $normalized_data );
 
 	if ( false === $json_data ) {
@@ -1465,6 +1476,381 @@ function mcp_abilities_elementor_make_size_control( $value, string $default_unit
 		'size' => mcp_abilities_elementor_is_numeric_value( $value ) ? mcp_abilities_elementor_format_numeric_value( (float) $value ) : '0',
 		'unit' => $default_unit,
 	);
+}
+
+/**
+ * Return whether a settings key is expected to hold arbitrary content.
+ *
+ * These fields can legitimately contain URLs, encoded characters, shortcode
+ * content, HTML, CSS snippets, or text. The validation guard below should not
+ * treat their string payloads as Elementor design-control values.
+ *
+ * @param string $key Settings key.
+ * @return bool
+ */
+function mcp_abilities_elementor_is_freeform_settings_key( string $key ): bool {
+	$key = strtolower( $key );
+
+	if ( in_array( $key, array( 'url', 'href', 'src', 'title', 'text', 'editor', 'html', 'shortcode', 'css_classes', 'custom_attributes', '_title' ), true ) ) {
+		return true;
+	}
+
+	foreach ( array( 'url', 'href', 'src', 'image', 'background_image', 'gallery', 'carousel', 'slides', 'tabs', 'items', 'content', 'text', 'title', 'editor', 'html', 'shortcode', 'css', 'classes', 'attributes' ) as $token ) {
+		if ( str_contains( $key, $token ) ) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/**
+ * Check whether a value is a supported Elementor control unit.
+ *
+ * @param mixed $unit Raw unit.
+ * @return bool
+ */
+function mcp_abilities_elementor_is_valid_control_unit( $unit ): bool {
+	if ( ! is_string( $unit ) ) {
+		return false;
+	}
+
+	$unit = strtolower( trim( $unit ) );
+	if ( '' === $unit ) {
+		return true;
+	}
+
+	return in_array(
+		$unit,
+		array( 'px', '%', 'em', 'rem', 'vw', 'vh', 'vmin', 'vmax', 'deg', 's', 'ms', 'custom' ),
+		true
+	);
+}
+
+/**
+ * Validate a scalar that Elementor expects to be numeric or empty.
+ *
+ * @param mixed  $value Raw value.
+ * @param string $path Dot-path for diagnostics.
+ * @param array  $errors Validation errors.
+ * @return void
+ */
+function mcp_abilities_elementor_validate_numeric_control_scalar( $value, string $path, array &$errors ): void {
+	if ( null === $value || '' === $value || is_int( $value ) || is_float( $value ) ) {
+		return;
+	}
+
+	if ( is_string( $value ) && is_numeric( trim( $value ) ) ) {
+		return;
+	}
+
+	if ( is_string( $value ) && 'auto' === strtolower( trim( $value ) ) && str_ends_with( $path, '.size' ) ) {
+		return;
+	}
+
+	$errors[] = sprintf(
+		'%s must be numeric or empty; got %s',
+		$path,
+		is_scalar( $value ) ? wp_json_encode( $value ) : gettype( $value )
+	);
+}
+
+/**
+ * Recursively validate Elementor settings values before they are written.
+ *
+ * This is deliberately conservative around Elementor control structures:
+ * arrays with a `unit` plus `size` or spacing sides must contain known units
+ * and numeric values. Freeform text/HTML/URL fields are skipped so encoded
+ * URLs and content are not blocked.
+ *
+ * @param mixed  $value Settings value/tree.
+ * @param string $path Dot-path for diagnostics.
+ * @param array  $errors Validation errors.
+ * @return void
+ */
+function mcp_abilities_elementor_validate_settings_value( $value, string $path, array &$errors ): void {
+	$key = basename( str_replace( '.', '/', $path ) );
+
+	if ( mcp_abilities_elementor_is_freeform_settings_key( $key ) ) {
+		return;
+	}
+
+	if ( is_string( $value ) ) {
+		if ( preg_match( '/%[0-9A-Fa-f]{2}/', $value ) ) {
+			$errors[] = sprintf( '%s contains percent-encoded text (%s). Use a proper Elementor control object/value instead.', $path, $value );
+		}
+		return;
+	}
+
+	if ( ! is_array( $value ) ) {
+		return;
+	}
+
+	$has_unit = array_key_exists( 'unit', $value );
+	$has_size = array_key_exists( 'size', $value );
+	$sides    = array_intersect( array( 'top', 'right', 'bottom', 'left' ), array_keys( $value ) );
+
+	if ( $has_unit && ( $has_size || ! empty( $sides ) ) ) {
+		if ( ! mcp_abilities_elementor_is_valid_control_unit( $value['unit'] ) ) {
+			$errors[] = sprintf( '%s.unit has invalid Elementor unit %s', $path, wp_json_encode( $value['unit'] ) );
+		}
+	}
+
+	if ( $has_size ) {
+		mcp_abilities_elementor_validate_numeric_control_scalar( $value['size'], $path . '.size', $errors );
+	}
+
+	foreach ( $sides as $side ) {
+		mcp_abilities_elementor_validate_numeric_control_scalar( $value[ $side ], $path . '.' . $side, $errors );
+	}
+
+	foreach ( $value as $child_key => $child_value ) {
+		if ( ! is_string( $child_key ) && ! is_int( $child_key ) ) {
+			continue;
+		}
+
+		$child_key = (string) $child_key;
+		if ( mcp_abilities_elementor_is_freeform_settings_key( $child_key ) ) {
+			continue;
+		}
+
+		mcp_abilities_elementor_validate_settings_value( $child_value, $path . '.' . $child_key, $errors );
+	}
+}
+
+/**
+ * Validate a flat Elementor settings array before writing.
+ *
+ * @param array  $settings Settings array.
+ * @param string $context Diagnostic context.
+ * @return array Validation result.
+ */
+function mcp_abilities_elementor_validate_settings_array( array $settings, string $context = 'settings' ): array {
+	$errors = array();
+	foreach ( $settings as $key => $value ) {
+		$key = is_string( $key ) || is_int( $key ) ? (string) $key : 'unknown';
+		mcp_abilities_elementor_validate_settings_value( $value, $context . '.' . $key, $errors );
+	}
+
+	return array(
+		'valid'  => empty( $errors ),
+		'errors' => $errors,
+	);
+}
+
+/**
+ * Validate all settings arrays in an Elementor data tree.
+ *
+ * @param array  $elements Elementor tree.
+ * @param string $context Diagnostic context.
+ * @return array Validation result.
+ */
+function mcp_abilities_elementor_validate_document_settings( array $elements, string $context = 'data' ): array {
+	$errors = array();
+
+	$walk = static function ( array $items, string $path ) use ( &$walk, &$errors ): void {
+		foreach ( $items as $index => $element ) {
+			if ( ! is_array( $element ) ) {
+				continue;
+			}
+
+			$id           = is_string( $element['id'] ?? null ) ? $element['id'] : (string) $index;
+			$element_path = $path . '.' . $id;
+
+			if ( isset( $element['settings'] ) ) {
+				if ( ! is_array( $element['settings'] ) ) {
+					$errors[] = $element_path . '.settings must be an object';
+				} else {
+					$result = mcp_abilities_elementor_validate_settings_array( $element['settings'], $element_path . '.settings' );
+					$errors = array_merge( $errors, $result['errors'] );
+				}
+			}
+
+			if ( isset( $element['elements'] ) && is_array( $element['elements'] ) ) {
+				$walk( $element['elements'], $element_path . '.elements' );
+			}
+		}
+	};
+
+	$walk( $elements, $context );
+
+	return array(
+		'valid'  => empty( $errors ),
+		'errors' => $errors,
+	);
+}
+
+/**
+ * Format validation failures for ability responses/logs.
+ *
+ * @param array $errors Validation errors.
+ * @return string
+ */
+function mcp_abilities_elementor_format_validation_errors( array $errors ): string {
+	$errors = array_values( array_filter( array_map( 'strval', $errors ) ) );
+	if ( empty( $errors ) ) {
+		return 'Invalid Elementor settings.';
+	}
+
+	$visible = array_slice( $errors, 0, 5 );
+	$suffix  = count( $errors ) > count( $visible ) ? ' +' . ( count( $errors ) - count( $visible ) ) . ' more' : '';
+
+	return 'Invalid Elementor settings: ' . implode( '; ', $visible ) . $suffix;
+}
+
+/**
+ * Store the last blocked Elementor meta write error for diagnostics.
+ *
+ * @param array $errors Validation errors.
+ * @return void
+ */
+function mcp_abilities_elementor_set_last_meta_validation_errors( array $errors ): void {
+	$GLOBALS['mcp_abilities_elementor_last_meta_validation_errors'] = array_values( array_map( 'strval', $errors ) );
+}
+
+/**
+ * Return the last blocked Elementor meta write error.
+ *
+ * @return array
+ */
+function mcp_abilities_elementor_get_last_meta_validation_errors(): array {
+	$errors = $GLOBALS['mcp_abilities_elementor_last_meta_validation_errors'] ?? array();
+	return is_array( $errors ) ? $errors : array();
+}
+
+/**
+ * Build a stable validation payload for ability read/audit responses.
+ *
+ * @param array $errors Validation errors.
+ * @return array
+ */
+function mcp_abilities_elementor_build_validation_payload( array $errors ): array {
+	$errors = array_values( array_filter( array_map( 'strval', $errors ) ) );
+
+	return array(
+		'valid'       => empty( $errors ),
+		'error_count' => count( $errors ),
+		'errors'      => $errors,
+		'message'     => empty( $errors ) ? 'Elementor settings validation passed.' : mcp_abilities_elementor_format_validation_errors( $errors ),
+	);
+}
+
+/**
+ * Validate decoded Elementor document data and page settings for read/audit responses.
+ *
+ * @param array $data Elementor document tree.
+ * @param mixed $page_settings Elementor page settings.
+ * @param int   $post_id Post ID.
+ * @return array
+ */
+function mcp_abilities_elementor_validate_read_payload( array $data, $page_settings, int $post_id = 0 ): array {
+	$errors = array();
+
+	$data_validation = mcp_abilities_elementor_validate_document_settings( $data, 'post.' . $post_id . '._elementor_data' );
+	if ( ! empty( $data_validation['errors'] ) && is_array( $data_validation['errors'] ) ) {
+		$errors = array_merge( $errors, $data_validation['errors'] );
+	}
+
+	if ( is_array( $page_settings ) ) {
+		$page_settings_validation = mcp_abilities_elementor_validate_settings_array( $page_settings, 'post.' . $post_id . '._elementor_page_settings' );
+		if ( ! empty( $page_settings_validation['errors'] ) && is_array( $page_settings_validation['errors'] ) ) {
+			$errors = array_merge( $errors, $page_settings_validation['errors'] );
+		}
+	}
+
+	return mcp_abilities_elementor_build_validation_payload( $errors );
+}
+
+/**
+ * Validate a raw Elementor post meta write.
+ *
+ * This is used by a global metadata preflight filter so every write path in
+ * this plugin, including older direct update_post_meta calls, is guarded.
+ *
+ * @param string $meta_key Meta key.
+ * @param mixed  $meta_value Raw meta value.
+ * @param int    $post_id Post ID.
+ * @return array Validation result.
+ */
+function mcp_abilities_elementor_validate_meta_write( string $meta_key, $meta_value, int $post_id = 0 ): array {
+	if ( '_elementor_data' === $meta_key ) {
+		if ( is_string( $meta_value ) ) {
+			$json = function_exists( 'wp_unslash' ) ? wp_unslash( $meta_value ) : stripslashes( $meta_value );
+			$data = json_decode( $json, true );
+			if ( null === $data && JSON_ERROR_NONE !== json_last_error() ) {
+				return array(
+					'valid'  => false,
+					'errors' => array( 'post ' . $post_id . ' _elementor_data is not valid JSON: ' . json_last_error_msg() ),
+				);
+			}
+		} elseif ( is_array( $meta_value ) ) {
+			$data = $meta_value;
+		} else {
+			return array(
+				'valid'  => false,
+				'errors' => array( 'post ' . $post_id . ' _elementor_data must be a JSON string or array' ),
+			);
+		}
+
+		if ( ! is_array( $data ) ) {
+			return array(
+				'valid'  => false,
+				'errors' => array( 'post ' . $post_id . ' _elementor_data decoded to a non-array value' ),
+			);
+		}
+
+		return mcp_abilities_elementor_validate_document_settings( $data, 'post.' . $post_id . '._elementor_data' );
+	}
+
+	if ( '_elementor_page_settings' === $meta_key ) {
+		if ( is_string( $meta_value ) ) {
+			$json = function_exists( 'wp_unslash' ) ? wp_unslash( $meta_value ) : stripslashes( $meta_value );
+			$decoded = json_decode( $json, true );
+			if ( JSON_ERROR_NONE === json_last_error() && is_array( $decoded ) ) {
+				$meta_value = $decoded;
+			}
+		}
+
+		if ( ! is_array( $meta_value ) ) {
+			return array(
+				'valid'  => false,
+				'errors' => array( 'post ' . $post_id . ' _elementor_page_settings must be an array/object' ),
+			);
+		}
+
+		return mcp_abilities_elementor_validate_settings_array( $meta_value, 'post.' . $post_id . '._elementor_page_settings' );
+	}
+
+	return array(
+		'valid'  => true,
+		'errors' => array(),
+	);
+}
+
+/**
+ * Block invalid Elementor meta before WordPress writes it.
+ *
+ * @param mixed  $check Existing preflight result.
+ * @param int    $object_id Post ID.
+ * @param string $meta_key Meta key.
+ * @param mixed  $meta_value Meta value.
+ * @return mixed
+ */
+function mcp_abilities_elementor_prevent_invalid_meta_write( $check, int $object_id, string $meta_key, $meta_value ) {
+	if ( null !== $check || ! in_array( $meta_key, array( '_elementor_data', '_elementor_page_settings' ), true ) ) {
+		return $check;
+	}
+
+	$result = mcp_abilities_elementor_validate_meta_write( $meta_key, $meta_value, $object_id );
+	if ( ! empty( $result['valid'] ) ) {
+		mcp_abilities_elementor_set_last_meta_validation_errors( array() );
+		return $check;
+	}
+
+	$errors = is_array( $result['errors'] ?? null ) ? $result['errors'] : array( 'Invalid Elementor meta write.' );
+	mcp_abilities_elementor_set_last_meta_validation_errors( $errors );
+
+	return false;
 }
 
 /**
@@ -5755,6 +6141,7 @@ function mcp_abilities_elementor_register_abilities(): void {
 						'description' => 'Elementor data as array or raw JSON string when format is "json".',
 					),
 					'page_settings' => array( 'type' => 'object' ),
+					'validation'    => array( 'type' => 'object' ),
 					'message'       => array( 'type' => 'string' ),
 				),
 			),
@@ -5789,10 +6176,19 @@ function mcp_abilities_elementor_register_abilities(): void {
 
 				$format = $input['format'] ?? 'array';
 				$decode_error = null;
-				$data         = ( 'json' === $format ) ? $elementor_data : mcp_abilities_elementor_decode_data_meta( $elementor_data, $decode_error );
+				$decoded_data  = mcp_abilities_elementor_decode_data_meta( $elementor_data, $decode_error );
+				$data         = ( 'json' === $format ) ? $elementor_data : $decoded_data;
 				$message      = 'Elementor data retrieved successfully';
 				if ( null !== $decode_error ) {
 					$message .= ' (data was invalid JSON and was normalized to an empty array)';
+				}
+				$validation = mcp_abilities_elementor_validate_read_payload(
+					is_array( $decoded_data ) ? $decoded_data : array(),
+					$page_settings,
+					(int) $input['id']
+				);
+				if ( ! $validation['valid'] ) {
+					$message .= ' (validation found ' . (int) $validation['error_count'] . ' issue(s))';
 				}
 
 				return array(
@@ -5802,7 +6198,166 @@ function mcp_abilities_elementor_register_abilities(): void {
 					'edit_mode'     => $edit_mode ?: 'not set',
 					'data'          => $data,
 					'page_settings' => $page_settings ?: array(),
+					'validation'    => $validation,
 					'message'       => $message,
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Audit Invalid Settings
+	// =========================================================================
+	wp_register_ability(
+		'elementor/audit-invalid-settings',
+		array(
+			'label'               => 'Audit Elementor Invalid Settings',
+			'description'         => 'Readonly prescan for malformed Elementor data/page settings, including invalid responsive size/unit/spacing control values. Pass id for an exact document audit; without id, scans a bounded set of recently modified candidate documents.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'id'            => array(
+						'type'        => 'integer',
+						'description' => 'Optional single post/page/template ID to audit.',
+					),
+					'post_type'     => array(
+						'type'        => 'array',
+						'description' => 'Post types to scan when id is omitted. Defaults to page, post, and elementor_library.',
+					),
+					'status'        => array(
+						'type'        => 'array',
+						'description' => 'Post statuses to scan when id is omitted. Defaults to publish.',
+					),
+					'per_page'      => array(
+						'type'        => 'integer',
+						'default'     => 50,
+						'description' => 'Maximum documents to scan when id is omitted. Capped at 200.',
+					),
+					'include_valid' => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'Include valid documents in the returned items.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'     => array( 'type' => 'boolean' ),
+					'scanned'     => array( 'type' => 'integer' ),
+					'invalid'     => array( 'type' => 'integer' ),
+					'items'       => array( 'type' => 'array' ),
+					'message'     => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input = is_array( $input ) ? $input : array();
+
+				if ( ! current_user_can( 'edit_posts' ) ) {
+					return array( 'success' => false, 'message' => 'You do not have permission to audit Elementor data' );
+				}
+
+				$post_ids = array();
+				if ( ! empty( $input['id'] ) ) {
+					$post = get_post( (int) $input['id'] );
+					if ( ! $post ) {
+						return array( 'success' => false, 'message' => 'Post not found' );
+					}
+					if ( ! current_user_can( 'edit_post', $post->ID ) ) {
+						return array( 'success' => false, 'message' => 'You do not have permission to audit this post' );
+					}
+					$post_ids[] = (int) $post->ID;
+				} else {
+					$post_type = isset( $input['post_type'] ) && is_array( $input['post_type'] )
+						? array_values( array_filter( array_map( 'sanitize_key', $input['post_type'] ) ) )
+						: array( 'page', 'post', 'elementor_library' );
+					$status = isset( $input['status'] ) && is_array( $input['status'] )
+						? array_values( array_filter( array_map( 'sanitize_key', $input['status'] ) ) )
+						: array( 'publish' );
+					$per_page = isset( $input['per_page'] ) ? max( 1, min( 200, (int) $input['per_page'] ) ) : 50;
+
+					$post_type = ! empty( $post_type ) ? $post_type : array( 'page', 'post', 'elementor_library' );
+					$status    = ! empty( $status ) ? $status : array( 'publish' );
+
+					$query = new WP_Query( array(
+						'post_type'              => $post_type,
+						'post_status'            => $status,
+						'posts_per_page'         => $per_page,
+						'fields'                 => 'ids',
+						'orderby'                => 'modified',
+						'order'                  => 'DESC',
+						'no_found_rows'          => true,
+						'update_post_meta_cache' => false,
+						'update_post_term_cache' => false,
+					) );
+					$post_ids = array_map( 'intval', $query->posts );
+				}
+
+				$items         = array();
+				$invalid_count = 0;
+				$include_valid = ! empty( $input['include_valid'] );
+
+				foreach ( $post_ids as $post_id ) {
+					$post = get_post( $post_id );
+					if ( ! $post || ! current_user_can( 'edit_post', $post_id ) ) {
+						continue;
+					}
+
+					$raw_data = mcp_abilities_elementor_get_raw_data_meta( $post_id );
+					if ( '' === $raw_data ) {
+						continue;
+					}
+
+					$decode_error = null;
+					$data = mcp_abilities_elementor_decode_data_meta( $raw_data, $decode_error );
+					$page_settings = get_post_meta( $post_id, '_elementor_page_settings', true );
+					$validation = mcp_abilities_elementor_validate_read_payload(
+						is_array( $data ) ? $data : array(),
+						$page_settings,
+						$post_id
+					);
+
+					if ( null !== $decode_error ) {
+						$validation['valid'] = false;
+						$validation['errors'][] = 'post.' . $post_id . '._elementor_data is not valid JSON: ' . $decode_error;
+						$validation['error_count'] = count( $validation['errors'] );
+						$validation['message'] = mcp_abilities_elementor_format_validation_errors( $validation['errors'] );
+					}
+
+					if ( ! $validation['valid'] ) {
+						++$invalid_count;
+					}
+
+					if ( $include_valid || ! $validation['valid'] ) {
+						$items[] = array(
+							'id'         => $post_id,
+							'title'      => get_the_title( $post_id ),
+							'post_type'  => $post->post_type,
+							'status'     => $post->post_status,
+							'link'       => get_permalink( $post_id ),
+							'validation' => $validation,
+						);
+					}
+				}
+
+				return array(
+					'success' => true,
+					'scanned' => count( $post_ids ),
+					'invalid' => $invalid_count,
+					'items'   => $items,
+					'message' => 'Audited ' . count( $post_ids ) . ' Elementor document(s); found ' . $invalid_count . ' invalid document(s).',
 				);
 			},
 			'permission_callback' => function (): bool {
@@ -5901,13 +6456,23 @@ function mcp_abilities_elementor_register_abilities(): void {
 					if ( $existing_top_level > 1 && $new_top_level < (int) ceil( $existing_top_level / 2 ) ) {
 						return array( 'success' => false, 'message' => 'Refusing to drastically shrink Elementor document structure without force_replace=true' );
 					}
-				}
+					}
 
-				$normalized_data = mcp_abilities_elementor_normalize_background_container_subtrees( $input['data'] );
+					$normalized_data = mcp_abilities_elementor_normalize_background_container_subtrees( $input['data'] );
+					$validation      = mcp_abilities_elementor_validate_document_settings( $normalized_data, 'post.' . (int) $input['id'] . '._elementor_data' );
+					if ( empty( $validation['valid'] ) ) {
+						$errors = is_array( $validation['errors'] ?? null ) ? $validation['errors'] : array();
+						mcp_abilities_elementor_set_last_meta_validation_errors( $errors );
+						return array(
+							'success' => false,
+							'message' => mcp_abilities_elementor_format_validation_errors( $errors ),
+							'errors'  => $errors,
+						);
+					}
 
-				// Encode data to JSON.
-				$json_data = wp_json_encode( $normalized_data );
-				if ( false === $json_data ) {
+					// Encode data to JSON.
+					$json_data = wp_json_encode( $normalized_data );
+					if ( false === $json_data ) {
 					return array( 'success' => false, 'message' => 'Failed to encode data to JSON' );
 				}
 
@@ -7070,13 +7635,23 @@ function mcp_abilities_elementor_register_abilities(): void {
 						'element_id' => $input['element_id'],
 						'message'    => 'Element with ID "' . $input['element_id'] . '" not found in page structure',
 					);
-				}
+					}
 
-				$data = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
+					$data = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
+					$validation = mcp_abilities_elementor_validate_document_settings( $data, 'post.' . (int) $input['id'] . '._elementor_data' );
+					if ( empty( $validation['valid'] ) ) {
+						$errors = is_array( $validation['errors'] ?? null ) ? $validation['errors'] : array();
+						mcp_abilities_elementor_set_last_meta_validation_errors( $errors );
+						return array(
+							'success' => false,
+							'message' => mcp_abilities_elementor_format_validation_errors( $errors ),
+							'errors'  => $errors,
+						);
+					}
 
-				// Encode and save.
-				$json_data = wp_json_encode( $data );
-				if ( false === $json_data ) {
+					// Encode and save.
+					$json_data = wp_json_encode( $data );
+					if ( false === $json_data ) {
 					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
 				}
 
@@ -7265,12 +7840,22 @@ function mcp_abilities_elementor_register_abilities(): void {
 					);
 				}
 
-				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['element_id'], $merged_element );
-				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
-				$json_data = wp_json_encode( $data );
-				if ( false === $json_data ) {
-					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
-				}
+					mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['element_id'], $merged_element );
+					$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
+					$validation = mcp_abilities_elementor_validate_document_settings( $data, 'post.' . (int) $input['id'] . '._elementor_data' );
+					if ( empty( $validation['valid'] ) ) {
+						$errors = is_array( $validation['errors'] ?? null ) ? $validation['errors'] : array();
+						mcp_abilities_elementor_set_last_meta_validation_errors( $errors );
+						return array(
+							'success' => false,
+							'message' => mcp_abilities_elementor_format_validation_errors( $errors ),
+							'errors'  => $errors,
+						);
+					}
+					$json_data = wp_json_encode( $data );
+					if ( false === $json_data ) {
+						return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
+					}
 
 				update_post_meta( (int) $input['id'], '_elementor_data', wp_slash( $json_data ) );
 				$cache_details = mcp_abilities_elementor_invalidate_after_write( (int) $input['id'], $requested_cache_scope );
@@ -11972,6 +12557,7 @@ function mcp_abilities_elementor_register_abilities(): void {
 					'element_id' => array( 'type' => 'string' ),
 					'path'       => array( 'type' => 'array' ),
 					'element'    => array( 'type' => 'object' ),
+					'validation' => array( 'type' => 'object' ),
 					'message'    => array( 'type' => 'string' ),
 				),
 			),
@@ -12042,13 +12628,25 @@ function mcp_abilities_elementor_register_abilities(): void {
 					);
 				}
 
+				$validation = is_array( $found_element )
+					? mcp_abilities_elementor_validate_document_settings( array( $found_element ), 'post.' . (int) $input['id'] . '._elementor_data.' . (string) $input['element_id'] )
+					: array( 'valid' => true, 'errors' => array() );
+				$validation = mcp_abilities_elementor_build_validation_payload(
+					is_array( $validation['errors'] ?? null ) ? $validation['errors'] : array()
+				);
+				$message = 'Element retrieved successfully';
+				if ( ! $validation['valid'] ) {
+					$message .= ' (validation found ' . (int) $validation['error_count'] . ' issue(s))';
+				}
+
 				return array(
 					'success'    => true,
 					'id'         => $input['id'],
 					'element_id' => $input['element_id'],
 					'path'       => $found_path,
 					'element'    => $found_element,
-					'message'    => 'Element retrieved successfully',
+					'validation' => $validation,
+					'message'    => $message,
 				);
 			},
 			'permission_callback' => function (): bool {
@@ -15024,10 +15622,20 @@ function mcp_abilities_elementor_register_abilities(): void {
 				$existing = get_post_meta( $kit_id, '_elementor_page_settings', true );
 				$existing = is_array( $existing ) ? $existing : array();
 
-				$replace = ! empty( $input['replace'] );
-				$final   = $replace ? $input['settings'] : array_merge( $existing, $input['settings'] );
+					$replace = ! empty( $input['replace'] );
+					$final   = $replace ? $input['settings'] : array_merge( $existing, $input['settings'] );
+					$validation = mcp_abilities_elementor_validate_settings_array( $final, 'post.' . (int) $kit_id . '._elementor_page_settings' );
+					if ( empty( $validation['valid'] ) ) {
+						$errors = is_array( $validation['errors'] ?? null ) ? $validation['errors'] : array();
+						mcp_abilities_elementor_set_last_meta_validation_errors( $errors );
+						return array(
+							'success' => false,
+							'message' => mcp_abilities_elementor_format_validation_errors( $errors ),
+							'errors'  => $errors,
+						);
+					}
 
-				update_post_meta( $kit_id, '_elementor_page_settings', $final );
+					update_post_meta( $kit_id, '_elementor_page_settings', $final );
 
 					// Clear all Elementor CSS cache since kit affects entire site.
 					mcp_abilities_elementor_clear_site_cache();
@@ -15598,12 +16206,22 @@ function mcp_abilities_elementor_register_abilities(): void {
 
 				if ( $replace ) {
 					$final_settings = $new_settings;
-				} else {
-					// Merge new settings into existing (new values override).
-					$final_settings = array_merge( $existing_settings, $new_settings );
-				}
+					} else {
+						// Merge new settings into existing (new values override).
+						$final_settings = array_merge( $existing_settings, $new_settings );
+					}
+					$validation = mcp_abilities_elementor_validate_settings_array( $final_settings, 'post.' . (int) $input['id'] . '._elementor_page_settings' );
+					if ( empty( $validation['valid'] ) ) {
+						$errors = is_array( $validation['errors'] ?? null ) ? $validation['errors'] : array();
+						mcp_abilities_elementor_set_last_meta_validation_errors( $errors );
+						return array(
+							'success' => false,
+							'message' => mcp_abilities_elementor_format_validation_errors( $errors ),
+							'errors'  => $errors,
+						);
+					}
 
-				update_post_meta( $input['id'], '_elementor_page_settings', $final_settings );
+					update_post_meta( $input['id'], '_elementor_page_settings', $final_settings );
 
 				// Clear Elementor CSS cache.
 				delete_post_meta( $input['id'], '_elementor_css' );
@@ -15638,4 +16256,6 @@ add_action( 'wp_enqueue_scripts', 'mcp_abilities_elementor_enqueue_frontend_runt
 add_action( 'elementor/frontend/after_register_scripts', 'mcp_abilities_elementor_enqueue_frontend_runtime_when_needed', 5 );
 add_action( 'wp_head', 'mcp_abilities_elementor_print_frontend_config_when_needed', 1 );
 add_action( 'wp_head', 'mcp_abilities_elementor_print_footer_scripts_early_when_needed', 999 );
+add_filter( 'add_post_metadata', 'mcp_abilities_elementor_prevent_invalid_meta_write', 10, 4 );
+add_filter( 'update_post_metadata', 'mcp_abilities_elementor_prevent_invalid_meta_write', 10, 4 );
 add_action( 'wp_abilities_api_init', 'mcp_abilities_elementor_register_abilities' );
