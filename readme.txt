@@ -3,7 +3,7 @@ Contributors: devenia
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 6.9
-Stable tag: 2.3.2
+Stable tag: 2.3.0
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -57,15 +57,6 @@ Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilit
 * [All Add-on Plugins](https://devenia.com/plugins/mcp-expose-abilities/#add-ons)
 
 == Changelog ==
-
-= 2.3.2 =
-* Added: read-time validation payloads to `elementor/get-data` and `elementor/get-element` so existing malformed Elementor settings are visible during inspection.
-* Added: `elementor/audit-invalid-settings` readonly prescan ability for one exact document or a bounded scan of recently modified published candidate documents.
-
-= 2.3.1 =
-* Added: global validation guard for `_elementor_data` and `_elementor_page_settings` writes so malformed Elementor control values are blocked before save.
-* Added: clearer validation errors for invalid responsive/unit/spacing values, including accidental percent-encoded strings such as `%20` in design fields.
-* Preserved encoded URLs, HTML, CSS, shortcode, and text fields as freeform content so valid content payloads continue to work.
 
 = 2.3.0 =
 * Added: first abilities-only page-authoring pass inspired by the requested `elementor-mcp` comparison.
