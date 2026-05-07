@@ -3,7 +3,7 @@ Contributors: devenia
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 6.9
-Stable tag: 2.3.2
+Stable tag: 2.3.3
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -57,6 +57,12 @@ Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilit
 * [All Add-on Plugins](https://devenia.com/plugins/mcp-expose-abilities/#add-ons)
 
 == Changelog ==
+
+= 2.3.3 =
+* Added: `elementor/repair-invalid-settings` to repair existing malformed Elementor numeric control values after audit findings, such as `size: "20px"` into `unit: "px", size: 20`.
+* Added: `elementor/restore-data-from-revision` to restore Elementor data from a revision through validated WordPress API writes.
+* Changed: repair writes now verify readback through WordPress meta APIs only.
+* Improved: repair writes verify the saved `_elementor_data` readback semantically so failed persistence is surfaced without treating harmless JSON serialization differences as failures.
 
 = 2.3.2 =
 * Added: global validation guard for `_elementor_data` and `_elementor_page_settings` writes so malformed Elementor control values are blocked before save.

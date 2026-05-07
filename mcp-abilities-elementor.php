@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.3.2
+ * Version: 2.3.3
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -1759,6 +1759,183 @@ function mcp_abilities_elementor_validate_read_payload( array $data, $page_setti
 	}
 
 	return mcp_abilities_elementor_build_validation_payload( $errors );
+}
+
+/**
+ * Convert common malformed numeric control strings into valid Elementor values.
+ *
+ * Elementor size controls should store the number in `size` and the unit in
+ * `unit`. This repairs existing legacy/bad values such as `size: "20px"`.
+ *
+ * @param mixed  $value Settings value/tree.
+ * @param string $path Dot-path for diagnostics.
+ * @param array  $changes Repair changes.
+ * @return mixed
+ */
+function mcp_abilities_elementor_repair_settings_value( $value, string $path, array &$changes ) {
+	if ( ! is_array( $value ) ) {
+		return $value;
+	}
+
+	$key = basename( str_replace( '.', '/', $path ) );
+	if ( mcp_abilities_elementor_is_freeform_settings_key( $key ) ) {
+		return $value;
+	}
+
+	if ( array_key_exists( 'unit', $value ) && array_key_exists( 'size', $value ) && is_string( $value['size'] ) ) {
+		$raw_size = trim( $value['size'] );
+		if ( preg_match( '/^(-?(?:\d+|\d*\.\d+))(px|%|em|rem|vw|vh|vmin|vmax|deg|s|ms)$/i', $raw_size, $matches ) ) {
+			$old = array(
+				'unit' => $value['unit'],
+				'size' => $value['size'],
+			);
+
+			$numeric_size = (float) $matches[1];
+			$value['unit'] = strtolower( $matches[2] );
+			$value['size'] = abs( $numeric_size - round( $numeric_size ) ) < 0.0001 ? (int) round( $numeric_size ) : $numeric_size;
+			if ( ! array_key_exists( 'sizes', $value ) ) {
+				$value['sizes'] = array();
+			}
+
+			$changes[] = array(
+				'path' => $path,
+				'from' => $old,
+				'to'   => array(
+					'unit' => $value['unit'],
+					'size' => $value['size'],
+				),
+			);
+		}
+	}
+
+	foreach ( $value as $child_key => $child_value ) {
+		if ( ! is_array( $child_value ) ) {
+			continue;
+		}
+
+		$child_key = is_string( $child_key ) || is_int( $child_key ) ? (string) $child_key : 'unknown';
+		if ( mcp_abilities_elementor_is_freeform_settings_key( $child_key ) ) {
+			continue;
+		}
+
+		$value[ $child_key ] = mcp_abilities_elementor_repair_settings_value( $child_value, $path . '.' . $child_key, $changes );
+	}
+
+	return $value;
+}
+
+/**
+ * Repair malformed numeric control values in an Elementor data tree.
+ *
+ * @param array $elements Elementor document tree.
+ * @return array Repair result.
+ */
+function mcp_abilities_elementor_repair_document_settings( array $elements ): array {
+	$changes = array();
+
+	$walk = static function ( array &$items, string $path ) use ( &$walk, &$changes ): void {
+		foreach ( $items as $index => &$element ) {
+			if ( ! is_array( $element ) ) {
+				continue;
+			}
+
+			$id           = is_string( $element['id'] ?? null ) ? $element['id'] : (string) $index;
+			$element_path = $path . '.' . $id;
+
+			if ( isset( $element['settings'] ) && is_array( $element['settings'] ) ) {
+				$element['settings'] = mcp_abilities_elementor_repair_settings_value(
+					$element['settings'],
+					$element_path . '.settings',
+					$changes
+				);
+			}
+
+			if ( isset( $element['elements'] ) && is_array( $element['elements'] ) ) {
+				$walk( $element['elements'], $element_path . '.elements' );
+			}
+		}
+	};
+
+	$walk( $elements, 'data' );
+
+	return array(
+		'data'    => $elements,
+		'changes' => $changes,
+	);
+}
+
+/**
+ * Compare Elementor JSON payloads semantically, ignoring serialization details.
+ *
+ * @param string $readback_json JSON payload read from WordPress.
+ * @param string $expected_json JSON payload that was written.
+ * @return bool Whether both payloads decode to the same Elementor data tree.
+ */
+function mcp_abilities_elementor_json_payloads_match( string $readback_json, string $expected_json ): bool {
+	if ( $readback_json === $expected_json ) {
+		return true;
+	}
+
+	$readback = json_decode( $readback_json, true );
+	if ( JSON_ERROR_NONE !== json_last_error() || ! is_array( $readback ) ) {
+		return false;
+	}
+
+	$expected = json_decode( $expected_json, true );
+	if ( JSON_ERROR_NONE !== json_last_error() || ! is_array( $expected ) ) {
+		return false;
+	}
+
+	return $readback == $expected;
+}
+
+/**
+ * Persist Elementor data through WordPress APIs and verify the value was saved.
+ *
+ * This is intentionally narrow and used by repair tooling when an existing
+ * malformed meta value needs to be replaced by a validated clean value.
+ *
+ * @param int    $post_id Post ID.
+ * @param string $json_data JSON-encoded Elementor data.
+ * @return array Persistence result.
+ */
+function mcp_abilities_elementor_persist_data_meta_verified( int $post_id, string $json_data ): array {
+	$updated = update_post_meta( $post_id, '_elementor_data', wp_slash( $json_data ) );
+	clean_post_cache( $post_id );
+	wp_cache_delete( $post_id, 'post_meta' );
+
+	$readback = mcp_abilities_elementor_get_raw_data_meta( $post_id );
+	if ( mcp_abilities_elementor_json_payloads_match( $readback, $json_data ) ) {
+		return array(
+			'success' => true,
+			'method'  => 'update_post_meta',
+			'updated' => false !== $updated,
+		);
+	}
+
+	$deleted = delete_post_meta( $post_id, '_elementor_data' );
+	$added   = add_post_meta( $post_id, '_elementor_data', wp_slash( $json_data ), true );
+	clean_post_cache( $post_id );
+	wp_cache_delete( $post_id, 'post_meta' );
+
+	$readback = mcp_abilities_elementor_get_raw_data_meta( $post_id );
+	if ( mcp_abilities_elementor_json_payloads_match( $readback, $json_data ) ) {
+		return array(
+			'success' => true,
+			'method'  => 'delete_add_post_meta',
+			'deleted' => (bool) $deleted,
+			'added'   => (bool) $added,
+		);
+	}
+
+	return array(
+		'success' => false,
+		'method'  => 'wordpress_meta_api',
+		'updated' => false !== $updated,
+		'deleted' => (bool) $deleted,
+		'added'   => (bool) $added,
+		'message' => 'Readback did not match after WordPress meta API update and delete/add retry.',
+	);
 }
 
 /**
@@ -6366,6 +6543,349 @@ function mcp_abilities_elementor_register_abilities(): void {
 			'meta'                => array(
 				'annotations' => array(
 					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Repair Invalid Settings
+	// =========================================================================
+	wp_register_ability(
+		'elementor/repair-invalid-settings',
+		array(
+			'label'               => 'Repair Elementor Invalid Settings',
+			'description'         => 'Repairs existing malformed Elementor numeric control values found by audit-invalid-settings, such as size strings with embedded units. Validates and verifies readback before reporting success.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id' ),
+				'properties'           => array(
+					'id'          => array(
+						'type'        => 'integer',
+						'description' => 'Post/Page/Template ID to repair.',
+					),
+					'dry_run'     => array(
+						'type'        => 'boolean',
+						'default'     => true,
+						'description' => 'Preview repairs without writing.',
+					),
+					'cache_scope' => array(
+						'type'        => 'string',
+						'enum'        => array( 'none', 'post', 'site' ),
+						'default'     => 'post',
+						'description' => 'Cache invalidation scope after write.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'     => array( 'type' => 'boolean' ),
+					'id'          => array( 'type' => 'integer' ),
+					'dry_run'     => array( 'type' => 'boolean' ),
+					'changed'     => array( 'type' => 'boolean' ),
+					'changes'     => array( 'type' => 'array' ),
+					'validation'  => array( 'type' => 'object' ),
+					'persistence' => array( 'type' => 'object' ),
+					'cache'       => array( 'type' => 'object' ),
+					'message'     => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input = is_array( $input ) ? $input : array();
+				$post_id = isset( $input['id'] ) ? (int) $input['id'] : 0;
+
+				if ( $post_id <= 0 ) {
+					return array( 'success' => false, 'message' => 'Post/Page/Template ID is required' );
+				}
+
+				$post = get_post( $post_id );
+				if ( ! $post ) {
+					return array( 'success' => false, 'message' => 'Post not found' );
+				}
+
+				if ( ! current_user_can( 'edit_post', $post_id ) ) {
+					return array( 'success' => false, 'message' => 'You do not have permission to repair this post' );
+				}
+
+				$raw_data = mcp_abilities_elementor_get_raw_data_meta( $post_id );
+				if ( '' === $raw_data ) {
+					return array( 'success' => false, 'id' => $post_id, 'message' => 'No Elementor data found for this post' );
+				}
+
+				$decode_error = null;
+				$data = mcp_abilities_elementor_decode_data_meta( $raw_data, $decode_error );
+				if ( null !== $decode_error ) {
+					return array(
+						'success' => false,
+						'id'      => $post_id,
+						'message' => 'Elementor data is invalid JSON: ' . $decode_error,
+					);
+				}
+
+				$repair = mcp_abilities_elementor_repair_document_settings( $data );
+				$repaired_data = is_array( $repair['data'] ?? null ) ? $repair['data'] : $data;
+				$changes = is_array( $repair['changes'] ?? null ) ? $repair['changes'] : array();
+				$validation_result = mcp_abilities_elementor_validate_document_settings( $repaired_data, 'post.' . $post_id . '._elementor_data' );
+				$validation = mcp_abilities_elementor_build_validation_payload(
+					is_array( $validation_result['errors'] ?? null ) ? $validation_result['errors'] : array()
+				);
+
+				$dry_run = ! array_key_exists( 'dry_run', $input ) || ! empty( $input['dry_run'] );
+				$requested_cache_scope = mcp_abilities_elementor_normalize_cache_scope( $input['cache_scope'] ?? 'post', 'post' );
+
+				if ( empty( $changes ) ) {
+					return array(
+						'success'    => true,
+						'id'         => $post_id,
+						'dry_run'    => $dry_run,
+						'changed'    => false,
+						'changes'    => array(),
+						'validation' => $validation,
+						'message'    => 'No repairable invalid Elementor settings were found.',
+					);
+				}
+
+				if ( ! $validation['valid'] ) {
+					return array(
+						'success'    => false,
+						'id'         => $post_id,
+						'dry_run'    => $dry_run,
+						'changed'    => false,
+						'changes'    => $changes,
+						'validation' => $validation,
+						'message'    => 'Repair result still contains invalid Elementor settings; no write performed.',
+					);
+				}
+
+				$json_data = wp_json_encode( $repaired_data );
+				if ( false === $json_data ) {
+					return array( 'success' => false, 'id' => $post_id, 'message' => 'Failed to encode repaired Elementor data to JSON' );
+				}
+
+				if ( $dry_run ) {
+					return array(
+						'success'    => true,
+						'id'         => $post_id,
+						'dry_run'    => true,
+						'changed'    => true,
+						'changes'    => $changes,
+						'validation' => $validation,
+						'message'    => 'Dry run: repair prepared successfully.',
+					);
+				}
+
+				$persistence = mcp_abilities_elementor_persist_data_meta_verified( $post_id, $json_data );
+				if ( empty( $persistence['success'] ) ) {
+					return array(
+						'success'     => false,
+						'id'          => $post_id,
+						'dry_run'     => false,
+						'changed'     => false,
+						'changes'     => $changes,
+						'validation'  => $validation,
+						'persistence' => $persistence,
+						'message'     => $persistence['message'] ?? 'Failed to persist repaired Elementor data.',
+					);
+				}
+
+				update_post_meta( $post_id, '_elementor_edit_mode', 'builder' );
+				$cache_details = mcp_abilities_elementor_invalidate_after_write( $post_id, $requested_cache_scope );
+
+				return array(
+					'success'     => true,
+					'id'          => $post_id,
+					'dry_run'     => false,
+					'changed'     => true,
+					'changes'     => $changes,
+					'validation'  => $validation,
+					'persistence' => $persistence,
+					'cache'       => $cache_details,
+					'message'     => 'Invalid Elementor settings repaired successfully.',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Restore Data From Revision
+	// =========================================================================
+	wp_register_ability(
+		'elementor/restore-data-from-revision',
+		array(
+			'label'               => 'Restore Elementor Data From Revision',
+			'description'         => 'Restores Elementor data from a revision to a target document, repairs known invalid numeric control values, validates the result, and verifies readback.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id', 'revision_id' ),
+				'properties'           => array(
+					'id'          => array(
+						'type'        => 'integer',
+						'description' => 'Target post/page/template ID to restore into.',
+					),
+					'revision_id' => array(
+						'type'        => 'integer',
+						'description' => 'Revision ID to read Elementor data from.',
+					),
+					'dry_run'     => array(
+						'type'        => 'boolean',
+						'default'     => true,
+						'description' => 'Preview restore without writing.',
+					),
+					'cache_scope' => array(
+						'type'        => 'string',
+						'enum'        => array( 'none', 'post', 'site' ),
+						'default'     => 'post',
+						'description' => 'Cache invalidation scope after write.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'     => array( 'type' => 'boolean' ),
+					'id'          => array( 'type' => 'integer' ),
+					'revision_id' => array( 'type' => 'integer' ),
+					'dry_run'     => array( 'type' => 'boolean' ),
+					'changed'     => array( 'type' => 'boolean' ),
+					'changes'     => array( 'type' => 'array' ),
+					'validation'  => array( 'type' => 'object' ),
+					'persistence' => array( 'type' => 'object' ),
+					'cache'       => array( 'type' => 'object' ),
+					'message'     => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input       = is_array( $input ) ? $input : array();
+				$post_id     = isset( $input['id'] ) ? (int) $input['id'] : 0;
+				$revision_id = isset( $input['revision_id'] ) ? (int) $input['revision_id'] : 0;
+
+				if ( $post_id <= 0 || $revision_id <= 0 ) {
+					return array( 'success' => false, 'message' => 'Target ID and revision_id are required' );
+				}
+
+				$post     = get_post( $post_id );
+				$revision = get_post( $revision_id );
+				if ( ! $post || ! $revision || 'revision' !== $revision->post_type ) {
+					return array( 'success' => false, 'id' => $post_id, 'revision_id' => $revision_id, 'message' => 'Target post or revision not found' );
+				}
+
+				if ( (int) $revision->post_parent !== $post_id ) {
+					return array( 'success' => false, 'id' => $post_id, 'revision_id' => $revision_id, 'message' => 'Revision does not belong to the target post' );
+				}
+
+				if ( ! current_user_can( 'edit_post', $post_id ) ) {
+					return array( 'success' => false, 'id' => $post_id, 'message' => 'You do not have permission to restore this post' );
+				}
+
+				$raw_data = mcp_abilities_elementor_get_raw_data_meta( $revision_id );
+				if ( '' === $raw_data ) {
+					return array( 'success' => false, 'id' => $post_id, 'revision_id' => $revision_id, 'message' => 'No Elementor data found on revision' );
+				}
+
+				$decode_error = null;
+				$data         = mcp_abilities_elementor_decode_data_meta( $raw_data, $decode_error );
+				if ( null !== $decode_error ) {
+					return array( 'success' => false, 'id' => $post_id, 'revision_id' => $revision_id, 'message' => 'Revision Elementor data is invalid JSON: ' . $decode_error );
+				}
+
+				$repair        = mcp_abilities_elementor_repair_document_settings( $data );
+				$repaired_data = is_array( $repair['data'] ?? null ) ? $repair['data'] : $data;
+				$changes       = is_array( $repair['changes'] ?? null ) ? $repair['changes'] : array();
+				$validation_result = mcp_abilities_elementor_validate_document_settings( $repaired_data, 'post.' . $post_id . '._elementor_data' );
+				$validation = mcp_abilities_elementor_build_validation_payload(
+					is_array( $validation_result['errors'] ?? null ) ? $validation_result['errors'] : array()
+				);
+
+				if ( ! $validation['valid'] ) {
+					return array(
+						'success'     => false,
+						'id'          => $post_id,
+						'revision_id' => $revision_id,
+						'changed'     => false,
+						'changes'     => $changes,
+						'validation'  => $validation,
+						'message'     => 'Restored data would still contain invalid Elementor settings; no write performed.',
+					);
+				}
+
+				$json_data = wp_json_encode( $repaired_data );
+				if ( false === $json_data ) {
+					return array( 'success' => false, 'id' => $post_id, 'revision_id' => $revision_id, 'message' => 'Failed to encode restored Elementor data to JSON' );
+				}
+
+				$target_raw = mcp_abilities_elementor_get_raw_data_meta( $post_id );
+				$changed    = ! mcp_abilities_elementor_json_payloads_match( $target_raw, $json_data );
+				$dry_run    = ! array_key_exists( 'dry_run', $input ) || ! empty( $input['dry_run'] );
+				if ( $dry_run ) {
+					return array(
+						'success'     => true,
+						'id'          => $post_id,
+						'revision_id' => $revision_id,
+						'dry_run'     => true,
+						'changed'     => $changed,
+						'changes'     => $changes,
+						'validation'  => $validation,
+						'message'     => $changed ? 'Dry run: restore prepared successfully.' : 'Dry run: target already matches restored data.',
+					);
+				}
+
+				$persistence = mcp_abilities_elementor_persist_data_meta_verified( $post_id, $json_data );
+				if ( empty( $persistence['success'] ) ) {
+					return array(
+						'success'     => false,
+						'id'          => $post_id,
+						'revision_id' => $revision_id,
+						'dry_run'     => false,
+						'changed'     => false,
+						'changes'     => $changes,
+						'validation'  => $validation,
+						'persistence' => $persistence,
+						'message'     => $persistence['message'] ?? 'Failed to persist restored Elementor data.',
+					);
+				}
+
+				update_post_meta( $post_id, '_elementor_edit_mode', 'builder' );
+				$cache_details = mcp_abilities_elementor_invalidate_after_write(
+					$post_id,
+					mcp_abilities_elementor_normalize_cache_scope( $input['cache_scope'] ?? 'post', 'post' )
+				);
+
+				return array(
+					'success'     => true,
+					'id'          => $post_id,
+					'revision_id' => $revision_id,
+					'dry_run'     => false,
+					'changed'     => $changed,
+					'changes'     => $changes,
+					'validation'  => $validation,
+					'persistence' => $persistence,
+					'cache'       => $cache_details,
+					'message'     => 'Elementor data restored from revision successfully.',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
 					'destructive' => false,
 					'idempotent'  => true,
 				),
