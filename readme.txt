@@ -2,8 +2,8 @@
 Contributors: devenia
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
-Tested up to: 6.9
-Stable tag: 2.3.4
+Tested up to: 7.0
+Stable tag: 2.3.5
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -57,6 +57,10 @@ Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilit
 * [All Add-on Plugins](https://devenia.com/plugins/mcp-expose-abilities/#add-ons)
 
 == Changelog ==
+
+= 2.3.5 =
+* Fixed: frontend runtime repair now only runs for Elementor Canvas/headless opt-in templates instead of normal Elementor pages.
+* Fixed: navigation menu widgets no longer trigger the runtime-repair path, avoiding duplicate menu initialization.
 
 = 2.3.4 =
 * Safety: removed the global `_elementor_data` / `_elementor_page_settings` metadata write guard; validation is now read/audit surfaced instead of intercepting all WordPress metadata writes.

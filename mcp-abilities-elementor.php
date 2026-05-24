@@ -3,12 +3,13 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.3.4
+ * Version: 2.3.5
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
  * License URI: http://www.gnu.org/licenses/gpl-2.0.txt
  * Requires at least: 6.9
+ * Tested up to: 7.0
  * Requires PHP: 8.0
  *
  * @package MCP_Abilities_Elementor
@@ -363,6 +364,30 @@ function mcp_abilities_elementor_decode_data_meta( $raw, ?string &$error = null 
 	}
 
 	return is_array( $decoded ) ? $decoded : array();
+}
+
+/**
+ * Count nodes in an Elementor element tree.
+ *
+ * @param array $nodes Elementor element nodes.
+ * @return int
+ */
+function mcp_abilities_elementor_count_nodes( array $nodes ): int {
+	$count = 0;
+
+	foreach ( $nodes as $node ) {
+		if ( ! is_array( $node ) ) {
+			continue;
+		}
+
+		$count++;
+
+		if ( isset( $node['elements'] ) && is_array( $node['elements'] ) ) {
+			$count += mcp_abilities_elementor_count_nodes( $node['elements'] );
+		}
+	}
+
+	return $count;
 }
 
 /**
@@ -802,6 +827,39 @@ function mcp_abilities_elementor_insert_element_in_tree( array &$elements, array
 	}
 
 	return false;
+}
+
+/**
+ * Validate that an add operation preserved the existing tree.
+ *
+ * @param array  $before Existing Elementor tree.
+ * @param array  $after Updated Elementor tree.
+ * @param string $new_element_id Newly added element ID.
+ * @return array
+ */
+function mcp_abilities_elementor_validate_single_add_diff( array $before, array $after, string $new_element_id ): array {
+	$before_ids = mcp_abilities_elementor_collect_element_ids( $before );
+	$after_ids  = mcp_abilities_elementor_collect_element_ids( $after );
+
+	$missing = array_values( array_diff( $before_ids, $after_ids ) );
+	$added   = array_values( array_diff( $after_ids, $before_ids ) );
+
+	$errors = array();
+	if ( ! empty( $missing ) ) {
+		$errors[] = 'Existing Elementor element IDs disappeared during add operation: ' . implode( ', ', array_slice( $missing, 0, 20 ) );
+	}
+	if ( array( $new_element_id ) !== $added ) {
+		$errors[] = 'Add operation must add exactly one new element ID (' . $new_element_id . '); actual added IDs: ' . implode( ', ', $added );
+	}
+
+	return array(
+		'valid'   => empty( $errors ),
+		'errors'  => $errors,
+		'before_count' => count( $before_ids ),
+		'after_count'  => count( $after_ids ),
+		'added'   => $added,
+		'missing' => $missing,
+	);
 }
 
 /**
@@ -1491,17 +1549,72 @@ function mcp_abilities_elementor_make_size_control( $value, string $default_unit
 function mcp_abilities_elementor_is_freeform_settings_key( string $key ): bool {
 	$key = strtolower( $key );
 
-	if ( in_array( $key, array( 'url', 'href', 'src', 'title', 'text', 'editor', 'html', 'shortcode', 'css_classes', 'custom_attributes', '_title' ), true ) ) {
+	if ( in_array( $key, array( 'url', 'href', 'src', 'title', 'text', 'editor', 'html', 'shortcode', 'custom_attributes', '_title' ), true ) ) {
 		return true;
 	}
 
+	if ( 'css_classes' === $key ) {
+		return false;
+	}
+
 	foreach ( array( 'url', 'href', 'src', 'image', 'background_image', 'gallery', 'carousel', 'slides', 'tabs', 'items', 'content', 'text', 'title', 'editor', 'html', 'shortcode', 'css', 'classes', 'attributes' ) as $token ) {
+		if ( 'classes' === $token && 'css_classes' === $key ) {
+			continue;
+		}
 		if ( str_contains( $key, $token ) ) {
 			return true;
 		}
 	}
 
 	return false;
+}
+
+/**
+ * Validate Elementor Advanced > CSS Classes values.
+ *
+ * Elementor's css_classes field accepts class-name tokens only. CSS rules,
+ * selectors, declarations, and copied WPBakery snippets must be blocked before
+ * they can be persisted into Elementor JSON.
+ *
+ * @param mixed  $value Raw css_classes value.
+ * @param string $path Dot-path for diagnostics.
+ * @param array  $errors Validation errors.
+ * @return void
+ */
+function mcp_abilities_elementor_validate_css_classes_value( $value, string $path, array &$errors ): void {
+	if ( null === $value || '' === $value ) {
+		return;
+	}
+
+	if ( ! is_string( $value ) ) {
+		$errors[] = sprintf( '%s must be a whitespace-separated string of class names; got %s', $path, gettype( $value ) );
+		return;
+	}
+
+	$trimmed = trim( $value );
+	if ( '' === $trimmed ) {
+		return;
+	}
+
+	if ( preg_match( '/[{}:;!]/', $trimmed ) || str_contains( strtolower( $trimmed ), '!important' ) ) {
+		$errors[] = sprintf( '%s contains CSS syntax. Use native Elementor settings instead of CSS rules in the CSS Classes field.', $path );
+		return;
+	}
+
+	$tokens = preg_split( '/\s+/', $trimmed );
+	if ( ! is_array( $tokens ) ) {
+		$errors[] = sprintf( '%s could not be parsed as class names', $path );
+		return;
+	}
+
+	foreach ( $tokens as $token ) {
+		if ( '' === $token ) {
+			continue;
+		}
+		if ( ! preg_match( '/^[A-Za-z_-][A-Za-z0-9_-]*$/', $token ) ) {
+			$errors[] = sprintf( '%s contains invalid CSS class token %s. Enter class names only, without dots, braces, or declarations.', $path, wp_json_encode( $token ) );
+		}
+	}
 }
 
 /**
@@ -1570,6 +1683,11 @@ function mcp_abilities_elementor_validate_numeric_control_scalar( $value, string
  */
 function mcp_abilities_elementor_validate_settings_value( $value, string $path, array &$errors ): void {
 	$key = basename( str_replace( '.', '/', $path ) );
+
+	if ( 'css_classes' === strtolower( $key ) ) {
+		mcp_abilities_elementor_validate_css_classes_value( $value, $path, $errors );
+		return;
+	}
 
 	if ( mcp_abilities_elementor_is_freeform_settings_key( $key ) ) {
 		return;
@@ -5606,7 +5724,6 @@ function mcp_abilities_elementor_collect_interactive_widget_usage( array $elemen
 		'loop-grid',
 		'video',
 		'animated-headline',
-		'nav-menu',
 		'search-form',
 		'posts',
 		'portfolio',
@@ -5911,19 +6028,8 @@ function mcp_abilities_elementor_apply_frontend_runtime_guard( array $response, 
  * @return array<int,mixed>
  */
 function mcp_abilities_elementor_get_post_elements( int $post_id ): array {
-	$raw = get_post_meta( $post_id, '_elementor_data', true );
-
-	if ( is_array( $raw ) ) {
-		return $raw;
-	}
-
-	if ( ! is_string( $raw ) || '' === trim( $raw ) ) {
-		return array();
-	}
-
-	$data = json_decode( wp_unslash( $raw ), true );
-
-	return is_array( $data ) ? $data : array();
+	$error = null;
+	return mcp_abilities_elementor_decode_data_meta( mcp_abilities_elementor_get_raw_data_meta( $post_id ), $error );
 }
 
 /**
@@ -5960,6 +6066,37 @@ function mcp_abilities_elementor_get_current_frontend_post_id(): int {
 }
 
 /**
+ * Check whether frontend runtime repair is allowed for the current document.
+ *
+ * Normal Elementor pages should be left to Elementor's own frontend bootstrap.
+ * This repair path is only for canvas/headless-style documents that intentionally
+ * bypass the theme wrapper and can miss the usual runtime output.
+ *
+ * @param int $post_id Post ID.
+ * @return bool
+ */
+function mcp_abilities_elementor_is_frontend_runtime_repair_allowed( int $post_id ): bool {
+	if ( $post_id <= 0 ) {
+		return false;
+	}
+
+	$template = (string) get_page_template_slug( $post_id );
+	if ( 'elementor_canvas' === $template ) {
+		return true;
+	}
+
+	/**
+	 * Allow site-specific headless/canvas templates to opt into Elementor
+	 * frontend runtime repair without enabling it on every normal page.
+	 *
+	 * @param bool   $allowed  Whether repair is allowed.
+	 * @param int    $post_id  Current post ID.
+	 * @param string $template Page template slug.
+	 */
+	return (bool) apply_filters( 'mcp_abilities_elementor_allow_frontend_runtime_repair', false, $post_id, $template );
+}
+
+/**
  * Detect whether the current frontend request needs Elementor runtime repair.
  *
  * @return array<string,mixed>
@@ -5990,6 +6127,12 @@ function mcp_abilities_elementor_get_current_frontend_runtime_context(): array {
 	$post_id = mcp_abilities_elementor_get_current_frontend_post_id();
 	if ( $post_id <= 0 ) {
 		$context = $default;
+		return $context;
+	}
+
+	if ( ! mcp_abilities_elementor_is_frontend_runtime_repair_allowed( $post_id ) ) {
+		$context = $default;
+		$context['reason'] = 'runtime_repair_not_allowed_for_template';
 		return $context;
 	}
 
@@ -6360,6 +6503,137 @@ function mcp_abilities_elementor_register_abilities(): void {
 					'page_settings' => $page_settings ?: array(),
 					'validation'    => $validation,
 					'message'       => $message,
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - List Usage
+	// =========================================================================
+	wp_register_ability(
+		'elementor/list-usage',
+		array(
+			'label'               => 'List Elementor Usage',
+			'description'         => 'Read-only scan for posts, pages, and Elementor templates with Elementor metadata.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'post_types' => array(
+						'type'        => 'array',
+						'items'       => array( 'type' => 'string' ),
+						'description' => 'Post types to scan.',
+						'default'     => array( 'page', 'post', 'elementor_library' ),
+					),
+					'statuses'   => array(
+						'type'        => 'array',
+						'items'       => array( 'type' => 'string' ),
+						'description' => 'Post statuses to scan.',
+						'default'     => array( 'publish' ),
+					),
+					'limit'      => array(
+						'type'        => 'integer',
+						'minimum'     => 1,
+						'maximum'     => 2000,
+						'default'     => 500,
+						'description' => 'Maximum number of matching items to return.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'items'   => array( 'type' => 'array' ),
+					'total'   => array( 'type' => 'integer' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input      = is_array( $input ) ? $input : array();
+				$post_types = isset( $input['post_types'] ) && is_array( $input['post_types'] ) ? $input['post_types'] : array( 'page', 'post', 'elementor_library' );
+				$statuses   = isset( $input['statuses'] ) && is_array( $input['statuses'] ) ? $input['statuses'] : array( 'publish' );
+				$limit      = isset( $input['limit'] ) ? max( 1, min( 2000, (int) $input['limit'] ) ) : 500;
+				$post_types = array_values( array_filter( array_map( 'sanitize_key', $post_types ) ) );
+				$statuses   = array_values( array_filter( array_map( 'sanitize_key', $statuses ) ) );
+
+				if ( empty( $post_types ) || empty( $statuses ) ) {
+					return array(
+						'success' => true,
+						'items'   => array(),
+						'total'   => 0,
+					);
+				}
+
+				$query = new WP_Query(
+					array(
+						'post_type'              => $post_types,
+						'post_status'            => $statuses,
+						'posts_per_page'         => $limit,
+						'fields'                 => 'ids',
+						'no_found_rows'          => true,
+						'orderby'                => 'modified',
+						'order'                  => 'DESC',
+						'update_post_meta_cache' => true,
+						'update_post_term_cache' => false,
+					)
+				);
+				$post_ids = array_map( 'intval', $query->posts );
+
+				$items = array();
+
+				foreach ( $post_ids as $post_id ) {
+					$post_id       = (int) $post_id;
+					$post          = get_post( $post_id );
+					$raw_data      = mcp_abilities_elementor_get_raw_data_meta( $post_id );
+					$edit_mode     = get_post_meta( $post_id, '_elementor_edit_mode', true );
+					$template_type = get_post_meta( $post_id, '_elementor_template_type', true );
+					$conditions    = get_post_meta( $post_id, '_elementor_conditions', true );
+					$decode_error  = null;
+					$decoded_data  = mcp_abilities_elementor_decode_data_meta( $raw_data, $decode_error );
+
+					if ( '' === $raw_data && '' === $edit_mode && '' === $template_type && empty( $conditions ) ) {
+						continue;
+					}
+
+					$items[] = array(
+						'id'            => $post_id,
+						'title'         => get_the_title( $post_id ),
+						'type'          => $post ? $post->post_type : '',
+						'status'        => $post ? $post->post_status : '',
+						'link'          => get_permalink( $post_id ),
+						'edit_mode'     => is_string( $edit_mode ) ? $edit_mode : '',
+						'template_type' => is_string( $template_type ) ? $template_type : '',
+						'conditions'    => is_array( $conditions ) ? array_values( $conditions ) : array(),
+						'has_data'      => '' !== $raw_data,
+						'node_count'    => mcp_abilities_elementor_count_nodes( $decoded_data ),
+						'decode_error'  => null === $decode_error ? '' : $decode_error,
+						'modified'      => $post ? $post->post_modified : '',
+					);
+				}
+
+				usort(
+					$items,
+					static function ( array $a, array $b ): int {
+						return strcmp( (string) $b['modified'], (string) $a['modified'] );
+					}
+				);
+
+				return array(
+					'success' => true,
+					'items'   => $items,
+					'total'   => count( $items ),
 				);
 			},
 			'permission_callback' => function (): bool {
@@ -7221,7 +7495,7 @@ function mcp_abilities_elementor_register_abilities(): void {
 						),
 						$extra_properties
 					),
-					'additionalProperties' => true,
+					'additionalProperties' => false,
 				),
 				'output_schema'       => array(
 					'type'       => 'object',
@@ -7237,6 +7511,12 @@ function mcp_abilities_elementor_register_abilities(): void {
 				),
 				'execute_callback'    => function ( $input = array() ) use ( $widget_type ): array {
 					$input = is_array( $input ) ? $input : array();
+					if ( array_key_exists( 'parent_id', $input ) ) {
+						return array(
+							'success' => false,
+							'message' => 'Invalid parameter parent_id. Use parent_element_id for Elementor parent containers.',
+						);
+					}
 					$post_id = (int) ( $input['id'] ?? 0 );
 					if ( $post_id <= 0 ) {
 						return array( 'success' => false, 'message' => 'Post/Page ID is required' );
@@ -7258,8 +7538,19 @@ function mcp_abilities_elementor_register_abilities(): void {
 					}
 
 					$data = mcp_abilities_elementor_get_post_elements( $post_id );
+					$original_data = $data;
 					$element_id = mcp_abilities_elementor_unique_element_id( $data, isset( $input['element_id'] ) ? (string) $input['element_id'] : null );
 					$settings = mcp_abilities_elementor_build_convenience_widget_settings( $effective_widget_type, $input );
+					$settings_validation = mcp_abilities_elementor_validate_settings_array( $settings, 'post.' . $post_id . '.new_widget.settings' );
+					if ( empty( $settings_validation['valid'] ) ) {
+						$errors = is_array( $settings_validation['errors'] ?? null ) ? $settings_validation['errors'] : array();
+						mcp_abilities_elementor_set_last_meta_validation_errors( $errors );
+						return array(
+							'success' => false,
+							'message' => mcp_abilities_elementor_format_validation_errors( $errors ),
+							'errors'  => $errors,
+						);
+					}
 					$widget = mcp_abilities_elementor_build_widget_element( $effective_widget_type, $settings, $element_id );
 
 					$inserted = mcp_abilities_elementor_insert_element_in_tree(
@@ -7270,6 +7561,15 @@ function mcp_abilities_elementor_register_abilities(): void {
 					);
 					if ( ! $inserted ) {
 						return array( 'success' => false, 'message' => 'Parent element not found' );
+					}
+
+					$diff_validation = mcp_abilities_elementor_validate_single_add_diff( $original_data, $data, $element_id );
+					if ( empty( $diff_validation['valid'] ) ) {
+						return array(
+							'success' => false,
+							'message' => 'Refusing to save add-widget result because structural diff validation failed.',
+							'diff'    => $diff_validation,
+						);
 					}
 
 					$save = mcp_abilities_elementor_save_document_data( $post_id, $data, (string) ( $input['cache_scope'] ?? 'post' ) );
