@@ -5,8 +5,8 @@ Elementor page builder integration for WordPress via MCP.
 [![GitHub release](https://img.shields.io/github/v/release/bjornfix/mcp-abilities-elementor)](https://github.com/bjornfix/mcp-abilities-elementor/releases)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 
-**Tested up to:** 6.9
-**Stable tag:** 2.3.0
+**Tested up to:** 7.0
+**Stable tag:** 2.3.5
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -296,6 +296,11 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 ```
 
 ## Changelog
+
+### 2.3.5
+
+- Fixed: frontend runtime repair now only runs for Elementor Canvas/headless opt-in templates instead of normal Elementor pages.
+- Fixed: navigation menu widgets no longer trigger the runtime-repair path, avoiding duplicate menu initialization.
 
 ### 2.3.0
 

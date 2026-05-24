@@ -3,12 +3,13 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.3.0
+ * Version: 2.3.5
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
  * License URI: http://www.gnu.org/licenses/gpl-2.0.txt
  * Requires at least: 6.9
+ * Tested up to: 7.0
  * Requires PHP: 8.0
  *
  * @package MCP_Abilities_Elementor
@@ -5060,7 +5061,6 @@ function mcp_abilities_elementor_collect_interactive_widget_usage( array $elemen
 		'loop-grid',
 		'video',
 		'animated-headline',
-		'nav-menu',
 		'search-form',
 		'posts',
 		'portfolio',
@@ -5414,6 +5414,37 @@ function mcp_abilities_elementor_get_current_frontend_post_id(): int {
 }
 
 /**
+ * Check whether frontend runtime repair is allowed for the current document.
+ *
+ * Normal Elementor pages should be left to Elementor's own frontend bootstrap.
+ * This repair path is only for canvas/headless-style documents that intentionally
+ * bypass the theme wrapper and can miss the usual runtime output.
+ *
+ * @param int $post_id Post ID.
+ * @return bool
+ */
+function mcp_abilities_elementor_is_frontend_runtime_repair_allowed( int $post_id ): bool {
+	if ( $post_id <= 0 ) {
+		return false;
+	}
+
+	$template = (string) get_page_template_slug( $post_id );
+	if ( 'elementor_canvas' === $template ) {
+		return true;
+	}
+
+	/**
+	 * Allow site-specific headless/canvas templates to opt into Elementor
+	 * frontend runtime repair without enabling it on every normal page.
+	 *
+	 * @param bool   $allowed  Whether repair is allowed.
+	 * @param int    $post_id  Current post ID.
+	 * @param string $template Page template slug.
+	 */
+	return (bool) apply_filters( 'mcp_abilities_elementor_allow_frontend_runtime_repair', false, $post_id, $template );
+}
+
+/**
  * Detect whether the current frontend request needs Elementor runtime repair.
  *
  * @return array<string,mixed>
@@ -5444,6 +5475,12 @@ function mcp_abilities_elementor_get_current_frontend_runtime_context(): array {
 	$post_id = mcp_abilities_elementor_get_current_frontend_post_id();
 	if ( $post_id <= 0 ) {
 		$context = $default;
+		return $context;
+	}
+
+	if ( ! mcp_abilities_elementor_is_frontend_runtime_repair_allowed( $post_id ) ) {
+		$context = $default;
+		$context['reason'] = 'runtime_repair_not_allowed_for_template';
 		return $context;
 	}
 
