@@ -6,13 +6,15 @@ Elementor page builder integration for WordPress via MCP.
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 
 **Tested up to:** 7.0
-**Stable tag:** 2.3.5
+**Stable tag:** 2.3.6
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
 ## What It Does
 
 This add-on plugin exposes Elementor functionality through MCP (Model Context Protocol). Your AI assistant can read Elementor page structures, locate and update elements, manage templates and conditions, control site-wide settings, and run Elementor tools like maintenance mode, experiments, and URL replacement.
+
+Version 2.3.6 enforces a global style policy on Elementor write abilities. Writes now reject local typography settings and inline style attributes, and local hex color values are only accepted when they can be normalized to an existing Elementor Kit global color token. This keeps AI-assisted Elementor work tied to the site kit instead of scattering one-off widget styles.
 
 **Part of the [MCP Expose Abilities](https://github.com/bjornfix/mcp-expose-abilities) ecosystem.**
 
@@ -296,6 +298,12 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 ```
 
 ## Changelog
+
+### 2.3.6
+
+- Added: Elementor write abilities now enforce global style values by rejecting local typography settings and inline style attributes before `_elementor_data` is saved.
+- Added: local hex color settings are normalized to matching Elementor Kit global color token references when possible; otherwise the write is rejected with structured violations.
+- Changed: `elementor/apply-text-hierarchy` now defaults to Elementor global typography references instead of local font-size/weight/line-height widget overrides.
 
 ### 2.3.5
 

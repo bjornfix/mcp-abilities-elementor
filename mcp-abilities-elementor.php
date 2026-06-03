@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.3.5
+ * Version: 2.3.6
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -952,6 +952,12 @@ function mcp_abilities_elementor_reorder_children_in_tree( array &$elements, arr
  */
 function mcp_abilities_elementor_save_document_data( int $post_id, array $data, string $cache_scope = 'post' ): array {
 	$normalized_data = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
+	$style_policy    = mcp_abilities_elementor_enforce_global_style_policy( $normalized_data );
+	if ( empty( $style_policy['success'] ) ) {
+		return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
+	}
+
+	$normalized_data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $normalized_data;
 	$json_data       = wp_json_encode( $normalized_data );
 
 	if ( false === $json_data ) {
@@ -970,6 +976,10 @@ function mcp_abilities_elementor_save_document_data( int $post_id, array $data, 
 		'success' => true,
 		'cache'   => $cache_details,
 		'data'    => $normalized_data,
+		'style_policy' => array(
+			'enforced' => true,
+			'normalized' => $style_policy['normalized'] ?? array(),
+		),
 	);
 }
 
@@ -3627,6 +3637,276 @@ function mcp_abilities_elementor_get_active_kit_settings(): array {
 }
 
 /**
+ * Normalize a CSS hex color for exact kit-token matching.
+ *
+ * @param mixed $value Color value.
+ * @return string
+ */
+function mcp_abilities_elementor_normalize_hex_color( $value ): string {
+	if ( ! is_string( $value ) ) {
+		return '';
+	}
+
+	$value = strtolower( trim( $value ) );
+	if ( preg_match( '/^#([0-9a-f]{3})$/', $value, $matches ) ) {
+		$chars = str_split( $matches[1] );
+		return '#' . $chars[0] . $chars[0] . $chars[1] . $chars[1] . $chars[2] . $chars[2];
+	}
+
+	if ( preg_match( '/^#([0-9a-f]{6})$/', $value ) ) {
+		return $value;
+	}
+
+	return '';
+}
+
+/**
+ * Build an exact color-to-global-reference map from the active Elementor kit.
+ *
+ * @return array
+ */
+function mcp_abilities_elementor_get_global_color_reference_map(): array {
+	$settings = mcp_abilities_elementor_get_active_kit_settings();
+	$groups   = array( 'system_colors', 'custom_colors' );
+	$map      = array();
+
+	foreach ( $groups as $group ) {
+		$tokens = isset( $settings[ $group ] ) && is_array( $settings[ $group ] ) ? $settings[ $group ] : array();
+		foreach ( $tokens as $token ) {
+			if ( ! is_array( $token ) ) {
+				continue;
+			}
+
+			$id    = isset( $token['_id'] ) && is_string( $token['_id'] ) ? trim( $token['_id'] ) : '';
+			$color = mcp_abilities_elementor_normalize_hex_color( $token['color'] ?? '' );
+			if ( '' === $id || '' === $color ) {
+				continue;
+			}
+
+			$map[ $color ] = 'globals/colors?id=' . $id;
+		}
+	}
+
+	return $map;
+}
+
+/**
+ * Determine whether a setting key is a local color control.
+ *
+ * @param string $key Setting key.
+ * @return bool
+ */
+function mcp_abilities_elementor_is_local_color_setting_key( string $key ): bool {
+	if ( '__globals__' === $key || '' === $key ) {
+		return false;
+	}
+
+	return 'color' === $key || false !== strpos( $key, '_color' ) || false !== strpos( $key, 'color_' );
+}
+
+/**
+ * Determine whether a setting key is a local typography control.
+ *
+ * @param string $key Setting key.
+ * @return bool
+ */
+function mcp_abilities_elementor_is_local_typography_setting_key( string $key ): bool {
+	if ( '__globals__' === $key || '' === $key ) {
+		return false;
+	}
+
+	$fragments = array(
+		'typography',
+		'font_family',
+		'font_size',
+		'font_weight',
+		'font_style',
+		'line_height',
+		'letter_spacing',
+		'word_spacing',
+		'text_transform',
+		'text_decoration',
+	);
+
+	foreach ( $fragments as $fragment ) {
+		if ( $key === $fragment || false !== strpos( $key, $fragment ) ) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/**
+ * Add a bounded global-style policy violation.
+ *
+ * @param array  $violations Violation list.
+ * @param array  $element Elementor element.
+ * @param string $path Data path.
+ * @param string $setting Setting key.
+ * @param string $type Violation type.
+ * @param mixed  $value Setting value.
+ * @param string $message Human-readable message.
+ * @return void
+ */
+function mcp_abilities_elementor_add_global_style_violation( array &$violations, array $element, string $path, string $setting, string $type, $value, string $message ): void {
+	if ( count( $violations ) >= 25 ) {
+		return;
+	}
+
+	$display_value = is_scalar( $value ) || null === $value ? (string) $value : wp_json_encode( $value );
+	$violations[] = array(
+		'element_id'  => isset( $element['id'] ) && is_string( $element['id'] ) ? $element['id'] : '',
+		'el_type'     => isset( $element['elType'] ) && is_string( $element['elType'] ) ? $element['elType'] : '',
+		'widget_type' => isset( $element['widgetType'] ) && is_string( $element['widgetType'] ) ? $element['widgetType'] : '',
+		'path'        => $path,
+		'setting'     => $setting,
+		'type'        => $type,
+		'value'       => $display_value,
+		'message'     => $message,
+	);
+}
+
+/**
+ * Enforce global Elementor style policy on a single element.
+ *
+ * @param array  $element Elementor element.
+ * @param array  $color_map Exact color-to-global-reference map.
+ * @param array  $violations Violation list.
+ * @param string $path Data path.
+ * @return array
+ */
+function mcp_abilities_elementor_enforce_global_style_policy_on_element( array $element, array $color_map, array &$violations, string $path ): array {
+	$settings = isset( $element['settings'] ) && is_array( $element['settings'] ) ? $element['settings'] : array();
+	$globals  = isset( $settings['__globals__'] ) && is_array( $settings['__globals__'] ) ? $settings['__globals__'] : array();
+
+	foreach ( $settings as $key => $value ) {
+		if ( '__globals__' === $key || ! is_string( $key ) ) {
+			continue;
+		}
+
+		if ( is_string( $value ) && preg_match( '/\sstyle\s*=/i', $value ) ) {
+			mcp_abilities_elementor_add_global_style_violation(
+				$violations,
+				$element,
+				$path . '.settings.' . $key,
+				$key,
+				'inline_style',
+				$value,
+				'Inline style attributes are not allowed in Elementor write abilities; use widget settings backed by global kit values.'
+			);
+			continue;
+		}
+
+		if ( mcp_abilities_elementor_is_local_typography_setting_key( $key ) ) {
+			$global_ref = isset( $globals[ $key ] ) && is_string( $globals[ $key ] ) ? $globals[ $key ] : '';
+			if ( 0 === strpos( $global_ref, 'globals/typography?id=' ) ) {
+				continue;
+			}
+
+			mcp_abilities_elementor_add_global_style_violation(
+				$violations,
+				$element,
+				$path . '.settings.' . $key,
+				$key,
+				'local_typography',
+				$value,
+				'Local typography settings are not allowed; update the Elementor Kit typography or reference a global typography token instead.'
+			);
+			continue;
+		}
+
+		if ( mcp_abilities_elementor_is_local_color_setting_key( $key ) && is_string( $value ) && '' !== trim( $value ) ) {
+			$global_ref = isset( $globals[ $key ] ) && is_string( $globals[ $key ] ) ? $globals[ $key ] : '';
+			if ( 0 === strpos( $global_ref, 'globals/colors?id=' ) ) {
+				continue;
+			}
+
+			$normalized_color = mcp_abilities_elementor_normalize_hex_color( $value );
+			if ( '' !== $normalized_color && isset( $color_map[ $normalized_color ] ) ) {
+				$globals[ $key ] = $color_map[ $normalized_color ];
+				continue;
+			}
+
+			mcp_abilities_elementor_add_global_style_violation(
+				$violations,
+				$element,
+				$path . '.settings.' . $key,
+				$key,
+				'local_color',
+				$value,
+				'Local colors are not allowed; use an Elementor Kit global color token or update the kit first.'
+			);
+		}
+	}
+
+	if ( ! empty( $globals ) ) {
+		$settings['__globals__'] = $globals;
+		$element['settings']    = $settings;
+	}
+
+	if ( isset( $element['elements'] ) && is_array( $element['elements'] ) ) {
+		foreach ( $element['elements'] as $index => $child ) {
+			if ( is_array( $child ) ) {
+				$element['elements'][ $index ] = mcp_abilities_elementor_enforce_global_style_policy_on_element(
+					$child,
+					$color_map,
+					$violations,
+					$path . '.elements[' . $index . ']'
+				);
+			}
+		}
+	}
+
+	return $element;
+}
+
+/**
+ * Enforce the default Elementor write policy: global colors/typography only.
+ *
+ * @param array $data Elementor document data.
+ * @return array
+ */
+function mcp_abilities_elementor_enforce_global_style_policy( array $data ): array {
+	$color_map  = mcp_abilities_elementor_get_global_color_reference_map();
+	$violations = array();
+
+	foreach ( $data as $index => $element ) {
+		if ( is_array( $element ) ) {
+			$data[ $index ] = mcp_abilities_elementor_enforce_global_style_policy_on_element(
+				$element,
+				$color_map,
+				$violations,
+				'data[' . $index . ']'
+			);
+		}
+	}
+
+	return array(
+		'success'      => empty( $violations ),
+		'data'         => $data,
+		'violations'   => $violations,
+		'normalized'   => array(
+			'color_reference_count' => count( $color_map ),
+		),
+	);
+}
+
+/**
+ * Build a standard failed response for global style policy violations.
+ *
+ * @param array $policy_result Policy result.
+ * @return array
+ */
+function mcp_abilities_elementor_global_style_policy_error_response( array $policy_result ): array {
+	return array(
+		'success'    => false,
+		'message'    => 'Global Elementor style policy rejected local style settings. Use Elementor Kit global colors/typography and remove inline style attributes before writing.',
+		'violations' => $policy_result['violations'] ?? array(),
+	);
+}
+
+/**
  * Summarize current Elementor/theme context.
  *
  * @return array
@@ -4381,11 +4661,23 @@ function mcp_abilities_elementor_apply_text_hierarchy_to_widget( array $element,
 
 	$widget_type = (string) ( $element['widgetType'] ?? '' );
 	$settings    = is_array( $element['settings'] ?? null ) ? $element['settings'] : array();
+	$globals     = isset( $settings['__globals__'] ) && is_array( $settings['__globals__'] ) ? $settings['__globals__'] : array();
+	$unset_local_typography = static function ( array &$settings ): void {
+		foreach ( array_keys( $settings ) as $key ) {
+			if ( is_string( $key ) && mcp_abilities_elementor_is_local_typography_setting_key( $key ) ) {
+				unset( $settings[ $key ] );
+			}
+		}
+	};
 
 	if ( 'heading' === $widget_type ) {
 		$tag   = is_string( $settings['header_size'] ?? null ) ? strtolower( $settings['header_size'] ) : 'h2';
 		$style = is_array( $heading_scale[ $tag ] ?? null ) ? $heading_scale[ $tag ] : ( $heading_scale['default'] ?? array() );
 
+		if ( ! empty( $style['global_typography'] ) ) {
+			$unset_local_typography( $settings );
+			$globals['typography_typography'] = 'globals/typography?id=' . sanitize_key( (string) $style['global_typography'] );
+		}
 		if ( ! empty( $style['font_family'] ) ) {
 			$settings['typography_typography'] = 'custom';
 			$settings['typography_font_family'] = (string) $style['font_family'];
@@ -4410,6 +4702,10 @@ function mcp_abilities_elementor_apply_text_hierarchy_to_widget( array $element,
 	}
 
 	if ( 'text-editor' === $widget_type ) {
+		if ( ! empty( $body_style['global_typography'] ) ) {
+			$unset_local_typography( $settings );
+			$globals['typography_typography'] = 'globals/typography?id=' . sanitize_key( (string) $body_style['global_typography'] );
+		}
 		if ( ! empty( $body_style['font_family'] ) ) {
 			$settings['typography_typography'] = 'custom';
 			$settings['typography_font_family'] = (string) $body_style['font_family'];
@@ -4434,6 +4730,10 @@ function mcp_abilities_elementor_apply_text_hierarchy_to_widget( array $element,
 	}
 
 	if ( 'button' === $widget_type ) {
+		if ( ! empty( $button_style['global_typography'] ) ) {
+			$unset_local_typography( $settings );
+			$globals['typography_typography'] = 'globals/typography?id=' . sanitize_key( (string) $button_style['global_typography'] );
+		}
 		if ( ! empty( $button_style['font_family'] ) ) {
 			$settings['typography_typography'] = 'custom';
 			$settings['typography_font_family'] = (string) $button_style['font_family'];
@@ -4463,6 +4763,10 @@ function mcp_abilities_elementor_apply_text_hierarchy_to_widget( array $element,
 				? $button_style['padding']
 				: mcp_abilities_elementor_zero_spacing_box( null );
 		}
+	}
+
+	if ( ! empty( $globals ) ) {
+		$settings['__globals__'] = $globals;
 	}
 
 	$element['settings'] = $settings;
@@ -5938,12 +6242,17 @@ function mcp_abilities_elementor_register_abilities(): void {
 					if ( $existing_top_level > 1 && $new_top_level < (int) ceil( $existing_top_level / 2 ) ) {
 						return array( 'success' => false, 'message' => 'Refusing to drastically shrink Elementor document structure without force_replace=true' );
 					}
-				}
+					}
 
-				$normalized_data = mcp_abilities_elementor_normalize_background_container_subtrees( $input['data'] );
+					$normalized_data = mcp_abilities_elementor_normalize_background_container_subtrees( $input['data'] );
+					$style_policy    = mcp_abilities_elementor_enforce_global_style_policy( $normalized_data );
+					if ( empty( $style_policy['success'] ) ) {
+						return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
+					}
+					$normalized_data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $normalized_data;
 
-				// Encode data to JSON.
-				$json_data = wp_json_encode( $normalized_data );
+					// Encode data to JSON.
+					$json_data = wp_json_encode( $normalized_data );
 				if ( false === $json_data ) {
 					return array( 'success' => false, 'message' => 'Failed to encode data to JSON' );
 				}
@@ -6720,6 +7029,16 @@ function mcp_abilities_elementor_register_abilities(): void {
 					);
 				}
 
+				$style_policy = mcp_abilities_elementor_enforce_global_style_policy( $normalized_source_data );
+				if ( empty( $style_policy['success'] ) ) {
+					return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
+				}
+				$normalized_source_data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $normalized_source_data;
+				$json_data = wp_json_encode( $normalized_source_data );
+				if ( false === $json_data ) {
+					return array( 'success' => false, 'message' => 'Failed to encode cloned Elementor data after global style policy normalization' );
+				}
+
 				update_post_meta( $target->ID, '_elementor_data', wp_slash( $json_data ) );
 				update_post_meta( $target->ID, '_elementor_edit_mode', 'builder' );
 
@@ -6872,10 +7191,15 @@ function mcp_abilities_elementor_register_abilities(): void {
 					return array( 'success' => false, 'message' => 'Replacement would result in invalid JSON - aborted' );
 				}
 
-				$normalized_data = mcp_abilities_elementor_normalize_background_container_subtrees( $test_decode );
-				$normalized_json = wp_json_encode( $normalized_data );
-				if ( false === $normalized_json ) {
-					return array( 'success' => false, 'message' => 'Replacement produced valid JSON but failed to re-encode after normalization' );
+					$normalized_data = mcp_abilities_elementor_normalize_background_container_subtrees( $test_decode );
+					$style_policy    = mcp_abilities_elementor_enforce_global_style_policy( $normalized_data );
+					if ( empty( $style_policy['success'] ) ) {
+						return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
+					}
+					$normalized_data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $normalized_data;
+					$normalized_json = wp_json_encode( $normalized_data );
+					if ( false === $normalized_json ) {
+						return array( 'success' => false, 'message' => 'Replacement produced valid JSON but failed to re-encode after normalization' );
 				}
 
 				// Update Elementor data.
@@ -7110,6 +7434,11 @@ function mcp_abilities_elementor_register_abilities(): void {
 				}
 
 				$data = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
+				$style_policy = mcp_abilities_elementor_enforce_global_style_policy( $data );
+				if ( empty( $style_policy['success'] ) ) {
+					return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
+				}
+				$data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $data;
 
 				// Encode and save.
 				$json_data = wp_json_encode( $data );
@@ -7304,6 +7633,11 @@ function mcp_abilities_elementor_register_abilities(): void {
 
 				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['element_id'], $merged_element );
 				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
+				$style_policy = mcp_abilities_elementor_enforce_global_style_policy( $data );
+				if ( empty( $style_policy['success'] ) ) {
+					return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
+				}
+				$data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $data;
 				$json_data = wp_json_encode( $data );
 				if ( false === $json_data ) {
 					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
@@ -7482,6 +7816,11 @@ function mcp_abilities_elementor_register_abilities(): void {
 
 				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['element_id'], $updated_element );
 				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
+				$style_policy = mcp_abilities_elementor_enforce_global_style_policy( $data );
+				if ( empty( $style_policy['success'] ) ) {
+					return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
+				}
+				$data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $data;
 				$json_data = wp_json_encode( $data );
 				if ( false === $json_data ) {
 					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
@@ -7664,6 +8003,11 @@ function mcp_abilities_elementor_register_abilities(): void {
 
 				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['target_element_id'], $target_element );
 				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
+				$style_policy = mcp_abilities_elementor_enforce_global_style_policy( $data );
+				if ( empty( $style_policy['success'] ) ) {
+					return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
+				}
+				$data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $data;
 				$json_data = wp_json_encode( $data );
 				if ( false === $json_data ) {
 					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
@@ -7885,6 +8229,11 @@ function mcp_abilities_elementor_register_abilities(): void {
 
 				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['target_element_id'], $target_element );
 				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
+				$style_policy = mcp_abilities_elementor_enforce_global_style_policy( $data );
+				if ( empty( $style_policy['success'] ) ) {
+					return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
+				}
+				$data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $data;
 				$json_data = wp_json_encode( $data );
 				if ( false === $json_data ) {
 					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
@@ -8213,6 +8562,11 @@ function mcp_abilities_elementor_register_abilities(): void {
 				}
 
 				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
+				$style_policy = mcp_abilities_elementor_enforce_global_style_policy( $data );
+				if ( empty( $style_policy['success'] ) ) {
+					return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
+				}
+				$data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $data;
 				$json_data = wp_json_encode( $data );
 				if ( false === $json_data ) {
 					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
@@ -8467,6 +8821,11 @@ function mcp_abilities_elementor_register_abilities(): void {
 
 				mcp_abilities_elementor_replace_element_in_tree( $data, $container_id, $replacement_element );
 				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
+				$style_policy = mcp_abilities_elementor_enforce_global_style_policy( $data );
+				if ( empty( $style_policy['success'] ) ) {
+					return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
+				}
+				$data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $data;
 				$json_data = wp_json_encode( $data );
 				if ( false === $json_data ) {
 					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
@@ -8694,6 +9053,11 @@ function mcp_abilities_elementor_register_abilities(): void {
 
 				mcp_abilities_elementor_replace_element_in_tree( $data, $target_id, $container );
 				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
+				$style_policy = mcp_abilities_elementor_enforce_global_style_policy( $data );
+				if ( empty( $style_policy['success'] ) ) {
+					return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
+				}
+				$data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $data;
 				$json_data = wp_json_encode( $data );
 				if ( false === $json_data ) {
 					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
@@ -8925,6 +9289,11 @@ function mcp_abilities_elementor_register_abilities(): void {
 
 				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['element_id'], $updated_element );
 				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
+				$style_policy = mcp_abilities_elementor_enforce_global_style_policy( $data );
+				if ( empty( $style_policy['success'] ) ) {
+					return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
+				}
+				$data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $data;
 				$json_data = wp_json_encode( $data );
 				if ( false === $json_data ) {
 					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
@@ -9103,6 +9472,11 @@ function mcp_abilities_elementor_register_abilities(): void {
 
 				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['element_id'], $updated_element );
 				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
+				$style_policy = mcp_abilities_elementor_enforce_global_style_policy( $data );
+				if ( empty( $style_policy['success'] ) ) {
+					return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
+				}
+				$data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $data;
 				$json_data = wp_json_encode( $data );
 				if ( false === $json_data ) {
 					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
@@ -11079,7 +11453,7 @@ function mcp_abilities_elementor_register_abilities(): void {
 		'elementor/apply-text-hierarchy',
 		array(
 			'label'               => 'Apply Elementor Text Hierarchy',
-			'description'         => 'Applies a coherent text hierarchy to a subtree by normalizing heading, body-text, and button typography settings. Supports `dry_run`.',
+				'description'         => 'Applies a coherent text hierarchy to a subtree using Elementor Kit global typography references. Local font-size/weight/line-height overrides are rejected by the global style policy. Supports `dry_run`.',
 			'category'            => 'site',
 			'input_schema'        => array(
 				'type'                 => 'object',
@@ -11089,9 +11463,9 @@ function mcp_abilities_elementor_register_abilities(): void {
 					'element_id'    => array( 'type' => 'string', 'description' => 'Root element ID for the subtree.' ),
 					'include_root'  => array( 'type' => 'boolean', 'default' => true, 'description' => 'If true, include the root element.' ),
 					'max_depth'     => array( 'type' => 'integer', 'default' => -1, 'description' => 'Maximum descendant depth. Use -1 for unlimited.' ),
-					'heading_scale' => array( 'type' => 'object', 'description' => 'Optional map of heading tag (h1-h6/default) to font settings.' ),
-					'body_style'    => array( 'type' => 'object', 'description' => 'Optional body text style overrides.' ),
-					'button_style'  => array( 'type' => 'object', 'description' => 'Optional button text style overrides.' ),
+						'heading_scale' => array( 'type' => 'object', 'description' => 'Optional map of heading tag (h1-h6/default) to global typography token refs such as { "global_typography": "primary" }.' ),
+						'body_style'    => array( 'type' => 'object', 'description' => 'Optional body text global typography token ref, for example { "global_typography": "text" }.' ),
+						'button_style'  => array( 'type' => 'object', 'description' => 'Optional button global typography token ref, for example { "global_typography": "accent" }.' ),
 					'dry_run'       => array( 'type' => 'boolean', 'default' => false, 'description' => 'If true, return changed IDs without writing.' ),
 					'cache_scope'   => array(
 						'type'        => 'string',
@@ -11149,25 +11523,21 @@ function mcp_abilities_elementor_register_abilities(): void {
 					return array( 'success' => false, 'message' => 'Element not found' );
 				}
 
-				$heading_scale = isset( $input['heading_scale'] ) && is_array( $input['heading_scale'] ) ? $input['heading_scale'] : array(
-					'h1'      => array( 'font_size' => 56, 'line_height' => 1.05, 'font_weight' => '600' ),
-					'h2'      => array( 'font_size' => 44, 'line_height' => 1.1, 'font_weight' => '600' ),
-					'h3'      => array( 'font_size' => 34, 'line_height' => 1.15, 'font_weight' => '600' ),
-					'h4'      => array( 'font_size' => 28, 'line_height' => 1.2, 'font_weight' => '600' ),
-					'h5'      => array( 'font_size' => 22, 'line_height' => 1.25, 'font_weight' => '600' ),
-					'h6'      => array( 'font_size' => 18, 'line_height' => 1.3, 'font_weight' => '600' ),
-					'default' => array( 'font_size' => 34, 'line_height' => 1.15, 'font_weight' => '600' ),
-				);
-				$body_style = isset( $input['body_style'] ) && is_array( $input['body_style'] ) ? $input['body_style'] : array(
-					'font_size'   => 18,
-					'line_height' => 1.6,
-					'font_weight' => '400',
-				);
-				$button_style = isset( $input['button_style'] ) && is_array( $input['button_style'] ) ? $input['button_style'] : array(
-					'font_size'   => 16,
-					'line_height' => 1.2,
-					'font_weight' => '500',
-				);
+					$heading_scale = isset( $input['heading_scale'] ) && is_array( $input['heading_scale'] ) ? $input['heading_scale'] : array(
+						'h1'      => array( 'global_typography' => 'primary' ),
+						'h2'      => array( 'global_typography' => 'primary' ),
+						'h3'      => array( 'global_typography' => 'secondary' ),
+						'h4'      => array( 'global_typography' => 'secondary' ),
+						'h5'      => array( 'global_typography' => 'secondary' ),
+						'h6'      => array( 'global_typography' => 'secondary' ),
+						'default' => array( 'global_typography' => 'secondary' ),
+					);
+					$body_style = isset( $input['body_style'] ) && is_array( $input['body_style'] ) ? $input['body_style'] : array(
+						'global_typography' => 'text',
+					);
+					$button_style = isset( $input['button_style'] ) && is_array( $input['button_style'] ) ? $input['button_style'] : array(
+						'global_typography' => 'accent',
+					);
 
 				$changed_ids  = array();
 				$include_root = ! array_key_exists( 'include_root', $input ) || ! empty( $input['include_root'] );
@@ -11220,6 +11590,11 @@ function mcp_abilities_elementor_register_abilities(): void {
 
 				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['element_id'], $updated );
 				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
+				$style_policy = mcp_abilities_elementor_enforce_global_style_policy( $data );
+				if ( empty( $style_policy['success'] ) ) {
+					return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
+				}
+				$data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $data;
 				$json_data = wp_json_encode( $data );
 				if ( false === $json_data ) {
 					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
@@ -11388,6 +11763,11 @@ function mcp_abilities_elementor_register_abilities(): void {
 
 				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['element_id'], $updated );
 				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
+				$style_policy = mcp_abilities_elementor_enforce_global_style_policy( $data );
+				if ( empty( $style_policy['success'] ) ) {
+					return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
+				}
+				$data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $data;
 				$json_data = wp_json_encode( $data );
 				if ( false === $json_data ) {
 					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
@@ -11555,6 +11935,11 @@ function mcp_abilities_elementor_register_abilities(): void {
 
 				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['element_id'], $updated );
 				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
+				$style_policy = mcp_abilities_elementor_enforce_global_style_policy( $data );
+				if ( empty( $style_policy['success'] ) ) {
+					return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
+				}
+				$data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $data;
 				$json_data = wp_json_encode( $data );
 				if ( false === $json_data ) {
 					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
@@ -11715,6 +12100,11 @@ function mcp_abilities_elementor_register_abilities(): void {
 
 				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['target_element_id'], $updated );
 				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
+				$style_policy = mcp_abilities_elementor_enforce_global_style_policy( $data );
+				if ( empty( $style_policy['success'] ) ) {
+					return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
+				}
+				$data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $data;
 				$json_data = wp_json_encode( $data );
 				if ( false === $json_data ) {
 					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
@@ -11927,6 +12317,11 @@ function mcp_abilities_elementor_register_abilities(): void {
 				}
 
 				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
+				$style_policy = mcp_abilities_elementor_enforce_global_style_policy( $data );
+				if ( empty( $style_policy['success'] ) ) {
+					return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
+				}
+				$data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $data;
 				$json_data = wp_json_encode( $data );
 				if ( false === $json_data ) {
 					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
@@ -12747,7 +13142,16 @@ function mcp_abilities_elementor_register_abilities(): void {
 				$elementor_data = $input['data'] ?? array();
 				$elementor_data = mcp_abilities_elementor_normalize_background_container_subtrees( $elementor_data );
 				if ( ! empty( $elementor_data ) ) {
-					update_post_meta( $post_id, '_elementor_data', wp_slash( wp_json_encode( $elementor_data ) ) );
+					$style_policy = mcp_abilities_elementor_enforce_global_style_policy( $elementor_data );
+					if ( empty( $style_policy['success'] ) ) {
+						return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
+					}
+					$elementor_data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $elementor_data;
+					$json_data = wp_json_encode( $elementor_data );
+					if ( false === $json_data ) {
+						return array( 'success' => false, 'message' => 'Failed to encode Elementor document data' );
+					}
+					update_post_meta( $post_id, '_elementor_data', wp_slash( $json_data ) );
 				} else {
 					// Create minimal empty structure.
 					update_post_meta( $post_id, '_elementor_data', '[]' );
@@ -12925,7 +13329,16 @@ function mcp_abilities_elementor_register_abilities(): void {
 				// Update Elementor data if provided.
 				if ( isset( $input['data'] ) && is_array( $input['data'] ) ) {
 					$normalized_data = mcp_abilities_elementor_normalize_background_container_subtrees( $input['data'] );
-					update_post_meta( $post->ID, '_elementor_data', wp_slash( wp_json_encode( $normalized_data ) ) );
+					$style_policy = mcp_abilities_elementor_enforce_global_style_policy( $normalized_data );
+					if ( empty( $style_policy['success'] ) ) {
+						return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
+					}
+					$normalized_data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $normalized_data;
+					$json_data = wp_json_encode( $normalized_data );
+					if ( false === $json_data ) {
+						return array( 'success' => false, 'message' => 'Failed to encode updated Elementor template data' );
+					}
+					update_post_meta( $post->ID, '_elementor_data', wp_slash( $json_data ) );
 					delete_post_meta( $post->ID, '_elementor_css' );
 				}
 
@@ -13831,9 +14244,18 @@ function mcp_abilities_elementor_register_abilities(): void {
 
 				// Set meta.
 				$normalized_content = mcp_abilities_elementor_normalize_background_container_subtrees( $data['content'] );
+				$style_policy = mcp_abilities_elementor_enforce_global_style_policy( $normalized_content );
+				if ( empty( $style_policy['success'] ) ) {
+					return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
+				}
+				$normalized_content = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $normalized_content;
+				$json_data = wp_json_encode( $normalized_content );
+				if ( false === $json_data ) {
+					return array( 'success' => false, 'message' => 'Failed to encode imported Elementor template data' );
+				}
 				update_post_meta( $post_id, '_elementor_template_type', $template_type );
 				update_post_meta( $post_id, '_elementor_edit_mode', 'builder' );
-				update_post_meta( $post_id, '_elementor_data', wp_slash( wp_json_encode( $normalized_content ) ) );
+				update_post_meta( $post_id, '_elementor_data', wp_slash( $json_data ) );
 
 				if ( ! empty( $data['page_settings'] ) ) {
 					update_post_meta( $post_id, '_elementor_page_settings', $data['page_settings'] );
