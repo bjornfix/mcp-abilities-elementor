@@ -3,7 +3,7 @@ Contributors: devenia
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 7.0
-Stable tag: 2.3.6
+Stable tag: 2.3.7
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -14,7 +14,7 @@ Elementor page builder integration for WordPress via MCP.
 
 This add-on plugin exposes Elementor functionality through MCP (Model Context Protocol). Your AI assistant can read Elementor page structures, locate and update elements, manage templates and conditions, and run Elementor tools like maintenance mode, experiments, and URL replacement.
 
-Version 2.3.6 enforces a global style policy on Elementor write abilities. Writes now reject local typography settings and inline style attributes, and local hex colors are only accepted when they can be normalized to an existing Elementor Kit global color token.
+Version 2.3.7 enforces a global style policy on Elementor write abilities. Writes now reject local typography settings and inline style attributes, and local hex colors are only accepted when they can be normalized to an existing Elementor Kit global color token.
 
 Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilities/) ecosystem.
 
@@ -59,6 +59,9 @@ Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilit
 * [All Add-on Plugins](https://devenia.com/plugins/mcp-expose-abilities/#add-ons)
 
 == Changelog ==
+
+= 2.3.7 =
+* Fixed: failed `elementor/create-page` initialization now deletes the newly inserted draft when the global style policy or Elementor data save rejects the payload, avoiding half-created pages.
 
 = 2.3.6 =
 * Added: Elementor write abilities now enforce global style values by rejecting local typography settings and inline style attributes before `_elementor_data` is saved.
