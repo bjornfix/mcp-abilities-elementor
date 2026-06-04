@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.3.8
+ * Version: 2.3.9
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -112,6 +112,18 @@ function mcp_abilities_elementor_get_official_guidance_catalog(): array {
 				'url'   => 'https://elementor.com/help/?p=83',
 				'native_authoring_note' => 'Use the Social Icons widget for linked social profiles in headers, footers, and top bars. It provides native alignment, size, padding, spacing, and row-gap controls, and Elementor renders the icons as centered inline-flex items. Do not recreate this pattern with separate Icon widgets unless the design truly needs independent non-social icons.',
 				'global_style_policy_note' => 'The `icon_color` setting is a mode selector, not a color value. `icon_color:"custom"` is allowed only when concrete color controls such as `icon_primary_color` and `icon_secondary_color` are normalized to Elementor Kit global color tokens.',
+			),
+			'nav_menu' => array(
+				'label' => 'WordPress Menu / legacy Nav Menu widget',
+				'url'   => 'https://elementor.com/help/nav-menu-widget-pro/',
+				'native_authoring_note' => 'Use the WordPress Menu/Nav Menu widget when an existing WordPress menu should be rendered with simple native dropdown styling. It supports dropdown text/background colors, typography, border, box shadow, item padding, dividers, and dropdown distance.',
+				'limitation_note' => 'The legacy Nav Menu widget does not expose native desktop submenu box width or dropdown line-height controls. If exact dropdown box sizing or line-height parity is required, prefer the newer Elementor Menu widget (`mega-menu`) instead of adding CSS patches.',
+			),
+			'menu' => array(
+				'label' => 'Elementor Menu widget',
+				'url'   => 'https://elementor.com/help/the-menu-widget/',
+				'native_authoring_note' => 'Use the newer Elementor Menu widget (`mega-menu` in Elementor data) when a header needs richer native dropdown control such as Open On hover/click, Fit To Content dropdowns, dropdown box/content styling, and nested container content.',
+				'data_shape_note' => 'The Menu widget stores top-level entries in `menu_items` and expects one child container per top-level menu item index. Dropdown content for item N belongs in child container N, even when some items have no dropdown content.',
 			),
 		),
 	);
@@ -5377,6 +5389,112 @@ function mcp_abilities_elementor_collect_widget_usage( array $elements ): array 
 }
 
 /**
+ * Return authoring warnings for Elementor menu widgets.
+ *
+ * The legacy Nav Menu/WordPress Menu widget and the newer Menu (`mega-menu`)
+ * widget both produce navigation, but their native control surfaces differ in
+ * important ways. Write abilities surface this guidance so agents do not solve
+ * menu parity gaps with ad-hoc CSS when Elementor has a better widget fit.
+ *
+ * @param array $elements Elementor elements tree.
+ * @return array<string,mixed>
+ */
+function mcp_abilities_elementor_collect_menu_widget_guidance_warnings( array $elements ): array {
+	$warnings = array();
+	$catalog  = mcp_abilities_elementor_get_official_guidance_catalog();
+	$sources  = array(
+		'nav_menu' => (string) ( $catalog['widgets']['nav_menu']['url'] ?? '' ),
+		'menu'     => (string) ( $catalog['widgets']['menu']['url'] ?? '' ),
+	);
+
+	$walk = static function ( array $nodes ) use ( &$walk, &$warnings, $sources ): void {
+		foreach ( $nodes as $node ) {
+			if ( ! is_array( $node ) ) {
+				continue;
+			}
+
+			if ( 'widget' === ( $node['elType'] ?? null ) ) {
+				$widget_type = (string) ( $node['widgetType'] ?? '' );
+				$settings    = is_array( $node['settings'] ?? null ) ? $node['settings'] : array();
+				$element_id  = (string) ( $node['id'] ?? '' );
+
+				if ( 'nav-menu' === $widget_type ) {
+					$has_dropdown_controls = false;
+					foreach ( array_keys( $settings ) as $key ) {
+						if ( is_string( $key ) && false !== strpos( $key, 'dropdown' ) ) {
+							$has_dropdown_controls = true;
+							break;
+						}
+					}
+
+					$warnings[] = array(
+						'element_id'       => $element_id,
+						'widget_type'      => $widget_type,
+						'type'             => 'legacy_nav_menu_control_limit',
+						'severity'         => $has_dropdown_controls ? 'warning' : 'info',
+						'message'          => 'Legacy Nav Menu/WordPress Menu supports basic dropdown styling, but does not expose native desktop submenu box width or dropdown line-height controls. Use the newer Elementor Menu widget (`mega-menu`) when exact dropdown parity is required.',
+						'recommended_widget' => 'mega-menu',
+						'sources'          => array_values( array_filter( array( $sources['nav_menu'], $sources['menu'] ) ) ),
+					);
+				}
+
+				if ( 'mega-menu' === $widget_type ) {
+					$menu_items = is_array( $settings['menu_items'] ?? null ) ? array_values( $settings['menu_items'] ) : array();
+					$children   = is_array( $node['elements'] ?? null ) ? array_values( $node['elements'] ) : array();
+
+					if ( count( $menu_items ) !== count( $children ) ) {
+						$warnings[] = array(
+							'element_id'  => $element_id,
+							'widget_type' => $widget_type,
+							'type'        => 'mega_menu_child_container_count_mismatch',
+							'severity'    => 'warning',
+							'message'     => 'Elementor Menu (`mega-menu`) expects one child container per top-level `menu_items` entry, in the same order. Dropdown content for item N belongs in child container N.',
+							'expected'    => count( $menu_items ),
+							'actual'      => count( $children ),
+							'sources'     => array_values( array_filter( array( $sources['menu'] ) ) ),
+						);
+					}
+
+					foreach ( $menu_items as $index => $item ) {
+						$dropdown_enabled = is_array( $item ) && 'yes' === (string) ( $item['item_dropdown_content'] ?? 'no' );
+						if ( ! $dropdown_enabled ) {
+							continue;
+						}
+
+						$child = $children[ $index ] ?? array();
+						$child_elements = is_array( $child ) && is_array( $child['elements'] ?? null ) ? $child['elements'] : array();
+						if ( empty( $child_elements ) ) {
+							$warnings[] = array(
+								'element_id'  => $element_id,
+								'widget_type' => $widget_type,
+								'type'        => 'mega_menu_enabled_dropdown_without_content',
+								'severity'    => 'warning',
+								'message'     => 'This Menu item has `item_dropdown_content` enabled, but the matching child container is empty. Add dropdown content to the child container with the same index or disable dropdown content for this item.',
+								'item_index'  => $index,
+								'item_title'  => is_array( $item ) ? (string) ( $item['item_title'] ?? '' ) : '',
+								'sources'     => array_values( array_filter( array( $sources['menu'] ) ) ),
+							);
+						}
+					}
+				}
+			}
+
+			if ( ! empty( $node['elements'] ) && is_array( $node['elements'] ) ) {
+				$walk( $node['elements'] );
+			}
+		}
+	};
+
+	$walk( $elements );
+
+	return array(
+		'source_policy' => $catalog['policy'],
+		'warning_count' => count( $warnings ),
+		'warnings'      => array_values( $warnings ),
+	);
+}
+
+/**
  * Return interactive widget usage that depends on Elementor frontend runtime.
  *
  * @param array $elements Elementor elements tree.
@@ -5398,6 +5516,7 @@ function mcp_abilities_elementor_collect_interactive_widget_usage( array $elemen
 		'video',
 		'animated-headline',
 		'search-form',
+		'mega-menu',
 		'posts',
 		'portfolio',
 		'gallery',
@@ -5678,6 +5797,11 @@ function mcp_abilities_elementor_audit_frontend_runtime_readiness( int $post_id,
 function mcp_abilities_elementor_apply_frontend_runtime_guard( array $response, int $post_id, array $elements ): array {
 	$guard = mcp_abilities_elementor_audit_frontend_runtime_readiness( $post_id, $elements );
 	$response['frontend_runtime'] = $guard;
+
+	$menu_guidance = mcp_abilities_elementor_collect_menu_widget_guidance_warnings( $elements );
+	if ( ! empty( $menu_guidance['warning_count'] ) ) {
+		$response['menu_widget_guidance'] = $menu_guidance;
+	}
 
 	if ( ! empty( $guard['required'] ) && empty( $guard['ready'] ) ) {
 		$response['success'] = false;

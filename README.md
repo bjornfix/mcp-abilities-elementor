@@ -6,7 +6,7 @@ Elementor page builder integration for WordPress via MCP.
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 
 **Tested up to:** 7.0
-**Stable tag:** 2.3.8
+**Stable tag:** 2.3.9
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -14,7 +14,7 @@ Elementor page builder integration for WordPress via MCP.
 
 This add-on plugin exposes Elementor functionality through MCP (Model Context Protocol). Your AI assistant can read Elementor page structures, locate and update elements, manage templates and conditions, control site-wide settings, and run Elementor tools like maintenance mode, experiments, and URL replacement.
 
-Version 2.3.8 enforces a global style policy on Elementor write abilities. Writes reject local typography settings and inline style attributes, and local hex color values are only accepted when they can be normalized to an existing Elementor Kit global color token. It also documents Elementor-native social icon authoring and treats the Social Icons widget's `icon_color` field as a mode selector, while still requiring its concrete primary and secondary colors to use global kit tokens.
+Version 2.3.9 enforces a global style policy on Elementor write abilities, documents Elementor-native menu/widget choices, and flags header menu control limits before agents reach for CSS patches. Writes reject local typography settings and inline style attributes, and local hex color values are only accepted when they can be normalized to an existing Elementor Kit global color token.
 
 **Part of the [MCP Expose Abilities](https://github.com/bjornfix/mcp-expose-abilities) ecosystem.**
 
@@ -298,6 +298,12 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 ```
 
 ## Changelog
+
+### 2.3.9
+
+- Added: official-pattern guidance now distinguishes legacy Nav Menu/WordPress Menu from the newer Elementor Menu (`mega-menu`) widget, including the Nav Menu limitations around exact desktop dropdown width and line height.
+- Added: Elementor write responses now include `menu_widget_guidance` warnings for legacy `nav-menu` control limits and malformed `mega-menu` child-container structures.
+- Fixed: `mega-menu` is now treated as an interactive Elementor widget by the frontend runtime guard.
 
 ### 2.3.8
 
