@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.3.7
+ * Version: 2.3.8
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -106,6 +106,12 @@ function mcp_abilities_elementor_get_official_guidance_catalog(): array {
 			'icon_list' => array(
 				'label' => 'Icon List widget',
 				'url'   => 'https://elementor.com/help/icon-list-widget/',
+			),
+			'social_icons' => array(
+				'label' => 'Social Icons widget',
+				'url'   => 'https://elementor.com/help/?p=83',
+				'native_authoring_note' => 'Use the Social Icons widget for linked social profiles in headers, footers, and top bars. It provides native alignment, size, padding, spacing, and row-gap controls, and Elementor renders the icons as centered inline-flex items. Do not recreate this pattern with separate Icon widgets unless the design truly needs independent non-social icons.',
+				'global_style_policy_note' => 'The `icon_color` setting is a mode selector, not a color value. `icon_color:"custom"` is allowed only when concrete color controls such as `icon_primary_color` and `icon_secondary_color` are normalized to Elementor Kit global color tokens.',
 			),
 		),
 	);
@@ -3705,6 +3711,28 @@ function mcp_abilities_elementor_is_local_color_setting_key( string $key ): bool
 }
 
 /**
+ * Determine whether a color-looking key is an Elementor mode selector rather
+ * than a concrete color value.
+ *
+ * Elementor's Social Icons widget uses `icon_color` to choose between
+ * "official" and "custom" color modes. The actual color values live in
+ * `icon_primary_color` and `icon_secondary_color`, which remain subject to the
+ * global token policy.
+ *
+ * @param string $key Setting key.
+ * @param array  $element Elementor element.
+ * @return bool
+ */
+function mcp_abilities_elementor_is_color_mode_selector_setting_key( string $key, array $element ): bool {
+	$widget_type = isset( $element['widgetType'] ) && is_string( $element['widgetType'] ) ? $element['widgetType'] : '';
+	if ( 'social-icons' !== $widget_type ) {
+		return false;
+	}
+
+	return in_array( $key, array( 'icon_color', 'item_icon_color' ), true );
+}
+
+/**
  * Determine whether a setting key is a local typography control.
  *
  * @param string $key Setting key.
@@ -3813,6 +3841,10 @@ function mcp_abilities_elementor_enforce_global_style_policy_on_element( array $
 				$value,
 				'Local typography settings are not allowed; update the Elementor Kit typography or reference a global typography token instead.'
 			);
+			continue;
+		}
+
+		if ( mcp_abilities_elementor_is_color_mode_selector_setting_key( $key, $element ) ) {
 			continue;
 		}
 

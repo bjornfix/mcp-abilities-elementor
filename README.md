@@ -6,7 +6,7 @@ Elementor page builder integration for WordPress via MCP.
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 
 **Tested up to:** 7.0
-**Stable tag:** 2.3.7
+**Stable tag:** 2.3.8
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -14,7 +14,7 @@ Elementor page builder integration for WordPress via MCP.
 
 This add-on plugin exposes Elementor functionality through MCP (Model Context Protocol). Your AI assistant can read Elementor page structures, locate and update elements, manage templates and conditions, control site-wide settings, and run Elementor tools like maintenance mode, experiments, and URL replacement.
 
-Version 2.3.7 enforces a global style policy on Elementor write abilities. Writes now reject local typography settings and inline style attributes, and local hex color values are only accepted when they can be normalized to an existing Elementor Kit global color token. This keeps AI-assisted Elementor work tied to the site kit instead of scattering one-off widget styles.
+Version 2.3.8 enforces a global style policy on Elementor write abilities. Writes reject local typography settings and inline style attributes, and local hex color values are only accepted when they can be normalized to an existing Elementor Kit global color token. It also documents Elementor-native social icon authoring and treats the Social Icons widget's `icon_color` field as a mode selector, while still requiring its concrete primary and secondary colors to use global kit tokens.
 
 **Part of the [MCP Expose Abilities](https://github.com/bjornfix/mcp-expose-abilities) ecosystem.**
 
@@ -298,6 +298,11 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 ```
 
 ## Changelog
+
+### 2.3.8
+
+- Fixed: Social Icons widget `icon_color` is now treated as an Elementor color-mode selector instead of a local color value, so `icon_color: "custom"` can pass when concrete icon colors are bound to Elementor Kit global color tokens.
+- Added: official-pattern guidance now documents Social Icons as the native widget for header/footer social profile links, including its alignment, size, padding, spacing, and centered flex rendering behavior.
 
 ### 2.3.7
 
