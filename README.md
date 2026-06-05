@@ -1,9 +1,11 @@
 # MCP Abilities - Elementor
 
-Elementor page builder integration for WordPress via MCP.
+Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
 
 [![GitHub release](https://img.shields.io/github/v/release/bjornfix/mcp-abilities-elementor)](https://github.com/bjornfix/mcp-abilities-elementor/releases)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
+[![WordPress](https://img.shields.io/badge/WordPress-6.9%2B-blue.svg)](https://wordpress.org)
+[![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://php.net)
 
 **Tested up to:** 7.0
 **Stable tag:** 2.3.9
@@ -12,45 +14,98 @@ Elementor page builder integration for WordPress via MCP.
 
 ## What It Does
 
-This add-on plugin exposes Elementor functionality through MCP (Model Context Protocol). Your AI assistant can read Elementor page structures, locate and update elements, manage templates and conditions, control site-wide settings, and run Elementor tools like maintenance mode, experiments, and URL replacement.
+Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
 
-Version 2.3.9 enforces a global style policy on Elementor write abilities, documents Elementor-native menu/widget choices, and flags header menu control limits before agents reach for CSS patches. Writes reject local typography settings and inline style attributes, and local hex color values are only accepted when they can be normalized to an existing Elementor Kit global color token.
+This plugin is part of the Devenia MCP abilities ecosystem. It gives an MCP-capable agent a focused, authenticated way to work with Elementor work inside WordPress through MCP.
 
-**Part of the [MCP Expose Abilities](https://github.com/bjornfix/mcp-expose-abilities) ecosystem.**
+**Example:** "Handle this WordPress maintenance task directly." - The agent can inspect the site, call the relevant ability, and return the result without making the human click through wp-admin for every step.
 
-This is one piece of a bigger open WordPress automation stack that lets AI agents do real builder work inside WordPress instead of just producing instructions for humans.
+## The Real Workflow
 
-## Why This Is Cool
+In practice, the human should not have to memorize every ability name.
 
-Elementor is where a lot of WordPress work goes to become tedious.
+The normal pattern is:
 
-This add-on changes that. You can ask Codex or Claude to inspect page structure, find one exact widget, patch the right content, adjust a template, or clear Elementor cache without turning the job into an hour of clicking.
+1. install the base MCP stack
+2. install only the add-ons the site actually needs
+3. let the agent discover the available abilities
+4. give the agent a clear task with boundaries
+5. verify the result in WordPress
 
-That is the point of the whole ecosystem: not AI advice about WordPress, but AI doing WordPress work.
+The human's job is mostly to describe the goal.
+The agent's job is to figure out the mechanics.
+
+## Why This Feels Different
+
+Most WordPress automation still leaves the repetitive part to the human.
+
+This plugin is different because the agent can act inside the site through a narrow, authenticated ability surface:
+
+- inspect current site state before changing anything
+- run the specific action needed for the task
+- return structured results that are easy to verify
+- keep the workflow inside WordPress instead of a separate checklist
+
+That changes the experience from:
+
+- `Here is what you should do in wp-admin`
+
+to:
+
+- `Tell the agent what needs doing, and let it carry out the work`
+
+## Before vs After
+
+### Before
+
+- ask the AI what to do
+- copy the answer into WordPress by hand
+- click through wp-admin for the repetitive bits
+- postpone maintenance because the task is tedious
+
+### After
+
+- tell the agent what needs doing
+- let it inspect the relevant WordPress state
+- let it run the targeted ability
+- verify the result and move on
+
+## Who It Is For
+
+This is a good fit for:
+
+- agencies managing WordPress sites with AI-assisted maintenance
+- operators who want agents to do real WordPress work instead of producing instructions
+- teams already using MCP Expose Abilities
+- sites where this WordPress area is updated often enough to deserve automation
+
+It is especially useful when the manual version is repetitive enough that important maintenance gets delayed.
 
 ## Documentation
 
-- [Core Plugin: MCP Expose Abilities](https://github.com/bjornfix/mcp-expose-abilities)
-- [MCP Wiki Home](https://github.com/bjornfix/mcp-expose-abilities/wiki)
-- [Why Teams Use It](https://github.com/bjornfix/mcp-expose-abilities/wiki/Why-Teams-Use-It)
-- [Use Cases](https://github.com/bjornfix/mcp-expose-abilities/wiki/Use-Cases)
-- [Elementor Add-On Guide](https://github.com/bjornfix/mcp-expose-abilities/wiki/Addon-Elementor)
+Start with the main plugin page and base stack documentation:
+
+- [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilities/)
+- [Plugin Page](https://devenia.com/plugins/mcp-expose-abilities/#add-ons)
 - [Getting Started](https://github.com/bjornfix/mcp-expose-abilities/wiki/Getting-Started)
+- [Install Order and Dependencies](https://github.com/bjornfix/mcp-expose-abilities/wiki/Install-Order-and-Dependencies)
 
-## Requirements
+If you are using an AI agent, the simplest instruction is often just:
 
-- WordPress 6.9+
-- PHP 8.0+
-- [Abilities API](https://github.com/WordPress/abilities-api) plugin
-- [MCP Adapter](https://github.com/WordPress/mcp-adapter) plugin
-- [Elementor](https://wordpress.org/plugins/elementor/) (Free or Pro)
+- `Read https://github.com/bjornfix/mcp-expose-abilities and figure out the stack before making changes.`
 
-## Installation
+## Start Here
 
-1. Install the required plugins (Abilities API, MCP Adapter, Elementor)
-2. Download the latest release from [Releases](https://github.com/bjornfix/mcp-abilities-elementor/releases)
-3. Upload via WordPress Admin > Plugins > Add New > Upload Plugin
-4. Activate the plugin
+If you are new to the stack, use this order:
+
+1. Install **Abilities API**.
+2. Install **MCP Adapter**.
+3. Install **MCP Expose Abilities**.
+4. Install **MCP Abilities - Elementor**.
+5. Confirm the new abilities appear in discovery.
+6. Give the agent a clear task that uses this add-on.
+
+If you skip base-stack verification and start with add-ons immediately, troubleshooting gets harder than it needs to be.
 
 ## Abilities (75)
 
@@ -167,28 +222,6 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 | `elementor/update-maintenance-mode` | Enable or update maintenance mode |
 | `elementor/list-experiments` | List Elementor experiments |
 | `elementor/update-experiment` | Update experiment state |
-
-## Feature Coverage & Notes
-
-- Theme Builder templates (header/footer/single/archive/popup) and conditions require Elementor Pro.
-- Custom Code snippets and Form Submissions require Elementor Pro.
-- WooCommerce templates are usually Theme Builder templates with a `template_sub_type` like `product` or `product-archive`.
-- Maintenance mode uses Elementor templates; you must provide a template ID to enable it.
-- Experiments map to Elementor's experiments manager; reset to default clears the saved option.
-- Prefer `get-element`/`find-elements` + `update-element` for targeted edits, and use `update-data` only when replacing full JSON.
-- Prefer `merge-element-settings` for small spacing/width/layout adjustments when you do not need to replace an entire element payload.
-- Use `get-theme-context` and `get-style-guide` before design work when you need the actual theme/kit context.
-- Use `get-official-pattern-guidance` when the question is which Elementor-native pattern or widget should be preferred. Pattern choice should come from Elementor.com first; site-local payloads are only fallback implementation references after that choice is clear.
-- Use `get-official-widget-catalog` when the plugin needs to know the full official Elementor widget surface, not just a curated shortlist. The source of truth for availability is Elementor's own widgets index.
-- `get-theme-context`, `get-style-guide`, `evaluate-design`, and `suggest-design-fixes` now also expose `source_policy` and `guidance_basis` so clients can tell which recommendations are grounded in official Elementor docs and which are plugin heuristics.
-- Prefer `evaluate-design` and `suggest-design-fixes` as the main entry point when the narrow design audits start to feel noisy or overlapping.
-- Use `evaluate-render-context` when the problem may live in the rendered wrapper/theme chrome rather than in Elementor content itself.
-- Use `zero-container-padding-subtree`, `copy-lane-settings`, `copy-row-balance`, `normalize-campaign-detail-page`, `image-widget-to-background-container`, `fix-visible-gap-rhythm`, `enforce-boundary-coherence`, `reset-negative-margins-subtree`, `extract-design-tokens`, `apply-text-hierarchy`, `normalize-section-spacing-rhythm`, `normalize-responsive-values`, `sync-component-variant`, `audit-emphasis-drift`, `audit-section-rivalry`, and `audit-composition-rhythm` when tracking Elementor lane drift, hidden inner padding, repeated campaign-detail cleanup, full-height image-column conversion, visible gap mismatch, left/right boundary incoherence, negative offset cleanup, design-token drift, typography inconsistency, rhythm mismatch, breakpoint drift, component-variant mismatch, flat section hierarchy, or pages where too many sections are competing for the same spotlight.
-- `elementor/update-element` is a full element replacement, not a deep merge. It now refuses shape-changing replacements by default (for example changing `elType`/`widgetType` or replacing a populated container with empty children) unless `force_replace=true`.
-- `elementor/update-element` now also normalizes background-image container replacements by inheriting compiler-relevant layout settings from the original container when the incoming payload omits them. This is meant to prevent Elementor from silently dropping generated background CSS on thin hand-authored payloads.
-- All Elementor data write paths now normalize top-level background-image subtrees too. When a top-level container subtree contains a native background-image container, the root container is automatically marked with `e-no-lazyload` so Elementor's lazyload descendant resets do not blank the generated background on the frontend.
-- `elementor/update-data` now refuses obviously destructive full-document replacements by default (for example replacing a populated page with empty or drastically smaller top-level data) unless `force_replace=true`.
-- `elementor/delete-element` now refuses deleting top-level or populated elements by default unless `force_delete=true`.
 
 ## Usage Examples
 
@@ -517,6 +550,10 @@ That is the point of the whole ecosystem: not AI advice about WordPress, but AI 
 ### 1.0.0
 - Initial release
 
+## Contributing
+
+PRs welcome. Keep changes focused on the plugin's WordPress ability surface and preserve authenticated, explicit workflows.
+
 ## License
 
 GPL-2.0+
@@ -525,19 +562,20 @@ GPL-2.0+
 
 [Devenia](https://devenia.com) - We've been doing SEO and web development since 1993.
 
-## Free and Open
+## Links
 
-Like the rest of the ecosystem, this add-on is free for all, completely open source, and built from actual production use.
+- [Plugin Page](https://devenia.com/plugins/mcp-expose-abilities/#add-ons)
+- [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilities/)
+- [GitHub Releases](https://github.com/bjornfix/mcp-abilities-elementor/releases)
 
 ## Star and Share
 
-If this add-on helps, please star the repo, share the ecosystem, and point people to the main wiki:
+If this plugin saves you time or makes WordPress maintenance easier to verify, please:
 
-- https://github.com/bjornfix/mcp-expose-abilities
-- https://github.com/bjornfix/mcp-expose-abilities/wiki
+- star the repo
+- share it with people running WordPress sites
+- point them to the main plugin page so they can see what the ecosystem can actually do
 
-## Links
+Why do it?
 
-- [Core Plugin (MCP Expose Abilities)](https://github.com/bjornfix/mcp-expose-abilities)
-- [Main Wiki](https://github.com/bjornfix/mcp-expose-abilities/wiki)
-- [Elementor Add-On Guide](https://github.com/bjornfix/mcp-expose-abilities/wiki/Addon-Elementor)
+Because agent-friendly open WordPress tooling helps more of the boring but important work get done.
