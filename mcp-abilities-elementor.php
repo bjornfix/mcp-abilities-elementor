@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.3.9
+ * Version: 2.3.10
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -3937,6 +3937,177 @@ function mcp_abilities_elementor_enforce_global_style_policy( array $data ): arr
 }
 
 /**
+ * Get the numeric size from an Elementor slider-like setting.
+ *
+ * @param mixed $value Elementor setting value.
+ * @return float|null
+ */
+function mcp_abilities_elementor_slider_size_value( $value ): ?float {
+	if ( is_array( $value ) && array_key_exists( 'size', $value ) ) {
+		$value = $value['size'];
+	}
+
+	if ( '' === $value || null === $value ) {
+		return null;
+	}
+
+	return is_numeric( $value ) ? (float) $value : null;
+}
+
+/**
+ * Add a bounded Elementor write guard issue.
+ *
+ * @param array  $issues Issue list.
+ * @param array  $element Elementor element.
+ * @param string $path Data path.
+ * @param string $setting Setting key.
+ * @param string $type Issue type.
+ * @param string $severity Issue severity.
+ * @param string $message Human-readable message.
+ * @return void
+ */
+function mcp_abilities_elementor_add_write_guard_issue( array &$issues, array $element, string $path, string $setting, string $type, string $severity, string $message ): void {
+	if ( count( $issues ) >= 25 ) {
+		return;
+	}
+
+	$issues[] = array(
+		'element_id'  => isset( $element['id'] ) && is_string( $element['id'] ) ? $element['id'] : '',
+		'el_type'     => isset( $element['elType'] ) && is_string( $element['elType'] ) ? $element['elType'] : '',
+		'widget_type' => isset( $element['widgetType'] ) && is_string( $element['widgetType'] ) ? $element['widgetType'] : '',
+		'path'        => $path,
+		'setting'     => $setting,
+		'type'        => $type,
+		'severity'    => $severity,
+		'message'     => $message,
+	);
+}
+
+/**
+ * Audit one Elementor element for write guard issues that Elementor would render differently per device.
+ *
+ * @param array  $element Elementor element.
+ * @param array  $issues Issue list.
+ * @param string $path Data path.
+ * @return void
+ */
+function mcp_abilities_elementor_collect_write_guard_issues_on_element( array $element, array &$issues, string $path ): void {
+	$settings = isset( $element['settings'] ) && is_array( $element['settings'] ) ? $element['settings'] : array();
+
+	foreach ( $settings as $key => $value ) {
+		if ( ! is_string( $key ) || '__globals__' === $key ) {
+			continue;
+		}
+
+		if ( is_string( $value ) && false !== stripos( $value, 'calc(' ) && 'custom_css' !== $key ) {
+			mcp_abilities_elementor_add_write_guard_issue(
+				$issues,
+				$element,
+				$path . '.settings.' . $key,
+				$key,
+				'calculated_field_value',
+				'error',
+				'Elementor control fields must store concrete values, not CSS calc() expressions. Move the intent to native Elementor controls or generated CSS owned by Elementor.'
+			);
+		}
+	}
+
+	if ( 'posts' === ( $element['widgetType'] ?? '' ) ) {
+		foreach ( $settings as $key => $value ) {
+			if ( ! is_string( $key ) || ! preg_match( '/^(.*)_item_ratio$/', $key, $matches ) ) {
+				continue;
+			}
+
+			$base_size = mcp_abilities_elementor_slider_size_value( $value );
+			if ( null === $base_size ) {
+				continue;
+			}
+
+			$tablet_key  = $key . '_tablet';
+			$mobile_key  = $key . '_mobile';
+			$tablet_size = mcp_abilities_elementor_slider_size_value( $settings[ $tablet_key ] ?? null );
+			$mobile_size = mcp_abilities_elementor_slider_size_value( $settings[ $mobile_key ] ?? null );
+
+			if ( null === $mobile_size ) {
+				mcp_abilities_elementor_add_write_guard_issue(
+					$issues,
+					$element,
+					$path . '.settings.' . $mobile_key,
+					$mobile_key,
+					'missing_responsive_posts_image_ratio',
+					'error',
+					'Posts widget image ratio is a responsive Elementor slider. Setting `' . $key . '` does not set mobile; Elementor Pro defaults mobile image ratio to 0.5. Set `' . $mobile_key . '` explicitly, for example {unit:"px",size:' . rtrim( rtrim( (string) $base_size, '0' ), '.' ) . ',sizes:[]}.'
+				);
+			}
+
+			if ( null === $tablet_size ) {
+				mcp_abilities_elementor_add_write_guard_issue(
+					$issues,
+					$element,
+					$path . '.settings.' . $tablet_key,
+					$tablet_key,
+					'missing_responsive_posts_image_ratio',
+					'warning',
+					'Posts widget image ratio is responsive. Set `' . $tablet_key . '` explicitly when the desktop ratio is intentional across breakpoints.'
+				);
+			}
+		}
+	}
+
+	if ( isset( $element['elements'] ) && is_array( $element['elements'] ) ) {
+		foreach ( $element['elements'] as $index => $child ) {
+			if ( is_array( $child ) ) {
+				mcp_abilities_elementor_collect_write_guard_issues_on_element( $child, $issues, $path . '.elements[' . $index . ']' );
+			}
+		}
+	}
+}
+
+/**
+ * Audit Elementor data for write guard issues that should be caught before saving.
+ *
+ * @param array $data Elementor document data.
+ * @return array
+ */
+function mcp_abilities_elementor_audit_write_guard( array $data ): array {
+	$issues = array();
+
+	foreach ( $data as $index => $element ) {
+		if ( is_array( $element ) ) {
+			mcp_abilities_elementor_collect_write_guard_issues_on_element( $element, $issues, 'data[' . $index . ']' );
+		}
+	}
+
+	$errors = array_values(
+		array_filter(
+			$issues,
+			static fn( array $issue ): bool => 'error' === ( $issue['severity'] ?? '' )
+		)
+	);
+
+	return array(
+		'success'       => empty( $errors ),
+		'error_count'   => count( $errors ),
+		'warning_count' => count( $issues ) - count( $errors ),
+		'issues'        => array_values( $issues ),
+	);
+}
+
+/**
+ * Build a standard failed response for Elementor write guard issues.
+ *
+ * @param array $guard_result Guard result.
+ * @return array
+ */
+function mcp_abilities_elementor_write_guard_error_response( array $guard_result ): array {
+	return array(
+		'success'               => false,
+		'message'               => 'Elementor write guard blocked the update. Fix the reported Elementor data issue(s) before saving.',
+		'elementor_write_guard' => $guard_result,
+	);
+}
+
+/**
  * Build a standard failed response for global style policy violations.
  *
  * @param array $policy_result Policy result.
@@ -5798,6 +5969,11 @@ function mcp_abilities_elementor_apply_frontend_runtime_guard( array $response, 
 	$guard = mcp_abilities_elementor_audit_frontend_runtime_readiness( $post_id, $elements );
 	$response['frontend_runtime'] = $guard;
 
+	$write_guard = mcp_abilities_elementor_audit_write_guard( $elements );
+	if ( ! empty( $write_guard['warning_count'] ) || ! empty( $write_guard['error_count'] ) ) {
+		$response['elementor_write_guard'] = $write_guard;
+	}
+
 	$menu_guidance = mcp_abilities_elementor_collect_menu_widget_guidance_warnings( $elements );
 	if ( ! empty( $menu_guidance['warning_count'] ) ) {
 		$response['menu_widget_guidance'] = $menu_guidance;
@@ -6359,6 +6535,7 @@ function mcp_abilities_elementor_register_abilities(): void {
 					'link'    => array( 'type' => 'string' ),
 					'unchanged' => array( 'type' => 'boolean' ),
 					'cache'   => array( 'type' => 'object' ),
+					'elementor_write_guard' => array( 'type' => 'object' ),
 				),
 			),
 			'execute_callback'    => function ( $input = array() ): array {
@@ -6406,6 +6583,10 @@ function mcp_abilities_elementor_register_abilities(): void {
 						return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
 					}
 					$normalized_data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $normalized_data;
+					$write_guard     = mcp_abilities_elementor_audit_write_guard( $normalized_data );
+					if ( empty( $write_guard['success'] ) ) {
+						return mcp_abilities_elementor_write_guard_error_response( $write_guard );
+					}
 
 					// Encode data to JSON.
 					$json_data = wp_json_encode( $normalized_data );
@@ -7285,6 +7466,7 @@ function mcp_abilities_elementor_register_abilities(): void {
 					'message'      => array( 'type' => 'string' ),
 					'link'         => array( 'type' => 'string' ),
 					'cache'        => array( 'type' => 'object' ),
+					'elementor_write_guard' => array( 'type' => 'object' ),
 				),
 			),
 			'execute_callback'    => function ( $input = array() ): array {
@@ -7354,6 +7536,10 @@ function mcp_abilities_elementor_register_abilities(): void {
 						return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
 					}
 					$normalized_data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $normalized_data;
+					$write_guard     = mcp_abilities_elementor_audit_write_guard( $normalized_data );
+					if ( empty( $write_guard['success'] ) ) {
+						return mcp_abilities_elementor_write_guard_error_response( $write_guard );
+					}
 					$normalized_json = wp_json_encode( $normalized_data );
 					if ( false === $normalized_json ) {
 						return array( 'success' => false, 'message' => 'Replacement produced valid JSON but failed to re-encode after normalization' );
@@ -7444,6 +7630,7 @@ function mcp_abilities_elementor_register_abilities(): void {
 					'link'       => array( 'type' => 'string' ),
 					'unchanged'  => array( 'type' => 'boolean' ),
 					'cache'      => array( 'type' => 'object' ),
+					'elementor_write_guard' => array( 'type' => 'object' ),
 				),
 			),
 			'execute_callback'    => function ( $input = array() ): array {
@@ -7596,6 +7783,10 @@ function mcp_abilities_elementor_register_abilities(): void {
 					return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
 				}
 				$data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $data;
+				$write_guard = mcp_abilities_elementor_audit_write_guard( $data );
+				if ( empty( $write_guard['success'] ) ) {
+					return mcp_abilities_elementor_write_guard_error_response( $write_guard );
+				}
 
 				// Encode and save.
 				$json_data = wp_json_encode( $data );
@@ -7705,6 +7896,7 @@ function mcp_abilities_elementor_register_abilities(): void {
 					'unchanged'   => array( 'type' => 'boolean' ),
 					'settings'    => array( 'type' => 'object' ),
 					'cache'       => array( 'type' => 'object' ),
+					'elementor_write_guard' => array( 'type' => 'object' ),
 				),
 			),
 			'execute_callback'    => function ( $input = array() ): array {
@@ -7795,6 +7987,10 @@ function mcp_abilities_elementor_register_abilities(): void {
 					return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
 				}
 				$data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $data;
+				$write_guard = mcp_abilities_elementor_audit_write_guard( $data );
+				if ( empty( $write_guard['success'] ) ) {
+					return mcp_abilities_elementor_write_guard_error_response( $write_guard );
+				}
 				$json_data = wp_json_encode( $data );
 				if ( false === $json_data ) {
 					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );

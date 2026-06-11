@@ -3,7 +3,7 @@ Contributors: devenia
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 7.0
-Stable tag: 2.3.9
+Stable tag: 2.3.10
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -14,7 +14,7 @@ Elementor page builder integration for WordPress via MCP.
 
 This add-on plugin exposes Elementor functionality through MCP (Model Context Protocol). Your AI assistant can read Elementor page structures, locate and update elements, manage templates and conditions, and run Elementor tools like maintenance mode, experiments, and URL replacement.
 
-Version 2.3.9 enforces a global style policy on Elementor write abilities, documents Elementor-native menu/widget choices, and flags header menu control limits before agents reach for CSS patches.
+Version 2.3.10 adds Elementor write guards for responsive Posts image ratios and calculated field values so bad mobile payloads are blocked before save.
 
 Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilities/) ecosystem.
 
@@ -59,6 +59,11 @@ Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilit
 * [All Add-on Plugins](https://devenia.com/plugins/mcp-expose-abilities/#add-ons)
 
 == Changelog ==
+
+= 2.3.10 =
+* Added: Elementor write guard blocks Posts widgets that set desktop image ratio without an explicit mobile image ratio, because Elementor Pro defaults mobile ratio to 0.5.
+* Added: Elementor write guard rejects `calc(...)` values in ordinary Elementor control fields; use concrete native control values instead.
+* Added: write responses can include `elementor_write_guard` warnings for non-blocking responsive setting gaps.
 
 = 2.3.9 =
 * Added: official-pattern guidance now distinguishes legacy Nav Menu/WordPress Menu from the newer Elementor Menu (`mega-menu`) widget, including the Nav Menu limitations around exact desktop dropdown width and line height.

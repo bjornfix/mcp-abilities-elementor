@@ -8,7 +8,7 @@ Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage 
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://php.net)
 
 **Tested up to:** 7.0
-**Stable tag:** 2.3.9
+**Stable tag:** 2.3.10
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -331,6 +331,12 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 ```
 
 ## Changelog
+
+### 2.3.10
+
+- Added: Elementor write guard blocks Posts widgets that set desktop image ratio without an explicit mobile image ratio, because Elementor Pro defaults mobile ratio to 0.5.
+- Added: Elementor write guard rejects `calc(...)` values in ordinary Elementor control fields; use concrete native control values instead.
+- Added: write responses can include `elementor_write_guard` warnings for non-blocking responsive setting gaps.
 
 ### 2.3.9
 
