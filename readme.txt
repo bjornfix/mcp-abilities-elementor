@@ -3,7 +3,7 @@ Contributors: devenia
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 7.0
-Stable tag: 2.3.10
+Stable tag: 2.3.12
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -14,7 +14,7 @@ Elementor page builder integration for WordPress via MCP.
 
 This add-on plugin exposes Elementor functionality through MCP (Model Context Protocol). Your AI assistant can read Elementor page structures, locate and update elements, manage templates and conditions, and run Elementor tools like maintenance mode, experiments, and URL replacement.
 
-Version 2.3.10 adds Elementor write guards for responsive Posts image ratios and calculated field values so bad mobile payloads are blocked before save.
+Version 2.3.12 keeps targeted element setting merges usable on legacy documents while preserving full-document style guards for raw Elementor writes.
 
 Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilities/) ecosystem.
 
@@ -59,6 +59,12 @@ Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilit
 * [All Add-on Plugins](https://devenia.com/plugins/mcp-expose-abilities/#add-ons)
 
 == Changelog ==
+
+= 2.3.12 =
+* Fixed: `elementor/merge-element-settings` now validates the merged target element instead of blocking on unrelated legacy style violations elsewhere in the Elementor document.
+
+= 2.3.11 =
+* Security: `elementor/update-data`, `elementor/clone-data`, and `elementor/patch-data` now require explicit per-ability confirmation before writing raw Elementor document data.
 
 = 2.3.10 =
 * Added: Elementor write guard blocks Posts widgets that set desktop image ratio without an explicit mobile image ratio, because Elementor Pro defaults mobile ratio to 0.5.

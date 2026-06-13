@@ -8,7 +8,7 @@ Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage 
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://php.net)
 
 **Tested up to:** 7.0
-**Stable tag:** 2.3.10
+**Stable tag:** 2.3.12
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -331,6 +331,14 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 ```
 
 ## Changelog
+
+### 2.3.12
+
+- Fixed: `elementor/merge-element-settings` now validates the merged target element instead of blocking on unrelated legacy style violations elsewhere in the Elementor document.
+
+### 2.3.11
+
+- Security: `elementor/update-data`, `elementor/clone-data`, and `elementor/patch-data` now require explicit per-ability confirmation before writing raw Elementor document data.
 
 ### 2.3.10
 

@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.3.10
+ * Version: 2.3.12
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -40,6 +40,68 @@ function mcp_abilities_elementor_check_dependencies(): bool {
  */
 function mcp_abilities_elementor_is_active(): bool {
 	return class_exists( '\\Elementor\\Plugin' ) || defined( 'ELEMENTOR_VERSION' );
+}
+
+/**
+ * Return input schema fragment for high-risk Elementor document writes.
+ *
+ * @param string $ability_name Ability name.
+ * @return array
+ */
+function mcp_abilities_elementor_dangerous_action_confirmation_schema( string $ability_name ): array {
+	return array(
+		'type'        => 'string',
+		'description' => sprintf(
+			/* translators: %s: Ability name. */
+			__( 'Required for this high-risk Elementor document write. Must exactly equal "%s".', 'mcp-abilities-elementor' ),
+			$ability_name
+		),
+	);
+}
+
+/**
+ * Require explicit per-ability confirmation for full/raw Elementor document writes.
+ *
+ * @param array  $input        Ability input.
+ * @param string $ability_name Ability name.
+ * @return true|WP_Error
+ */
+function mcp_abilities_elementor_confirm_dangerous_action( array $input, string $ability_name ) {
+	$confirmation = isset( $input['confirm_dangerous_action'] ) ? (string) $input['confirm_dangerous_action'] : '';
+	if ( $ability_name === $confirmation ) {
+		return true;
+	}
+
+	return new WP_Error(
+		'mcp_elementor_dangerous_action_confirmation_required',
+		sprintf(
+			/* translators: 1: Ability name, 2: Confirmation parameter name, 3: Confirmation value. */
+			__( 'High-risk Elementor ability "%1$s" requires explicit confirmation. Set %2$s to "%3$s" after verifying the target and rollback path.', 'mcp-abilities-elementor' ),
+			$ability_name,
+			'confirm_dangerous_action',
+			$ability_name
+		)
+	);
+}
+
+/**
+ * Convert an Elementor dangerous-action guard result to ability output.
+ *
+ * @param true|WP_Error $result Guard result.
+ * @param string        $ability_name Ability name.
+ * @return array|null
+ */
+function mcp_abilities_elementor_dangerous_action_error_response( $result, string $ability_name ): ?array {
+	if ( ! is_wp_error( $result ) ) {
+		return null;
+	}
+
+	return array(
+		'success' => false,
+		'message' => $result->get_error_message(),
+		'ability' => $ability_name,
+		'code'    => $result->get_error_code(),
+	);
 }
 
 /**
@@ -6523,6 +6585,7 @@ function mcp_abilities_elementor_register_abilities(): void {
 						'default'     => 'post',
 						'description' => 'Cache invalidation scope after write. `post` clears post-level caches and touches the post; `site` also clears Elementor site-wide cache; `none` skips cache invalidation.',
 					),
+					'confirm_dangerous_action' => mcp_abilities_elementor_dangerous_action_confirmation_schema( 'elementor/update-data' ),
 				),
 				'additionalProperties' => false,
 			),
@@ -6540,6 +6603,13 @@ function mcp_abilities_elementor_register_abilities(): void {
 			),
 			'execute_callback'    => function ( $input = array() ): array {
 				$input = is_array( $input ) ? $input : array();
+				$confirmation_error = mcp_abilities_elementor_dangerous_action_error_response(
+					mcp_abilities_elementor_confirm_dangerous_action( $input, 'elementor/update-data' ),
+					'elementor/update-data'
+				);
+				if ( null !== $confirmation_error ) {
+					return $confirmation_error;
+				}
 
 				if ( empty( $input['id'] ) ) {
 					return array( 'success' => false, 'message' => 'Post/Page ID is required' );
@@ -7278,6 +7348,7 @@ function mcp_abilities_elementor_register_abilities(): void {
 						'default'     => 'post',
 						'description' => 'Cache invalidation scope after write. `post` clears post-level caches and touches the post; `site` also clears Elementor site-wide cache; `none` skips cache invalidation.',
 					),
+					'confirm_dangerous_action' => mcp_abilities_elementor_dangerous_action_confirmation_schema( 'elementor/clone-data' ),
 				),
 				'additionalProperties' => false,
 			),
@@ -7295,6 +7366,13 @@ function mcp_abilities_elementor_register_abilities(): void {
 			),
 			'execute_callback'    => function ( $input = array() ): array {
 				$input = is_array( $input ) ? $input : array();
+				$confirmation_error = mcp_abilities_elementor_dangerous_action_error_response(
+					mcp_abilities_elementor_confirm_dangerous_action( $input, 'elementor/clone-data' ),
+					'elementor/clone-data'
+				);
+				if ( null !== $confirmation_error ) {
+					return $confirmation_error;
+				}
 
 				if ( empty( $input['source_id'] ) || empty( $input['target_id'] ) ) {
 					return array( 'success' => false, 'message' => 'Source ID and target ID are required' );
@@ -7454,6 +7532,7 @@ function mcp_abilities_elementor_register_abilities(): void {
 						'default'     => 'post',
 						'description' => 'Cache invalidation scope after write. `post` clears post-level caches and touches the post; `site` also clears Elementor site-wide cache; `none` skips cache invalidation.',
 					),
+					'confirm_dangerous_action' => mcp_abilities_elementor_dangerous_action_confirmation_schema( 'elementor/patch-data' ),
 				),
 				'additionalProperties' => false,
 			),
@@ -7471,6 +7550,13 @@ function mcp_abilities_elementor_register_abilities(): void {
 			),
 			'execute_callback'    => function ( $input = array() ): array {
 				$input = is_array( $input ) ? $input : array();
+				$confirmation_error = mcp_abilities_elementor_dangerous_action_error_response(
+					mcp_abilities_elementor_confirm_dangerous_action( $input, 'elementor/patch-data' ),
+					'elementor/patch-data'
+				);
+				if ( null !== $confirmation_error ) {
+					return $confirmation_error;
+				}
 
 				if ( empty( $input['id'] ) ) {
 					return array( 'success' => false, 'message' => 'Post/Page ID is required' );
@@ -7980,13 +8066,16 @@ function mcp_abilities_elementor_register_abilities(): void {
 					);
 				}
 
-				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['element_id'], $merged_element );
-				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
-				$style_policy = mcp_abilities_elementor_enforce_global_style_policy( $data );
+				$style_policy = mcp_abilities_elementor_enforce_global_style_policy( array( $merged_element ) );
 				if ( empty( $style_policy['success'] ) ) {
 					return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
 				}
-				$data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $data;
+				if ( isset( $style_policy['data'][0] ) && is_array( $style_policy['data'][0] ) ) {
+					$merged_element = $style_policy['data'][0];
+				}
+
+				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['element_id'], $merged_element );
+				$data = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
 				$write_guard = mcp_abilities_elementor_audit_write_guard( $data );
 				if ( empty( $write_guard['success'] ) ) {
 					return mcp_abilities_elementor_write_guard_error_response( $write_guard );
