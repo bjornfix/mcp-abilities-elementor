@@ -8,7 +8,7 @@ Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage 
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://php.net)
 
 **Tested up to:** 7.0
-**Stable tag:** 2.3.12
+**Stable tag:** 2.3.13
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
