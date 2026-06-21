@@ -516,6 +516,9 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 - Improved: stronger cache invalidation after Elementor writes (post cache cleanup, asset meta cleanup, optional site-wide Elementor cache clear)
 - Improved: `elementor/clear-cache` now returns cache details and supports `scope` alias (`post` / `site`)
 
+### 2.3.14
+- Added `elementor/get-widget-controls` to inspect native Elementor widget control keys and metadata on the target site before writing widget settings.
+
 ### 2.2.2
 - Fixed: parse error in `elementor/set-active-kit`
 - Added: README sync for current stable tag and full ability list

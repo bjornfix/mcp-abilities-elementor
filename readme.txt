@@ -3,7 +3,7 @@ Contributors: devenia
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 7.0
-Stable tag: 2.3.13
+Stable tag: 2.3.14
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -14,7 +14,7 @@ Elementor page builder integration for WordPress via MCP.
 
 This add-on plugin exposes Elementor functionality through MCP (Model Context Protocol). Your AI assistant can read Elementor page structures, locate and update elements, manage templates and conditions, and run Elementor tools like maintenance mode, experiments, and URL replacement.
 
-Version 2.3.13 lets confirmed `elementor/update-data` writes initialize existing posts that have no Elementor data yet, while preserving the existing write guards for populated documents.
+Version 2.3.14 adds `elementor/get-widget-controls` so agents can inspect the native Elementor control surface on the target site before writing widget settings.
 
 Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilities/) ecosystem.
 
@@ -59,6 +59,9 @@ Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilit
 * [All Add-on Plugins](https://devenia.com/plugins/mcp-expose-abilities/#add-ons)
 
 == Changelog ==
+
+= 2.3.14 =
+* Added: `elementor/get-widget-controls` returns schema-safe summaries of native Elementor widget controls from the target site.
 
 = 2.3.13 =
 * Fixed: `elementor/update-data` can now initialize an existing post/page with empty Elementor data when `force_replace=true` and the dangerous-action confirmation are both provided.

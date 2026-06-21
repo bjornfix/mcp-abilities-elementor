@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.3.13
+ * Version: 2.3.14
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -5622,6 +5622,80 @@ function mcp_abilities_elementor_collect_widget_usage( array $elements ): array 
 }
 
 /**
+ * Convert Elementor widget control definitions into schema-safe summaries.
+ *
+ * @param array  $controls Raw Elementor controls.
+ * @param string $search   Optional case-insensitive filter.
+ * @return array<int,array<string,mixed>>
+ */
+function mcp_abilities_elementor_summarize_widget_controls( array $controls, string $search = '' ): array {
+	$summaries   = array();
+	$search      = strtolower( trim( $search ) );
+	$scalar_keys = array( 'type', 'label', 'description', 'tab', 'section', 'separator', 'prefix_class', 'render_type', 'frontend_available', 'responsive' );
+
+	foreach ( $controls as $name => $control ) {
+		if ( ! is_array( $control ) ) {
+			continue;
+		}
+
+		$haystack = strtolower(
+			(string) $name . ' ' .
+			(string) ( $control['label'] ?? '' ) . ' ' .
+			(string) ( $control['description'] ?? '' ) . ' ' .
+			(string) ( $control['section'] ?? '' ) . ' ' .
+			(string) ( $control['type'] ?? '' )
+		);
+
+		if ( '' !== $search && false === strpos( $haystack, $search ) ) {
+			continue;
+		}
+
+		$summary = array(
+			'name' => (string) $name,
+		);
+
+		foreach ( $scalar_keys as $key ) {
+			if ( isset( $control[ $key ] ) && ( is_scalar( $control[ $key ] ) || null === $control[ $key ] ) ) {
+				$summary[ $key ] = $control[ $key ];
+			}
+		}
+
+		if ( isset( $control['default'] ) && ( is_scalar( $control['default'] ) || is_array( $control['default'] ) || null === $control['default'] ) ) {
+			$summary['default'] = $control['default'];
+		}
+
+		if ( isset( $control['options'] ) && is_array( $control['options'] ) ) {
+			$summary['options'] = $control['options'];
+		}
+
+		if ( isset( $control['size_units'] ) && is_array( $control['size_units'] ) ) {
+			$summary['size_units'] = array_values( $control['size_units'] );
+		}
+
+		if ( isset( $control['range'] ) && is_array( $control['range'] ) ) {
+			$summary['range'] = $control['range'];
+		}
+
+		if ( isset( $control['devices'] ) && is_array( $control['devices'] ) ) {
+			$summary['devices'] = array_values( $control['devices'] );
+		}
+
+		if ( isset( $control['condition'] ) && is_array( $control['condition'] ) ) {
+			$summary['condition'] = $control['condition'];
+		}
+
+		if ( isset( $control['selectors'] ) && is_array( $control['selectors'] ) ) {
+			$summary['selector_count'] = count( $control['selectors'] );
+			$summary['selector_keys']  = array_values( array_map( 'strval', array_keys( $control['selectors'] ) ) );
+		}
+
+		$summaries[] = $summary;
+	}
+
+	return $summaries;
+}
+
+/**
  * Return authoring warnings for Elementor menu widgets.
  *
  * The legacy Nav Menu/WordPress Menu widget and the newer Menu (`mega-menu`)
@@ -6550,6 +6624,81 @@ function mcp_abilities_elementor_register_abilities(): void {
 					'idempotent'  => true,
 				),
 			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Get Widget Controls
+	// =========================================================================
+	wp_register_ability(
+		'elementor/get-widget-controls',
+		array(
+			'label'               => 'Get Elementor Widget Controls',
+			'description'         => 'Returns schema-safe summaries of the native Elementor controls exposed by a widget type on the target site.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'widget_type' ),
+				'properties'           => array(
+					'widget_type' => array(
+						'type'        => 'string',
+						'description' => 'Elementor widget type, for example "nav-menu", "mega-menu", or "media-carousel".',
+					),
+					'search'      => array(
+						'type'        => 'string',
+						'description' => 'Optional case-insensitive filter matched against control name, label, description, section, and type.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'     => array( 'type' => 'boolean' ),
+					'widget_type' => array( 'type' => 'string' ),
+					'count'       => array( 'type' => 'integer' ),
+					'controls'    => array( 'type' => 'array' ),
+					'message'     => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input       = is_array( $input ) ? $input : array();
+				$widget_type = isset( $input['widget_type'] ) ? sanitize_key( (string) $input['widget_type'] ) : '';
+				$search      = isset( $input['search'] ) ? sanitize_text_field( (string) $input['search'] ) : '';
+
+				if ( '' === $widget_type ) {
+					return array( 'success' => false, 'message' => 'widget_type is required' );
+				}
+
+				if ( ! class_exists( '\Elementor\Plugin' ) ) {
+					return array( 'success' => false, 'widget_type' => $widget_type, 'message' => 'Elementor is not loaded' );
+				}
+
+				$elementor = \Elementor\Plugin::instance();
+				$widgets_manager = $elementor->widgets_manager ?? null;
+				if ( ! $widgets_manager || ! method_exists( $widgets_manager, 'get_widget_types' ) ) {
+					return array( 'success' => false, 'widget_type' => $widget_type, 'message' => 'Elementor widgets manager is unavailable' );
+				}
+
+				$widget = $widgets_manager->get_widget_types( $widget_type );
+				if ( ! $widget || ! is_object( $widget ) || ! method_exists( $widget, 'get_controls' ) ) {
+					return array( 'success' => false, 'widget_type' => $widget_type, 'message' => 'Widget type not found or does not expose controls' );
+				}
+
+				$controls = $widget->get_controls();
+				$controls = is_array( $controls ) ? $controls : array();
+				$summaries = mcp_abilities_elementor_summarize_widget_controls( $controls, $search );
+
+				return array(
+					'success'     => true,
+					'widget_type' => $widget_type,
+					'count'       => count( $summaries ),
+					'controls'    => $summaries,
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
 		)
 	);
 
