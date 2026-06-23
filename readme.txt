@@ -3,7 +3,7 @@ Contributors: devenia
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 7.0
-Stable tag: 2.3.14
+Stable tag: 2.3.15
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -14,7 +14,7 @@ Elementor page builder integration for WordPress via MCP.
 
 This add-on plugin exposes Elementor functionality through MCP (Model Context Protocol). Your AI assistant can read Elementor page structures, locate and update elements, manage templates and conditions, and run Elementor tools like maintenance mode, experiments, and URL replacement.
 
-Version 2.3.14 adds `elementor/get-widget-controls` so agents can inspect the native Elementor control surface on the target site before writing widget settings.
+Version 2.3.15 expands Elementor pattern guidance so agents can choose the correct native Elementor widget/model for common page patterns such as split-panel carousel surfaces, static cover-image panels, dynamic post lists, static image-card grids, curated galleries, and repeated CTA modules.
 
 Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilities/) ecosystem.
 
@@ -59,6 +59,12 @@ Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilit
 * [All Add-on Plugins](https://devenia.com/plugins/mcp-expose-abilities/#add-ons)
 
 == Changelog ==
+
+= 2.3.15 =
+* Added: official pattern guidance now documents when to use Elementor Pro Slides for full-height split-panel carousel image surfaces instead of Media Carousel.
+* Added: official pattern guidance now documents when native container background images are the correct Elementor model for static split-panel image surfaces.
+* Added: official pattern guidance now documents dynamic related/archive card lists, static Image Box card grids, curated Gallery sections, and repeated Call to Action modules.
+* Improved: `elementor/get-official-pattern-guidance` supports `topic=patterns`.
 
 = 2.3.14 =
 * Added: `elementor/get-widget-controls` returns schema-safe summaries of native Elementor widget controls from the target site.

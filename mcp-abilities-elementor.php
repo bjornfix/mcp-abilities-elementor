@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.3.14
+ * Version: 2.3.15
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -151,8 +151,23 @@ function mcp_abilities_elementor_get_official_guidance_catalog(): array {
 				'label' => 'Grid vs Flex layout options',
 				'url'   => 'https://elementor.com/help/grid-container-layout-options/',
 			),
+			'background_slideshow' => array(
+				'label' => 'Background slideshow',
+				'url'   => 'https://elementor.com/help/background-slideshow/',
+			),
 		),
 		'widgets' => array(
+			'slides' => array(
+				'label' => 'Slides widget',
+				'url'   => 'https://elementor.com/widgets/pro/slides-widget/',
+				'native_authoring_note' => 'Use the Elementor Pro Slides widget when the design needs a full-height slide surface whose images behave as cover backgrounds. It is a better fit for split-panel image surfaces beside text panels than Media Carousel, because the image is the slide background rather than a media item floating inside a carousel frame.',
+				'height_control_note' => 'On current Elementor Pro builds the native height control is `slides_height`. It supports px, em, rem, vh, and custom units; percent is not an ordinary supported unit. Match sibling panels with concrete native height/min-height controls instead of CSS.',
+			),
+			'media_carousel' => array(
+				'label' => 'Media Carousel widget',
+				'url'   => 'https://elementor.com/widgets/',
+				'native_authoring_note' => 'Use Media Carousel for actual image/video galleries, product media collections, portfolios, and visual story strips where the media items are the content. Do not use it as a layout surface when the design calls for one full-height background-like image panel beside a text panel.',
+			),
 			'accordion' => array(
 				'label' => 'Accordion widget',
 				'url'   => 'https://elementor.com/help/accordion-widget/',
@@ -164,6 +179,27 @@ function mcp_abilities_elementor_get_official_guidance_catalog(): array {
 			'call_to_action' => array(
 				'label' => 'Call to Action widget',
 				'url'   => 'https://elementor.com/help/call-to-action-widget/',
+				'native_authoring_note' => 'Use Call to Action for repeated promo modules that combine media, title, copy, and a button/action. It is usually more maintainable than rebuilding the same card from separate Image, Heading, Text Editor, and Button widgets.',
+			),
+			'image_box' => array(
+				'label' => 'Image Box widget',
+				'url'   => 'https://elementor.com/help/image-box-widget/',
+				'native_authoring_note' => 'Use Image Box for static image cards where each item has one image, title, and short text. It keeps the content editable as one widget and avoids fragile hand-built card groups.',
+			),
+			'posts' => array(
+				'label' => 'Posts widget',
+				'url'   => 'https://elementor.com/help/posts-widget-pro/',
+				'native_authoring_note' => 'Use Posts for dynamic blog/reference/product-related grids when WordPress posts, taxonomy queries, pagination, and translated content should drive the cards.',
+			),
+			'loop_grid' => array(
+				'label' => 'Loop Grid widget',
+				'url'   => 'https://elementor.com/help/loop-grid/',
+				'native_authoring_note' => 'Use Loop Grid when a dynamic listing needs a custom repeated card layout that the Posts widget cannot express cleanly.',
+			),
+			'gallery' => array(
+				'label' => 'Gallery widget',
+				'url'   => 'https://elementor.com/help/gallery-widget/',
+				'native_authoring_note' => 'Use Gallery for a static or curated set of images shown as an image collection. Do not use it for dynamic post cards or split-panel cover surfaces.',
 			),
 			'icon_list' => array(
 				'label' => 'Icon List widget',
@@ -188,6 +224,103 @@ function mcp_abilities_elementor_get_official_guidance_catalog(): array {
 				'data_shape_note' => 'The Menu widget stores top-level entries in `menu_items` and expects one child container per top-level menu item index. Dropdown content for item N belongs in child container N, even when some items have no dropdown content.',
 			),
 		),
+		'patterns' => array(
+			'split_panel_carousel_surface' => array(
+				'label' => 'Split-panel carousel image surface',
+				'recommended_widget' => 'slides',
+				'avoid_widget' => 'media-carousel',
+				'official_widget_url' => 'https://elementor.com/widgets/pro/slides-widget/',
+				'control_probe' => array(
+					'ability' => 'elementor/get-widget-controls',
+					'params'  => array(
+						'widget_type' => 'slides',
+						'search'      => 'height',
+					),
+				),
+				'when_to_use' => 'Use for a rotating image panel in a 50/50 or similar split row where the sibling is a dark text/content panel and the image must fill the row height edge-to-edge.',
+				'native_controls' => array(
+					'Set the parent row/container height or min-height as the visual source of truth.',
+					'Use the Slides widget `slides_height` control for the slide surface.',
+					'Use slide background images with background size cover and centered positioning.',
+					'Keep slide heading/description/button empty when text belongs in the sibling content panel.',
+					'Use native navigation/autoplay controls only; do not repair white gaps with widget/page custom CSS.',
+				),
+				'why_not_media_carousel' => 'Media Carousel is documented as a media gallery/carousel widget and renders media items inside a carousel frame. In split-panel surface layouts that makes height, crop, and blank-space parity less reliable than a Slides background surface.',
+			),
+			'static_split_panel_image_surface' => array(
+				'label' => 'Static split-panel image surface',
+				'recommended_widget' => 'container_background_image',
+				'official_layout_url' => 'https://elementor.com/help/background-slideshow/',
+				'when_to_use' => 'Use for a non-rotating image panel beside a text/content panel when the image should behave as a cover surface rather than inline image content.',
+				'native_controls' => array(
+					'Apply the image as a native container background image.',
+					'Set background size to cover, repeat to no-repeat, and position to the visually correct focal point.',
+					'Set the container min-height to match the sibling panel or the live design rhythm.',
+					'Use an empty Spacer widget only when Elementor needs a child element to keep the background container renderable/editable.',
+					'Do not use CSS or an inline Image widget when the goal is full-height cover behavior.',
+				),
+				'why_use_background_image' => 'A native container background image fills its container like a design surface and avoids inline image aspect-ratio gaps in split rows.',
+			),
+			'actual_media_gallery_carousel' => array(
+				'label' => 'Actual media gallery carousel',
+				'recommended_widget' => 'media-carousel',
+				'official_widget_url' => 'https://elementor.com/widgets/',
+				'when_to_use' => 'Use when the visitor is meant to browse a set of images/videos as gallery content, such as portfolio media, product options, or visual story collections.',
+				'native_controls' => array(
+					'Use Media Carousel skin, slides-per-view, navigation, autoplay, and height controls as appropriate.',
+					'Keep it as a content widget, not a replacement for a split-row background image surface.',
+				),
+			),
+			'dynamic_related_or_archive_cards' => array(
+				'label' => 'Dynamic related/archive card list',
+				'recommended_widget' => 'posts_or_loop_grid',
+				'official_widget_urls' => array(
+					'https://elementor.com/help/posts-widget-pro/',
+					'https://elementor.com/help/loop-grid/',
+				),
+				'when_to_use' => 'Use for blog, reference, inspiration, product-related, or archive-like card lists where WordPress posts and taxonomies are the source of truth.',
+				'native_controls' => array(
+					'Use Posts when the built-in card structure and query controls are sufficient.',
+					'Use Loop Grid when the card layout must preserve a custom design while remaining dynamic.',
+					'Set the correct taxonomy, language/WPML context, posts per page, ordering, pagination/load-more, and image ratio controls.',
+					'Do not keep manual/fake repeated cards when published post data can render the list dynamically.',
+				),
+				'why_not_manual_cards' => 'Manual card lists drift from published content, translations, pagination, and future edits. They also create duplicate maintenance work.',
+			),
+			'static_image_card_grid' => array(
+				'label' => 'Static image-card grid',
+				'recommended_widget' => 'image-box',
+				'official_widget_url' => 'https://elementor.com/help/image-box-widget/',
+				'when_to_use' => 'Use for a small fixed set of cards where each item is not backed by a WordPress post/query and only needs image, title, and short text.',
+				'native_controls' => array(
+					'Use one Image Box per card.',
+					'Use native container/grid controls for columns, width, gap, and responsive stacking.',
+					'Use Image Box image spacing and typography/global controls rather than custom CSS.',
+				),
+				'why_not_hand_built_groups' => 'Separate Image + Heading + Text Editor groups are harder for clients to maintain and often produce uneven spacing across breakpoints.',
+			),
+			'curated_image_gallery' => array(
+				'label' => 'Curated image gallery',
+				'recommended_widget' => 'gallery',
+				'official_widget_url' => 'https://elementor.com/help/gallery-widget/',
+				'when_to_use' => 'Use when the content is a curated image set, not a post list, not a split-panel surface, and not an image/video carousel story.',
+				'native_controls' => array(
+					'Use Gallery layout, columns, spacing, image size, and lightbox controls.',
+					'Use Media Carousel only when the desired experience is carousel browsing rather than a grid/gallery.',
+				),
+			),
+			'repeated_promo_or_cta_modules' => array(
+				'label' => 'Repeated promo or CTA modules',
+				'recommended_widget' => 'call-to-action',
+				'official_widget_url' => 'https://elementor.com/help/call-to-action-widget/',
+				'when_to_use' => 'Use when repeated modules combine an image/media area, heading, copy, and a button/action.',
+				'native_controls' => array(
+					'Use Call to Action widgets for each module when the widget can express the design.',
+					'Use native style controls for image, content, button, hover, and spacing.',
+					'Only use raw containers when the module structure cannot be represented by a native widget without harming editability or parity.',
+				),
+			),
+		),
 	);
 }
 
@@ -202,6 +335,12 @@ function mcp_abilities_elementor_get_design_guidance_basis(): array {
 		'official_elementor_topics' => array(
 			'layout_mechanism_fit',
 			'native_widget_opportunities',
+			'split_panel_carousel_surface_widget_fit',
+			'static_split_panel_background_image_fit',
+			'dynamic_listing_widget_fit',
+			'static_card_widget_fit',
+			'gallery_widget_fit',
+			'promo_module_widget_fit',
 		),
 		'plugin_heuristic_topics'   => array(
 			'generic_layout',
@@ -11716,7 +11855,7 @@ function mcp_abilities_elementor_register_abilities(): void {
 				'properties'           => array(
 					'topic' => array(
 						'type'        => 'string',
-						'enum'        => array( 'all', 'layout', 'widgets', 'policy' ),
+						'enum'        => array( 'all', 'layout', 'widgets', 'patterns', 'policy' ),
 						'default'     => 'all',
 						'description' => 'Optional guidance subset to return.',
 					),
@@ -11747,6 +11886,11 @@ function mcp_abilities_elementor_register_abilities(): void {
 					$guidance = array(
 						'policy'  => $catalog['policy'],
 						'widgets' => $catalog['widgets'],
+					);
+				} elseif ( 'patterns' === $topic ) {
+					$guidance = array(
+						'policy'   => $catalog['policy'],
+						'patterns' => $catalog['patterns'],
 					);
 				} elseif ( 'policy' === $topic ) {
 					$guidance = array(

@@ -8,7 +8,7 @@ Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage 
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://php.net)
 
 **Tested up to:** 7.0
-**Stable tag:** 2.3.13
+**Stable tag:** 2.3.15
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -515,6 +515,12 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 - Added: `cache_scope` (`none` / `post` / `site`) to `elementor/update-data`, `elementor/patch-data`, and `elementor/update-element`
 - Improved: stronger cache invalidation after Elementor writes (post cache cleanup, asset meta cleanup, optional site-wide Elementor cache clear)
 - Improved: `elementor/clear-cache` now returns cache details and supports `scope` alias (`post` / `site`)
+
+### 2.3.15
+- Added official pattern guidance for full-height split-panel carousel surfaces: use Elementor Pro Slides as the native background-cover slide surface instead of Media Carousel.
+- Added official pattern guidance for static split-panel image surfaces: use native container background images with cover/min-height controls when the image is a design surface rather than inline content.
+- Added official pattern guidance for dynamic related/archive card lists, static Image Box card grids, curated Gallery sections, and repeated Call to Action modules.
+- Improved `elementor/get-official-pattern-guidance` with `topic=patterns`.
 
 ### 2.3.14
 - Added `elementor/get-widget-controls` to inspect native Elementor widget control keys and metadata on the target site before writing widget settings.
