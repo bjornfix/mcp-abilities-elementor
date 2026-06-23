@@ -18,7 +18,7 @@ function mcp_abilities_elementor_register_template_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - List Templates
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/list-templates',
 		array(
 			'label'               => 'List Elementor Templates',
@@ -85,7 +85,7 @@ function mcp_abilities_elementor_register_template_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Find Template For Pattern
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/find-template-for-pattern',
 		array(
 			'label'               => 'Find Elementor Template For Pattern',
@@ -222,7 +222,7 @@ function mcp_abilities_elementor_register_template_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Clear Cache
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/clear-cache',
 		array(
 			'label'               => 'Clear Elementor Cache',
@@ -317,7 +317,7 @@ function mcp_abilities_elementor_register_template_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Replace URLs
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/replace-urls',
 		array(
 			'label'               => 'Replace URLs in Elementor Data',
@@ -387,7 +387,7 @@ function mcp_abilities_elementor_register_template_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Create Template
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/create-template',
 		array(
 			'label'               => 'Create Elementor Template',
@@ -588,7 +588,7 @@ function mcp_abilities_elementor_register_template_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Update Template
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/update-template',
 		array(
 			'label'               => 'Update Elementor Template',
@@ -782,7 +782,7 @@ function mcp_abilities_elementor_register_template_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Delete Template
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/delete-template',
 		array(
 			'label'               => 'Delete Elementor Template',
@@ -882,7 +882,7 @@ function mcp_abilities_elementor_register_template_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Get Template
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/get-template',
 		array(
 			'label'               => 'Get Elementor Template',
@@ -982,7 +982,7 @@ function mcp_abilities_elementor_register_template_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Get Theme Builder Conditions
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/get-theme-builder-conditions',
 		array(
 			'label'               => 'Get Theme Builder Conditions',
@@ -1079,7 +1079,7 @@ function mcp_abilities_elementor_register_template_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Update Theme Builder Conditions
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/update-theme-builder-conditions',
 		array(
 			'label'               => 'Update Theme Builder Conditions',
@@ -1165,7 +1165,7 @@ function mcp_abilities_elementor_register_template_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Restore Template
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/restore-template',
 		array(
 			'label'               => 'Restore Elementor Template',
@@ -1256,7 +1256,7 @@ function mcp_abilities_elementor_register_template_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Empty Trash
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/empty-trash',
 		array(
 			'label'               => 'Empty Elementor Template Trash',
@@ -1342,7 +1342,7 @@ function mcp_abilities_elementor_register_template_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Duplicate Template
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/duplicate-template',
 		array(
 			'label'               => 'Duplicate Elementor Template',
@@ -1460,7 +1460,7 @@ function mcp_abilities_elementor_register_template_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Export Template
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/export-template',
 		array(
 			'label'               => 'Export Elementor Template',
@@ -1546,7 +1546,7 @@ function mcp_abilities_elementor_register_template_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Import Template
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/import-template',
 		array(
 			'label'               => 'Import Elementor Template',

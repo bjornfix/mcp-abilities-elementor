@@ -18,7 +18,7 @@ function mcp_abilities_elementor_register_site_tool_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - List Global Widgets
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/list-global-widgets',
 		array(
 			'label'               => 'List Global Widgets',
@@ -95,7 +95,7 @@ function mcp_abilities_elementor_register_site_tool_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - List Kits
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/list-kits',
 		array(
 			'label'               => 'List Elementor Kits',
@@ -163,7 +163,7 @@ function mcp_abilities_elementor_register_site_tool_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Get Kit Settings
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/get-kit-settings',
 		array(
 			'label'               => 'Get Elementor Kit Settings',
@@ -225,7 +225,7 @@ function mcp_abilities_elementor_register_site_tool_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Update Kit Settings
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/update-kit-settings',
 		array(
 			'label'               => 'Update Elementor Kit Settings',
@@ -311,7 +311,7 @@ function mcp_abilities_elementor_register_site_tool_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Set Active Kit
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/set-active-kit',
 		array(
 			'label'               => 'Set Active Elementor Kit',
@@ -373,7 +373,7 @@ function mcp_abilities_elementor_register_site_tool_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Get Maintenance Mode
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/get-maintenance-mode',
 		array(
 			'label'               => 'Get Elementor Maintenance Mode',
@@ -440,7 +440,7 @@ function mcp_abilities_elementor_register_site_tool_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Update Maintenance Mode
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/update-maintenance-mode',
 		array(
 			'label'               => 'Update Elementor Maintenance Mode',
@@ -572,7 +572,7 @@ function mcp_abilities_elementor_register_site_tool_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - List Experiments
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/list-experiments',
 		array(
 			'label'               => 'List Elementor Experiments',
@@ -663,7 +663,7 @@ function mcp_abilities_elementor_register_site_tool_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Update Experiment
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/update-experiment',
 		array(
 			'label'               => 'Update Elementor Experiment',
@@ -793,7 +793,7 @@ function mcp_abilities_elementor_register_site_tool_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Update Page Settings
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/update-page-settings',
 		array(
 			'label'               => 'Update Elementor Page Settings',

@@ -18,7 +18,7 @@ function mcp_abilities_elementor_register_pro_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - List Custom Code
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/list-custom-code',
 		array(
 			'label'               => 'List Elementor Custom Code',
@@ -132,7 +132,7 @@ function mcp_abilities_elementor_register_pro_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Get Custom Code
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/get-custom-code',
 		array(
 			'label'               => 'Get Elementor Custom Code',
@@ -217,7 +217,7 @@ function mcp_abilities_elementor_register_pro_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Create Custom Code
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/create-custom-code',
 		array(
 			'label'               => 'Create Elementor Custom Code',
@@ -313,7 +313,7 @@ function mcp_abilities_elementor_register_pro_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Update Custom Code
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/update-custom-code',
 		array(
 			'label'               => 'Update Elementor Custom Code',
@@ -432,7 +432,7 @@ function mcp_abilities_elementor_register_pro_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Delete Custom Code
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/delete-custom-code',
 		array(
 			'label'               => 'Delete Elementor Custom Code',
@@ -516,7 +516,7 @@ function mcp_abilities_elementor_register_pro_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - List Form Submissions
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/list-form-submissions',
 		array(
 			'label'               => 'List Elementor Form Submissions',
@@ -742,7 +742,7 @@ function mcp_abilities_elementor_register_pro_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Get Form Submission
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/get-form-submission',
 		array(
 			'label'               => 'Get Elementor Form Submission',
@@ -858,7 +858,7 @@ function mcp_abilities_elementor_register_pro_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Delete Form Submission
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/delete-form-submission',
 		array(
 			'label'               => 'Delete Elementor Form Submission',

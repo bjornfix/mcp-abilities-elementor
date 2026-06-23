@@ -18,7 +18,7 @@ function mcp_abilities_elementor_register_design_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Extract Design Tokens
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/extract-design-tokens',
 		array(
 			'label'               => 'Extract Elementor Design Tokens',
@@ -140,7 +140,7 @@ function mcp_abilities_elementor_register_design_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Audit Generic Layout Patterns
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/audit-generic-layout-patterns',
 		array(
 			'label'               => 'Audit Elementor Generic Layout Patterns',
@@ -245,7 +245,7 @@ function mcp_abilities_elementor_register_design_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Score Distinctiveness
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/score-distinctiveness',
 		array(
 			'label'               => 'Score Elementor Distinctiveness',
@@ -359,7 +359,7 @@ function mcp_abilities_elementor_register_design_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Audit Column Patterns
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/audit-column-patterns',
 		array(
 			'label'               => 'Audit Elementor Column Patterns',
@@ -455,7 +455,7 @@ function mcp_abilities_elementor_register_design_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Audit Layout Mechanism Fit
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/audit-layout-mechanism-fit',
 		array(
 			'label'               => 'Audit Elementor Layout Mechanism Fit',
@@ -551,7 +551,7 @@ function mcp_abilities_elementor_register_design_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Audit Native Widget Opportunities
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/audit-native-widget-opportunities',
 		array(
 			'label'               => 'Audit Elementor Native Widget Opportunities',
@@ -619,7 +619,7 @@ function mcp_abilities_elementor_register_design_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Audit Column Dominance
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/audit-column-dominance',
 		array(
 			'label'               => 'Audit Elementor Column Dominance',
@@ -715,7 +715,7 @@ function mcp_abilities_elementor_register_design_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Audit Column Alignment Rhythm
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/audit-column-alignment-rhythm',
 		array(
 			'label'               => 'Audit Elementor Column Alignment Rhythm',
@@ -811,7 +811,7 @@ function mcp_abilities_elementor_register_design_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Audit Column Balance
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/audit-column-balance',
 		array(
 			'label'               => 'Audit Elementor Column Balance',
@@ -907,7 +907,7 @@ function mcp_abilities_elementor_register_design_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Audit Column Necessity
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/audit-column-necessity',
 		array(
 			'label'               => 'Audit Elementor Column Necessity',
@@ -1003,7 +1003,7 @@ function mcp_abilities_elementor_register_design_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Audit Generic Component Repetition
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/audit-generic-component-repetition',
 		array(
 			'label'               => 'Audit Elementor Generic Component Repetition',
@@ -1099,7 +1099,7 @@ function mcp_abilities_elementor_register_design_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Audit Surface Overuse
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/audit-surface-overuse',
 		array(
 			'label'               => 'Audit Elementor Surface Overuse',
@@ -1192,7 +1192,7 @@ function mcp_abilities_elementor_register_design_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Audit Emphasis Drift
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/audit-emphasis-drift',
 		array(
 			'label'               => 'Audit Elementor Emphasis Drift',
@@ -1218,38 +1218,16 @@ function mcp_abilities_elementor_register_design_abilities(): void {
 				),
 			),
 			'execute_callback'    => function ( $input = array() ): array {
-				$input   = is_array( $input ) ? $input : array();
-				$post_id = isset( $input['id'] ) ? (int) $input['id'] : 0;
-				$profiles = array();
-
-				if ( $post_id > 0 ) {
-					$post = get_post( $post_id );
-					if ( ! $post ) {
-						return array( 'success' => false, 'message' => 'Post not found' );
-					}
-
-					$elementor_data = get_post_meta( $post_id, '_elementor_data', true );
-					if ( empty( $elementor_data ) ) {
-						return array( 'success' => false, 'message' => 'No Elementor data found for this post' );
-					}
-
-					$data = json_decode( $elementor_data, true );
-					if ( null === $data && JSON_ERROR_NONE !== json_last_error() ) {
-						return array( 'success' => false, 'message' => 'Failed to parse existing Elementor data' );
-					}
-
-					foreach ( (array) $data as $element ) {
-						if ( is_array( $element ) ) {
-							$profiles[] = mcp_abilities_elementor_compute_section_emphasis_profile( $element );
-						}
-					}
-				}
-
-				return array(
-					'success' => true,
-					'id'      => $post_id,
-					'audit'   => mcp_abilities_elementor_finalize_emphasis_drift_audit( $profiles ),
-					'message' => 'Emphasis drift audit completed successfully',
+				return mcp_abilities_elementor_run_design_audit(
+					is_array( $input ) ? $input : array(),
+					static function ( array $element, array &$profiles ): void {
+						$profiles[] = mcp_abilities_elementor_compute_section_emphasis_profile( $element );
+					},
+					static function ( array $profiles ): array {
+						return mcp_abilities_elementor_finalize_emphasis_drift_audit( $profiles );
+					},
+					'Emphasis drift audit completed successfully',
+					array()
 				);
 			},
 			'permission_callback' => function (): bool {
@@ -1268,7 +1246,7 @@ function mcp_abilities_elementor_register_design_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Audit Section Rivalry
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/audit-section-rivalry',
 		array(
 			'label'               => 'Audit Elementor Section Rivalry',
@@ -1294,38 +1272,16 @@ function mcp_abilities_elementor_register_design_abilities(): void {
 				),
 			),
 			'execute_callback'    => function ( $input = array() ): array {
-				$input    = is_array( $input ) ? $input : array();
-				$post_id  = isset( $input['id'] ) ? (int) $input['id'] : 0;
-				$profiles = array();
-
-				if ( $post_id > 0 ) {
-					$post = get_post( $post_id );
-					if ( ! $post ) {
-						return array( 'success' => false, 'message' => 'Post not found' );
-					}
-
-					$elementor_data = get_post_meta( $post_id, '_elementor_data', true );
-					if ( empty( $elementor_data ) ) {
-						return array( 'success' => false, 'message' => 'No Elementor data found for this post' );
-					}
-
-					$data = json_decode( $elementor_data, true );
-					if ( null === $data && JSON_ERROR_NONE !== json_last_error() ) {
-						return array( 'success' => false, 'message' => 'Failed to parse existing Elementor data' );
-					}
-
-					foreach ( (array) $data as $element ) {
-						if ( is_array( $element ) ) {
-							$profiles[] = mcp_abilities_elementor_compute_section_emphasis_profile( $element );
-						}
-					}
-				}
-
-				return array(
-					'success' => true,
-					'id'      => $post_id,
-					'audit'   => mcp_abilities_elementor_finalize_section_rivalry_audit( $profiles ),
-					'message' => 'Section rivalry audit completed successfully',
+				return mcp_abilities_elementor_run_design_audit(
+					is_array( $input ) ? $input : array(),
+					static function ( array $element, array &$profiles ): void {
+						$profiles[] = mcp_abilities_elementor_compute_section_emphasis_profile( $element );
+					},
+					static function ( array $profiles ): array {
+						return mcp_abilities_elementor_finalize_section_rivalry_audit( $profiles );
+					},
+					'Section rivalry audit completed successfully',
+					array()
 				);
 			},
 			'permission_callback' => function (): bool {
@@ -1344,7 +1300,7 @@ function mcp_abilities_elementor_register_design_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Audit Composition Rhythm
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/audit-composition-rhythm',
 		array(
 			'label'               => 'Audit Elementor Composition Rhythm',
@@ -1370,38 +1326,16 @@ function mcp_abilities_elementor_register_design_abilities(): void {
 				),
 			),
 			'execute_callback'    => function ( $input = array() ): array {
-				$input    = is_array( $input ) ? $input : array();
-				$post_id  = isset( $input['id'] ) ? (int) $input['id'] : 0;
-				$profiles = array();
-
-				if ( $post_id > 0 ) {
-					$post = get_post( $post_id );
-					if ( ! $post ) {
-						return array( 'success' => false, 'message' => 'Post not found' );
-					}
-
-					$elementor_data = get_post_meta( $post_id, '_elementor_data', true );
-					if ( empty( $elementor_data ) ) {
-						return array( 'success' => false, 'message' => 'No Elementor data found for this post' );
-					}
-
-					$data = json_decode( $elementor_data, true );
-					if ( null === $data && JSON_ERROR_NONE !== json_last_error() ) {
-						return array( 'success' => false, 'message' => 'Failed to parse existing Elementor data' );
-					}
-
-					foreach ( (array) $data as $element ) {
-						if ( is_array( $element ) ) {
-							$profiles[] = mcp_abilities_elementor_compute_section_emphasis_profile( $element );
-						}
-					}
-				}
-
-				return array(
-					'success' => true,
-					'id'      => $post_id,
-					'audit'   => mcp_abilities_elementor_finalize_composition_rhythm_audit( $profiles ),
-					'message' => 'Composition rhythm audit completed successfully',
+				return mcp_abilities_elementor_run_design_audit(
+					is_array( $input ) ? $input : array(),
+					static function ( array $element, array &$profiles ): void {
+						$profiles[] = mcp_abilities_elementor_compute_section_emphasis_profile( $element );
+					},
+					static function ( array $profiles ): array {
+						return mcp_abilities_elementor_finalize_composition_rhythm_audit( $profiles );
+					},
+					'Composition rhythm audit completed successfully',
+					array()
 				);
 			},
 			'permission_callback' => function (): bool {
@@ -1420,7 +1354,7 @@ function mcp_abilities_elementor_register_design_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Audit Separator Discipline
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/audit-separator-discipline',
 		array(
 			'label'               => 'Audit Elementor Separator Discipline',
@@ -1446,38 +1380,16 @@ function mcp_abilities_elementor_register_design_abilities(): void {
 				),
 			),
 			'execute_callback'    => function ( $input = array() ): array {
-				$input    = is_array( $input ) ? $input : array();
-				$post_id  = isset( $input['id'] ) ? (int) $input['id'] : 0;
-				$profiles = array();
-
-				if ( $post_id > 0 ) {
-					$post = get_post( $post_id );
-					if ( ! $post ) {
-						return array( 'success' => false, 'message' => 'Post not found' );
-					}
-
-					$elementor_data = get_post_meta( $post_id, '_elementor_data', true );
-					if ( empty( $elementor_data ) ) {
-						return array( 'success' => false, 'message' => 'No Elementor data found for this post' );
-					}
-
-					$data = json_decode( $elementor_data, true );
-					if ( null === $data && JSON_ERROR_NONE !== json_last_error() ) {
-						return array( 'success' => false, 'message' => 'Failed to parse existing Elementor data' );
-					}
-
-					foreach ( (array) $data as $element ) {
-						if ( is_array( $element ) ) {
-							$profiles[] = mcp_abilities_elementor_compute_section_separator_profile( $element );
-						}
-					}
-				}
-
-				return array(
-					'success' => true,
-					'id'      => $post_id,
-					'audit'   => mcp_abilities_elementor_finalize_separator_discipline_audit( $profiles ),
-					'message' => 'Separator discipline audit completed successfully',
+				return mcp_abilities_elementor_run_design_audit(
+					is_array( $input ) ? $input : array(),
+					static function ( array $element, array &$profiles ): void {
+						$profiles[] = mcp_abilities_elementor_compute_section_separator_profile( $element );
+					},
+					static function ( array $profiles ): array {
+						return mcp_abilities_elementor_finalize_separator_discipline_audit( $profiles );
+					},
+					'Separator discipline audit completed successfully',
+					array()
 				);
 			},
 			'permission_callback' => function (): bool {
@@ -1496,7 +1408,7 @@ function mcp_abilities_elementor_register_design_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Get Theme Context
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/get-theme-context',
 		array(
 			'label'               => 'Get Elementor Theme Context',
@@ -1554,7 +1466,7 @@ function mcp_abilities_elementor_register_design_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Get Official Widget Catalog
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/get-official-widget-catalog',
 		array(
 			'label'               => 'Get Elementor Official Widget Catalog',
@@ -1612,7 +1524,7 @@ function mcp_abilities_elementor_register_design_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Get Official Pattern Guidance
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/get-official-pattern-guidance',
 		array(
 			'label'               => 'Get Elementor Official Pattern Guidance',
@@ -1689,7 +1601,7 @@ function mcp_abilities_elementor_register_design_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Get Style Guide
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/get-style-guide',
 		array(
 			'label'               => 'Get Elementor Style Guide',
@@ -1747,7 +1659,7 @@ function mcp_abilities_elementor_register_design_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Evaluate Design
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/evaluate-design',
 		array(
 			'label'               => 'Evaluate Elementor Design',
@@ -1820,7 +1732,7 @@ function mcp_abilities_elementor_register_design_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Suggest Design Fixes
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/suggest-design-fixes',
 		array(
 			'label'               => 'Suggest Elementor Design Fixes',
@@ -1897,7 +1809,7 @@ function mcp_abilities_elementor_register_design_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Evaluate Render Context
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/evaluate-render-context',
 		array(
 			'label'               => 'Evaluate Elementor Render Context',

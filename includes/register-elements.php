@@ -18,7 +18,7 @@ function mcp_abilities_elementor_register_element_lookup_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Get Element
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/delete-element',
 		array(
 			'label'               => 'Delete Elementor Element',
@@ -252,7 +252,7 @@ function mcp_abilities_elementor_register_element_lookup_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Get Element
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/get-element',
 		array(
 			'label'               => 'Get Elementor Element',
@@ -376,7 +376,7 @@ function mcp_abilities_elementor_register_element_lookup_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Find Elements
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/find-elements',
 		array(
 			'label'               => 'Find Elementor Elements',

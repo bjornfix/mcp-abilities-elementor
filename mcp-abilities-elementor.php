@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.3.16
+ * Version: 2.3.17
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -23,8 +23,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 require_once __DIR__ . '/includes/ability-schema.php';
+require_once __DIR__ . '/includes/ability-registry.php';
+require_once __DIR__ . '/includes/document-repository.php';
 require_once __DIR__ . '/includes/guidance.php';
 require_once __DIR__ . '/includes/template-query.php';
+require_once __DIR__ . '/includes/design-audit-runner.php';
 require_once __DIR__ . '/includes/register-document.php';
 require_once __DIR__ . '/includes/register-design.php';
 require_once __DIR__ . '/includes/register-elements.php';

@@ -8,7 +8,7 @@ Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage 
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://php.net)
 
 **Tested up to:** 7.0
-**Stable tag:** 2.3.16
+**Stable tag:** 2.3.17
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -516,6 +516,11 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 - Added: `cache_scope` (`none` / `post` / `site`) to `elementor/update-data`, `elementor/patch-data`, and `elementor/update-element`
 - Improved: stronger cache invalidation after Elementor writes (post cache cleanup, asset meta cleanup, optional site-wide Elementor cache clear)
 - Improved: `elementor/clear-cache` now returns cache details and supports `scope` alias (`post` / `site`)
+
+### 2.3.17
+- Improved internal architecture with a shared ability registrar, Elementor document repository, and design audit runner.
+- Added lightweight architecture tests for helper interfaces while keeping tests out of release ZIPs.
+- Preserved the existing public ability surface while centralizing registration and common document/audit handling.
 
 ### 2.3.16
 - Added `elementor/find-template-for-pattern` so agents can search the current site's Elementor Library for reusable pattern templates before manually authoring containers/widgets.

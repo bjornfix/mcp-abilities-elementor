@@ -3,7 +3,7 @@ Contributors: devenia
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 7.0
-Stable tag: 2.3.16
+Stable tag: 2.3.17
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -14,7 +14,7 @@ Elementor page builder integration for WordPress via MCP.
 
 This add-on plugin exposes Elementor functionality through MCP (Model Context Protocol). Your AI assistant can read Elementor page structures, locate and update elements, manage templates and conditions, and run Elementor tools like maintenance mode, experiments, and URL replacement.
 
-Version 2.3.16 adds template-first pattern guidance so agents can reuse saved Elementor templates before manually authoring repeated containers/widgets, and create a template when a reusable pattern has no suitable saved template yet.
+Version 2.3.17 deepens the internal Elementor ability architecture with a shared ability registrar, document repository, design audit runner, and lightweight architecture tests. Version 2.3.16 added template-first pattern guidance for reusable Elementor templates.
 
 Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilities/) ecosystem.
 
@@ -59,6 +59,11 @@ Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilit
 * [All Add-on Plugins](https://devenia.com/plugins/mcp-expose-abilities/#add-ons)
 
 == Changelog ==
+
+= 2.3.17 =
+* Improved: internal ability registration now passes through a shared registrar so common defaults and future policy rules live behind one interface.
+* Improved: common Elementor document loading and design-audit execution now use shared helper modules.
+* Added: lightweight architecture regression tests for helper interfaces; tests are excluded from release packages.
 
 = 2.3.16 =
 * Added: `elementor/find-template-for-pattern` finds saved Elementor Library templates that match reusable layout patterns before raw authoring.

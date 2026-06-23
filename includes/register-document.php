@@ -18,7 +18,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Get Data
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/get-data',
 		array(
 			'label'               => 'Get Elementor Data',
@@ -58,48 +58,26 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 			),
 			'execute_callback'    => function ( $input = array() ): array {
 				$input = is_array( $input ) ? $input : array();
+				$document = mcp_abilities_elementor_load_document_from_input( $input );
 
-				if ( empty( $input['id'] ) ) {
-					return array( 'success' => false, 'message' => 'Post/Page ID is required' );
-				}
-
-				$post = get_post( $input['id'] );
-				if ( ! $post ) {
-					return array( 'success' => false, 'message' => 'Post not found' );
-				}
-
-				if ( ! current_user_can( 'edit_post', $post->ID ) ) {
-					return array( 'success' => false, 'message' => 'You do not have permission to access this post' );
-				}
-
-				$elementor_data = mcp_abilities_elementor_get_raw_data_meta( (int) $input['id'] );
-				$edit_mode      = get_post_meta( $input['id'], '_elementor_edit_mode', true );
-				$page_settings  = get_post_meta( $input['id'], '_elementor_page_settings', true );
-
-				if ( empty( $elementor_data ) ) {
-					return array(
-						'success' => false,
-						'id'      => $input['id'],
-						'title'   => $post->post_title,
-						'message' => 'No Elementor data found for this post',
-					);
+				if ( empty( $document['success'] ) ) {
+					return $document;
 				}
 
 				$format = $input['format'] ?? 'array';
-				$decode_error = null;
-				$data         = ( 'json' === $format ) ? $elementor_data : mcp_abilities_elementor_decode_data_meta( $elementor_data, $decode_error );
+				$data         = ( 'json' === $format ) ? (string) $document['raw_data'] : (array) $document['data'];
 				$message      = 'Elementor data retrieved successfully';
-				if ( null !== $decode_error ) {
+				if ( null !== $document['decode_error'] ) {
 					$message .= ' (data was invalid JSON and was normalized to an empty array)';
 				}
 
 				return array(
 					'success'       => true,
-					'id'            => $input['id'],
-					'title'         => $post->post_title,
-					'edit_mode'     => $edit_mode ?: 'not set',
+					'id'            => (int) $document['id'],
+					'title'         => (string) $document['title'],
+					'edit_mode'     => (string) $document['edit_mode'],
 					'data'          => $data,
-					'page_settings' => $page_settings ?: array(),
+					'page_settings' => (array) $document['page_settings'],
 					'message'       => $message,
 				);
 			},
@@ -119,7 +97,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Get Widget Controls
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/get-widget-controls',
 		array(
 			'label'               => 'Get Elementor Widget Controls',
@@ -194,7 +172,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Update Data
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/update-data',
 		array(
 			'label'               => 'Update Elementor Data',
@@ -366,7 +344,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Create Page
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/create-page',
 		array(
 			'label'               => 'Create Elementor Page',
@@ -488,7 +466,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Add Container
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/add-container',
 		array(
 			'label'               => 'Add Elementor Container',
@@ -585,7 +563,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 	// ELEMENTOR - Add Widget
 	// =========================================================================
 	$register_add_widget_ability = static function ( string $ability_name, string $label, string $widget_type, array $extra_properties = array(), array $required = array() ): void {
-		wp_register_ability(
+		mcp_abilities_elementor_register_ability(
 			$ability_name,
 			array(
 				'label'               => $label,
@@ -744,7 +722,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Move / Remove / Duplicate / Reorder Elements
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/move-element',
 		array(
 			'label'               => 'Move Elementor Element',
@@ -812,7 +790,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 		)
 	);
 
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/remove-element',
 		array(
 			'label'               => 'Remove Elementor Element',
@@ -865,7 +843,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 		)
 	);
 
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/duplicate-element',
 		array(
 			'label'               => 'Duplicate Elementor Element',
@@ -924,7 +902,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 		)
 	);
 
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/reorder-elements',
 		array(
 			'label'               => 'Reorder Elementor Elements',
@@ -974,7 +952,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Clone Data
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/clone-data',
 		array(
 			'label'               => 'Clone Elementor Data',
@@ -1154,7 +1132,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Patch Data (Find & Replace in JSON)
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/patch-data',
 		array(
 			'label'               => 'Patch Elementor Data',
@@ -1325,7 +1303,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Update Element (targeted container/widget replacement)
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/update-element',
 		array(
 			'label'               => 'Update Elementor Element',
@@ -1589,7 +1567,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Merge Element Settings
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/merge-element-settings',
 		array(
 			'label'               => 'Merge Elementor Element Settings',
@@ -1771,7 +1749,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Zero Container Padding In Subtree
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/zero-container-padding-subtree',
 		array(
 			'label'               => 'Zero Container Padding In Subtree',
@@ -1954,7 +1932,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Copy Lane Settings
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/copy-lane-settings',
 		array(
 			'label'               => 'Copy Elementor Lane Settings',
@@ -2143,7 +2121,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Copy Row Balance
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/copy-row-balance',
 		array(
 			'label'               => 'Copy Elementor Row Balance',
@@ -2371,7 +2349,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Normalize Campaign Detail Page
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/normalize-campaign-detail-page',
 		array(
 			'label'               => 'Normalize Elementor Campaign Detail Page',
@@ -2700,7 +2678,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Convert Image Widget To Background Container
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/image-widget-to-background-container',
 		array(
 			'label'               => 'Convert Elementor Image Widget To Background Container',
@@ -2960,7 +2938,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Fix Visible Gap Rhythm
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/fix-visible-gap-rhythm',
 		array(
 			'label'               => 'Fix Elementor Visible Gap Rhythm',
@@ -3190,7 +3168,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Enforce Boundary Coherence
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/enforce-boundary-coherence',
 		array(
 			'label'               => 'Enforce Elementor Boundary Coherence',
@@ -3428,7 +3406,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Reset Negative Margins In Subtree
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/reset-negative-margins-subtree',
 		array(
 			'label'               => 'Reset Negative Margins In Subtree',
@@ -3610,7 +3588,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Apply Text Hierarchy
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/apply-text-hierarchy',
 		array(
 			'label'               => 'Apply Elementor Text Hierarchy',
@@ -3791,7 +3769,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Normalize Section Spacing Rhythm
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/normalize-section-spacing-rhythm',
 		array(
 			'label'               => 'Normalize Elementor Section Spacing Rhythm',
@@ -3964,7 +3942,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Normalize Responsive Values
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/normalize-responsive-values',
 		array(
 			'label'               => 'Normalize Elementor Responsive Values',
@@ -4136,7 +4114,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 	// =========================================================================
 	// ELEMENTOR - Sync Component Variant
 	// =========================================================================
-	wp_register_ability(
+	mcp_abilities_elementor_register_ability(
 		'elementor/sync-component-variant',
 		array(
 			'label'               => 'Sync Elementor Component Variant',
