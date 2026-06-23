@@ -8,7 +8,7 @@ Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage 
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://php.net)
 
 **Tested up to:** 7.0
-**Stable tag:** 2.3.15
+**Stable tag:** 2.3.16
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -107,7 +107,7 @@ If you are new to the stack, use this order:
 
 If you skip base-stack verification and start with add-ons immediately, troubleshooting gets harder than it needs to be.
 
-## Abilities (75)
+## Abilities (76)
 
 ### Page/Post Data
 | Ability | Description |
@@ -176,6 +176,7 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 | Ability | Description |
 |---------|-------------|
 | `elementor/list-templates` | List all saved Elementor templates |
+| `elementor/find-template-for-pattern` | Find saved templates that match reusable layout patterns before raw authoring |
 | `elementor/get-template` | Get single template with all data |
 | `elementor/create-template` | Create page, section, popup, header, footer templates |
 | `elementor/update-template` | Modify existing template |
@@ -515,6 +516,11 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 - Added: `cache_scope` (`none` / `post` / `site`) to `elementor/update-data`, `elementor/patch-data`, and `elementor/update-element`
 - Improved: stronger cache invalidation after Elementor writes (post cache cleanup, asset meta cleanup, optional site-wide Elementor cache clear)
 - Improved: `elementor/clear-cache` now returns cache details and supports `scope` alias (`post` / `site`)
+
+### 2.3.16
+- Added `elementor/find-template-for-pattern` so agents can search the current site's Elementor Library for reusable pattern templates before manually authoring containers/widgets.
+- Improved pattern guidance with a template-first rule: reuse saved templates for repeated patterns, and create a template when a repeatable pattern is identified but no suitable template exists.
+- Changed raw container authoring: `elementor/add-container` now requires explicit template lookup status, and blocks reusable repeated patterns until a saved template exists.
 
 ### 2.3.15
 - Added official pattern guidance for full-height split-panel carousel surfaces: use Elementor Pro Slides as the native background-cover slide surface instead of Media Carousel.

@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.3.15
+ * Version: 2.3.16
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -140,7 +140,8 @@ function mcp_abilities_elementor_get_official_guidance_catalog(): array {
 		'policy'  => array(
 			'pattern_source_of_truth'      => 'official_elementor_docs_first',
 			'implementation_fallback_only' => 'site_local_payloads_after_pattern_choice',
-			'description'                  => 'Use Elementor.com as the canonical source for widget/layout pattern recommendations. Inspect local Elementor payloads only after the official pattern choice is clear, and only to satisfy serialization or implementation details.',
+			'template_reuse_policy'        => 'saved_templates_before_raw_authoring',
+			'description'                  => 'Use Elementor.com as the canonical source for widget/layout pattern recommendations. Inspect local Elementor payloads only after the official pattern choice is clear, and only to satisfy serialization or implementation details. When a repeated pattern exists as a saved Elementor template on the current site, reuse that template before hand-building raw containers/widgets. When a reusable pattern is identified and no suitable template exists, create a saved Elementor template before applying the pattern repeatedly.',
 		),
 		'layout'  => array(
 			'grid_for_symmetric_columns' => array(
@@ -244,6 +245,8 @@ function mcp_abilities_elementor_get_official_guidance_catalog(): array {
 					'Use slide background images with background size cover and centered positioning.',
 					'Keep slide heading/description/button empty when text belongs in the sibling content panel.',
 					'Use native navigation/autoplay controls only; do not repair white gaps with widget/page custom CSS.',
+					'Before raw authoring, call `elementor/find-template-for-pattern` and reuse a matching saved Elementor template when available.',
+					'If this becomes a repeated site pattern and no matching template exists, create a saved Elementor template before applying it to more pages.',
 				),
 				'why_not_media_carousel' => 'Media Carousel is documented as a media gallery/carousel widget and renders media items inside a carousel frame. In split-panel surface layouts that makes height, crop, and blank-space parity less reliable than a Slides background surface.',
 			),
@@ -258,6 +261,8 @@ function mcp_abilities_elementor_get_official_guidance_catalog(): array {
 					'Set the container min-height to match the sibling panel or the live design rhythm.',
 					'Use an empty Spacer widget only when Elementor needs a child element to keep the background container renderable/editable.',
 					'Do not use CSS or an inline Image widget when the goal is full-height cover behavior.',
+					'Before raw authoring, call `elementor/find-template-for-pattern` and reuse a matching saved Elementor template when available.',
+					'If this becomes a repeated site pattern and no matching template exists, create a saved Elementor template before applying it to more pages.',
 				),
 				'why_use_background_image' => 'A native container background image fills its container like a design surface and avoids inline image aspect-ratio gaps in split rows.',
 			),
@@ -269,6 +274,8 @@ function mcp_abilities_elementor_get_official_guidance_catalog(): array {
 				'native_controls' => array(
 					'Use Media Carousel skin, slides-per-view, navigation, autoplay, and height controls as appropriate.',
 					'Keep it as a content widget, not a replacement for a split-row background image surface.',
+					'Before raw authoring repeated carousel/text rows, call `elementor/find-template-for-pattern` and reuse a matching saved Elementor template when available.',
+					'If this becomes a repeated site pattern and no matching template exists, create a saved Elementor template before applying it to more pages.',
 				),
 			),
 			'dynamic_related_or_archive_cards' => array(
@@ -284,6 +291,7 @@ function mcp_abilities_elementor_get_official_guidance_catalog(): array {
 					'Use Loop Grid when the card layout must preserve a custom design while remaining dynamic.',
 					'Set the correct taxonomy, language/WPML context, posts per page, ordering, pagination/load-more, and image ratio controls.',
 					'Do not keep manual/fake repeated cards when published post data can render the list dynamically.',
+					'For custom repeated card layouts, reuse an existing Loop Item/template first; if none exists, create one before repeating the layout.',
 				),
 				'why_not_manual_cards' => 'Manual card lists drift from published content, translations, pagination, and future edits. They also create duplicate maintenance work.',
 			),
@@ -296,6 +304,7 @@ function mcp_abilities_elementor_get_official_guidance_catalog(): array {
 					'Use one Image Box per card.',
 					'Use native container/grid controls for columns, width, gap, and responsive stacking.',
 					'Use Image Box image spacing and typography/global controls rather than custom CSS.',
+					'If the card grid becomes a repeated site pattern, save it as an Elementor template before applying it across pages.',
 				),
 				'why_not_hand_built_groups' => 'Separate Image + Heading + Text Editor groups are harder for clients to maintain and often produce uneven spacing across breakpoints.',
 			),
@@ -307,6 +316,7 @@ function mcp_abilities_elementor_get_official_guidance_catalog(): array {
 				'native_controls' => array(
 					'Use Gallery layout, columns, spacing, image size, and lightbox controls.',
 					'Use Media Carousel only when the desired experience is carousel browsing rather than a grid/gallery.',
+					'Reuse a saved gallery-section template when the site already has one for the same pattern.',
 				),
 			),
 			'repeated_promo_or_cta_modules' => array(
@@ -318,7 +328,20 @@ function mcp_abilities_elementor_get_official_guidance_catalog(): array {
 					'Use Call to Action widgets for each module when the widget can express the design.',
 					'Use native style controls for image, content, button, hover, and spacing.',
 					'Only use raw containers when the module structure cannot be represented by a native widget without harming editability or parity.',
+					'If the CTA module pattern repeats across pages, create or reuse an Elementor template instead of rebuilding the same module by hand.',
 				),
+			),
+			'saved_template_reuse' => array(
+				'label' => 'Saved template reuse before raw authoring',
+				'recommended_ability' => 'elementor/find-template-for-pattern',
+				'when_to_use' => 'Use before manually creating a repeated layout pattern from raw containers or widgets, especially split media/text rows, related-card lists, static card grids, gallery sections, and CTA modules.',
+				'native_controls' => array(
+					'Search the current site Elementor Library for the intended pattern first.',
+					'Prefer importing/reusing a matching saved template and editing its native widget settings over reconstructing the pattern manually.',
+					'If no matching template exists and the pattern will be repeated, create a reusable Elementor template before applying the pattern to multiple pages.',
+					'Do not hardcode site-specific template IDs in this public plugin. Template selection must come from the current site library.',
+				),
+				'why_template_first' => 'Saved templates preserve proven Elementor structure, spacing, responsive controls, and widget choices. Reusing them reduces drift and keeps later client edits inside Elementor.',
 			),
 		),
 	);
@@ -341,6 +364,7 @@ function mcp_abilities_elementor_get_design_guidance_basis(): array {
 			'static_card_widget_fit',
 			'gallery_widget_fit',
 			'promo_module_widget_fit',
+			'saved_template_reuse',
 		),
 		'plugin_heuristic_topics'   => array(
 			'generic_layout',
@@ -373,6 +397,199 @@ function mcp_abilities_elementor_normalize_widget_catalog_slug( string $name ): 
 	$slug = trim( $slug, '-' );
 
 	return $slug;
+}
+
+/**
+ * Return generic title/search keywords for reusable Elementor template patterns.
+ *
+ * Keep this public-plugin catalog site-neutral. It must describe reusable
+ * pattern language, not client names, page names, or site-specific template IDs.
+ *
+ * @return array
+ */
+function mcp_abilities_elementor_get_template_pattern_keywords(): array {
+	return array(
+		'split_panel_carousel_surface' => array(
+			'split',
+			'panel',
+			'carousel',
+			'slides',
+			'slider',
+			'media',
+			'image',
+			'text',
+		),
+		'static_split_panel_image_surface' => array(
+			'split',
+			'panel',
+			'image',
+			'background',
+			'cover',
+			'media',
+			'text',
+		),
+		'actual_media_gallery_carousel' => array(
+			'carousel',
+			'gallery',
+			'media',
+			'image',
+			'slider',
+			'slides',
+		),
+		'dynamic_related_or_archive_cards' => array(
+			'related',
+			'archive',
+			'posts',
+			'loop',
+			'grid',
+			'cards',
+			'listing',
+		),
+		'static_image_card_grid' => array(
+			'image',
+			'box',
+			'card',
+			'cards',
+			'grid',
+		),
+		'curated_image_gallery' => array(
+			'gallery',
+			'images',
+			'grid',
+			'portfolio',
+		),
+		'repeated_promo_or_cta_modules' => array(
+			'cta',
+			'call',
+			'action',
+			'promo',
+			'teaser',
+			'module',
+		),
+	);
+}
+
+/**
+ * Return reusable pattern names accepted by template lookup-aware abilities.
+ *
+ * @return array
+ */
+function mcp_abilities_elementor_get_template_pattern_names(): array {
+	return array_merge( array_keys( mcp_abilities_elementor_get_template_pattern_keywords() ), array( 'custom' ) );
+}
+
+/**
+ * Build schema properties used to make raw authoring template-aware.
+ *
+ * @return array
+ */
+function mcp_abilities_elementor_get_template_lookup_schema_properties(): array {
+	return array(
+		'template_lookup_status' => array(
+			'type'        => 'string',
+			'enum'        => array( 'matched_template_used', 'no_matching_template_create_first', 'not_a_reusable_pattern' ),
+			'description' => 'Required for raw container authoring. Call elementor/find-template-for-pattern first when the work resembles a reusable pattern. Use matched_template_used when a saved template was reused, no_matching_template_create_first when a reusable pattern has no saved template yet, or not_a_reusable_pattern for one-off structural edits.',
+		),
+		'template_pattern' => array(
+			'type'        => 'string',
+			'enum'        => mcp_abilities_elementor_get_template_pattern_names(),
+			'description' => 'Reusable pattern checked with elementor/find-template-for-pattern, if applicable.',
+		),
+		'template_id' => array(
+			'type'        => 'integer',
+			'description' => 'Saved Elementor template ID used for this authoring step, when template_lookup_status is matched_template_used.',
+		),
+	);
+}
+
+/**
+ * Enforce template lookup on raw Elementor container authoring.
+ *
+ * This intentionally targets raw container creation, because repeated layout
+ * drift usually starts there. It does not block creating templates themselves.
+ *
+ * @param array  $input Ability input.
+ * @param string $ability_name Ability name.
+ * @return array|null Error response or null when allowed.
+ */
+function mcp_abilities_elementor_template_lookup_guard_response( array $input, string $ability_name ): ?array {
+	$status = isset( $input['template_lookup_status'] ) && is_string( $input['template_lookup_status'] )
+		? sanitize_key( $input['template_lookup_status'] )
+		: '';
+
+	if ( '' === $status ) {
+		return array(
+			'success' => false,
+			'message' => 'Raw Elementor container authoring requires template lookup status. Call elementor/find-template-for-pattern first when this resembles a reusable pattern, or set template_lookup_status to not_a_reusable_pattern for a one-off structural edit.',
+			'ability' => $ability_name,
+			'template_first_required' => true,
+			'required_next_step' => 'elementor/find-template-for-pattern',
+		);
+	}
+
+	if ( 'no_matching_template_create_first' === $status ) {
+		return array(
+			'success' => false,
+			'message' => 'A reusable Elementor pattern was identified but no matching saved template exists. Create a saved Elementor template with elementor/create-template before applying this pattern broadly.',
+			'ability' => $ability_name,
+			'template_first_required' => true,
+			'required_next_step' => 'elementor/create-template',
+		);
+	}
+
+	if ( 'matched_template_used' === $status && empty( $input['template_id'] ) ) {
+		return array(
+			'success' => false,
+			'message' => 'template_id is required when template_lookup_status is matched_template_used.',
+			'ability' => $ability_name,
+			'template_first_required' => true,
+		);
+	}
+
+	if ( ! in_array( $status, array( 'matched_template_used', 'not_a_reusable_pattern' ), true ) ) {
+		return array(
+			'success' => false,
+			'message' => 'Invalid template_lookup_status.',
+			'ability' => $ability_name,
+			'template_first_required' => true,
+		);
+	}
+
+	return null;
+}
+
+/**
+ * Score a saved Elementor template title against generic pattern keywords.
+ *
+ * @param string $title Template title.
+ * @param array  $keywords Pattern keywords.
+ * @param string $search Optional caller search text.
+ * @return int
+ */
+function mcp_abilities_elementor_score_template_pattern_match( string $title, array $keywords, string $search = '' ): int {
+	$haystack = ' ' . strtolower( $title ) . ' ';
+	$score    = 0;
+
+	foreach ( $keywords as $keyword ) {
+		if ( ! is_string( $keyword ) || '' === trim( $keyword ) ) {
+			continue;
+		}
+		if ( false !== strpos( $haystack, strtolower( trim( $keyword ) ) ) ) {
+			$score += 2;
+		}
+	}
+
+	$search_words = preg_split( '/[^a-z0-9]+/', strtolower( $search ) );
+	foreach ( is_array( $search_words ) ? $search_words : array() as $word ) {
+		if ( strlen( $word ) < 3 ) {
+			continue;
+		}
+		if ( false !== strpos( $haystack, $word ) ) {
+			++$score;
+		}
+	}
+
+	return $score;
 }
 
 /**
@@ -7033,6 +7250,20 @@ function mcp_abilities_elementor_register_abilities(): void {
 					'slug'      => array( 'type' => 'string', 'description' => 'Optional post slug.' ),
 					'data'      => array( 'type' => 'array', 'description' => 'Optional initial Elementor data array.' ),
 					'page_settings' => array( 'type' => 'object', 'description' => 'Optional Elementor page settings.' ),
+					'template_lookup_status' => array(
+						'type'        => 'string',
+						'enum'        => array( 'matched_template_used', 'no_matching_template_create_first', 'not_a_reusable_pattern' ),
+						'description' => 'Required when creating a page with initial Elementor data. Call elementor/find-template-for-pattern first when the initial layout resembles a reusable pattern.',
+					),
+					'template_pattern' => array(
+						'type'        => 'string',
+						'enum'        => mcp_abilities_elementor_get_template_pattern_names(),
+						'description' => 'Reusable pattern checked with elementor/find-template-for-pattern, if applicable.',
+					),
+					'template_id' => array(
+						'type'        => 'integer',
+						'description' => 'Saved Elementor template ID used for the initial layout, when template_lookup_status is matched_template_used.',
+					),
 					'cache_scope'   => array( 'type' => 'string', 'enum' => array( 'none', 'post', 'site' ), 'default' => 'post' ),
 				),
 				'additionalProperties' => false,
@@ -7059,6 +7290,13 @@ function mcp_abilities_elementor_register_abilities(): void {
 				$post_type = isset( $input['post_type'] ) ? sanitize_key( (string) $input['post_type'] ) : 'page';
 				if ( '' === $post_type || ! post_type_exists( $post_type ) ) {
 					return array( 'success' => false, 'message' => 'Invalid post_type' );
+				}
+
+				if ( isset( $input['data'] ) && is_array( $input['data'] ) && ! empty( $input['data'] ) ) {
+					$template_guard = mcp_abilities_elementor_template_lookup_guard_response( $input, 'elementor/create-page' );
+					if ( null !== $template_guard ) {
+						return $template_guard;
+					}
 				}
 
 				$post_type_object = get_post_type_object( $post_type );
@@ -7147,6 +7385,20 @@ function mcp_abilities_elementor_register_abilities(): void {
 					'position'          => array( 'type' => 'integer', 'default' => -1, 'description' => 'Insert position. -1 appends.' ),
 					'element_id'        => array( 'type' => 'string', 'description' => 'Optional explicit element ID.' ),
 					'settings'          => array( 'type' => 'object', 'description' => 'Container settings.' ),
+					'template_lookup_status' => array(
+						'type'        => 'string',
+						'enum'        => array( 'matched_template_used', 'no_matching_template_create_first', 'not_a_reusable_pattern' ),
+						'description' => 'Required for raw container authoring. Call elementor/find-template-for-pattern first when this resembles a reusable pattern.',
+					),
+					'template_pattern' => array(
+						'type'        => 'string',
+						'enum'        => mcp_abilities_elementor_get_template_pattern_names(),
+						'description' => 'Reusable pattern checked with elementor/find-template-for-pattern, if applicable.',
+					),
+					'template_id' => array(
+						'type'        => 'integer',
+						'description' => 'Saved Elementor template ID used for this authoring step, when template_lookup_status is matched_template_used.',
+					),
 					'cache_scope'       => array( 'type' => 'string', 'enum' => array( 'none', 'post', 'site' ), 'default' => 'post' ),
 				),
 				'additionalProperties' => false,
@@ -7174,6 +7426,11 @@ function mcp_abilities_elementor_register_abilities(): void {
 				}
 				if ( ! current_user_can( 'edit_post', $post->ID ) ) {
 					return array( 'success' => false, 'message' => 'You do not have permission to update this post' );
+				}
+
+				$template_guard = mcp_abilities_elementor_template_lookup_guard_response( $input, 'elementor/add-container' );
+				if ( null !== $template_guard ) {
+					return $template_guard;
 				}
 
 				$data = mcp_abilities_elementor_get_post_elements( $post_id );
@@ -13578,6 +13835,165 @@ function mcp_abilities_elementor_register_abilities(): void {
 					'templates' => $templates,
 					'total'     => count( $templates ),
 					'message'   => 'Templates retrieved successfully',
+				);
+			},
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// ELEMENTOR - Find Template For Pattern
+	// =========================================================================
+	wp_register_ability(
+		'elementor/find-template-for-pattern',
+		array(
+			'label'               => 'Find Elementor Template For Pattern',
+			'description'         => 'Finds saved Elementor templates that may match a reusable layout pattern. Use this before manually authoring repeated containers/widgets; if no match exists for a repeated pattern, create a template before applying the pattern broadly.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'pattern' => array(
+						'type'        => 'string',
+						'enum'        => array(
+							'split_panel_carousel_surface',
+							'static_split_panel_image_surface',
+							'actual_media_gallery_carousel',
+							'dynamic_related_or_archive_cards',
+							'static_image_card_grid',
+							'curated_image_gallery',
+							'repeated_promo_or_cta_modules',
+							'custom',
+						),
+						'default'     => 'custom',
+						'description' => 'Reusable layout pattern to search for.',
+					),
+					'search' => array(
+						'type'        => 'string',
+						'description' => 'Optional additional search words from the current site or design pattern.',
+					),
+					'type' => array(
+						'type'        => 'string',
+						'enum'        => array( 'all', 'page', 'section', 'container', 'loop-item', 'header', 'footer', 'single', 'archive', 'popup' ),
+						'default'     => 'all',
+						'description' => 'Optional Elementor template type filter.',
+					),
+					'min_score' => array(
+						'type'        => 'integer',
+						'default'     => 1,
+						'description' => 'Minimum title-match score required to include a template candidate.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'                         => array( 'type' => 'boolean' ),
+					'pattern'                         => array( 'type' => 'string' ),
+					'template_first_required'         => array( 'type' => 'boolean' ),
+					'create_template_if_missing'      => array( 'type' => 'boolean' ),
+					'template_creation_guidance'      => array( 'type' => 'string' ),
+					'candidates'                      => array( 'type' => 'array' ),
+					'total'                           => array( 'type' => 'integer' ),
+					'message'                         => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input    = is_array( $input ) ? $input : array();
+				$pattern  = isset( $input['pattern'] ) && is_string( $input['pattern'] ) ? sanitize_key( $input['pattern'] ) : 'custom';
+				$search   = isset( $input['search'] ) && is_string( $input['search'] ) ? sanitize_text_field( $input['search'] ) : '';
+				$type     = isset( $input['type'] ) && is_string( $input['type'] ) ? sanitize_key( $input['type'] ) : 'all';
+				$min_score = isset( $input['min_score'] ) ? max( 0, (int) $input['min_score'] ) : 1;
+
+				$allowed_types = array( 'all', 'page', 'section', 'container', 'loop-item', 'header', 'footer', 'single', 'archive', 'popup' );
+				if ( ! in_array( $type, $allowed_types, true ) ) {
+					return array( 'success' => false, 'message' => 'Invalid template type: ' . $type );
+				}
+
+				$pattern_keywords = mcp_abilities_elementor_get_template_pattern_keywords();
+				$keywords         = $pattern_keywords[ $pattern ] ?? array();
+				if ( 'custom' === $pattern && '' !== $search ) {
+					$keywords = preg_split( '/[^a-z0-9]+/', strtolower( $search ) );
+					$keywords = is_array( $keywords ) ? array_values( array_filter( $keywords, static function ( string $word ): bool {
+						return strlen( $word ) >= 3;
+					} ) ) : array();
+				}
+
+				$args = array(
+					'post_type'      => 'elementor_library',
+					'post_status'    => 'publish',
+					'posts_per_page' => 100,
+					'orderby'        => 'title',
+					'order'          => 'ASC',
+				);
+
+				if ( 'all' !== $type ) {
+					$args['tax_query'] = array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query -- Elementor template type filtering.
+						array(
+							'taxonomy' => 'elementor_library_type',
+							'field'    => 'slug',
+							'terms'    => $type,
+						),
+					);
+				}
+
+				$query      = new WP_Query( $args );
+				$candidates = array();
+
+				foreach ( $query->posts as $template ) {
+					$template_type = get_post_meta( $template->ID, '_elementor_template_type', true );
+					$template_sub_type = get_post_meta( $template->ID, '_elementor_template_sub_type', true );
+					$score         = mcp_abilities_elementor_score_template_pattern_match( (string) $template->post_title, $keywords, $search );
+
+					if ( $score < $min_score ) {
+						continue;
+					}
+
+					$candidates[] = array(
+						'id'       => (int) $template->ID,
+						'title'    => (string) $template->post_title,
+						'type'     => $template_type ?: 'unknown',
+						'sub_type' => $template_sub_type ?: '',
+						'score'    => $score,
+						'edit'     => admin_url( 'post.php?post=' . (int) $template->ID . '&action=elementor' ),
+						'modified' => (string) $template->post_modified,
+					);
+				}
+
+				usort(
+					$candidates,
+					static function ( array $left, array $right ): int {
+						$score_compare = (int) $right['score'] <=> (int) $left['score'];
+						if ( 0 !== $score_compare ) {
+							return $score_compare;
+						}
+						return strcasecmp( (string) $left['title'], (string) $right['title'] );
+					}
+				);
+
+				$message = empty( $candidates )
+					? 'No matching saved Elementor template found. If this pattern will be reused, create a template before applying it broadly.'
+					: 'Matching saved Elementor templates found. Reuse a candidate before raw authoring.';
+
+				return array(
+					'success'                    => true,
+					'pattern'                    => $pattern,
+					'template_first_required'    => true,
+					'create_template_if_missing' => true,
+					'template_creation_guidance' => 'When a reusable Elementor pattern is identified and no suitable saved template exists, create a template with elementor/create-template before applying the same pattern to additional pages.',
+					'candidates'                 => array_values( $candidates ),
+					'total'                      => count( $candidates ),
+					'message'                    => $message,
 				);
 			},
 			'permission_callback' => function (): bool {
