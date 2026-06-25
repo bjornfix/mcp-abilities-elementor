@@ -3,7 +3,7 @@ Contributors: devenia
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 7.0
-Stable tag: 2.3.19
+Stable tag: 2.3.20
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -14,7 +14,7 @@ Elementor page builder integration for WordPress via MCP.
 
 This add-on plugin exposes Elementor functionality through MCP (Model Context Protocol). Your AI assistant can read Elementor page structures, locate and update elements, manage templates and conditions, and run Elementor tools like maintenance mode, experiments, and URL replacement.
 
-Version 2.3.19 reports translated-sibling guard details from targeted settings-merge writes. Version 2.3.18 protects translated Elementor documents from multilingual custom-field sync during writes. Version 2.3.17 deepened the internal Elementor ability architecture with a shared ability registrar, document repository, design audit runner, and lightweight architecture tests.
+Version 2.3.20 adds a final shutdown restore for translated Elementor sibling documents after late multilingual custom-field sync hooks. Version 2.3.19 reports translated-sibling guard details from targeted settings-merge writes. Version 2.3.18 protects translated Elementor documents from multilingual custom-field sync during writes.
 
 Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilities/) ecosystem.
 
@@ -59,6 +59,9 @@ Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilit
 * [All Add-on Plugins](https://devenia.com/plugins/mcp-expose-abilities/#add-ons)
 
 == Changelog ==
+
+= 2.3.20 =
+* Improved: translated sibling protection now schedules a final shutdown restore after late multilingual custom-field sync hooks.
 
 = 2.3.19 =
 * Added: `elementor_translation_guard` details to targeted settings-merge responses so callers can verify which translated sibling documents were protected during Elementor writes.

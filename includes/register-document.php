@@ -304,7 +304,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 				}
 
 				// Update Elementor data.
-				mcp_abilities_elementor_update_guarded_elementor_data( $input['id'], wp_slash( $json_data ) );
+				$translation_guard = mcp_abilities_elementor_update_guarded_elementor_data( $input['id'], wp_slash( $json_data ) );
 
 				// Ensure edit mode is set to builder.
 				update_post_meta( $input['id'], '_elementor_edit_mode', 'builder' );
@@ -321,6 +321,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 					'link'      => get_permalink( $input['id'] ),
 					'unchanged' => false,
 					'cache'     => $cache_details,
+					'elementor_translation_guard' => $translation_guard,
 				);
 
 				return mcp_abilities_elementor_apply_frontend_runtime_guard(
@@ -1617,6 +1618,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 					'settings'    => array( 'type' => 'object' ),
 					'cache'       => array( 'type' => 'object' ),
 					'elementor_write_guard' => array( 'type' => 'object' ),
+					'elementor_translation_guard' => array( 'type' => 'object' ),
 				),
 			),
 			'execute_callback'    => function ( $input = array() ): array {
