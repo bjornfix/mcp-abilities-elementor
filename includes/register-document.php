@@ -255,7 +255,10 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 					$existing_tree = json_decode( $existing_data, true );
 				}
 				if ( null === $existing_tree && JSON_ERROR_NONE !== json_last_error() ) {
-					return array( 'success' => false, 'message' => 'Failed to parse existing Elementor data' );
+					if ( ! $force_replace ) {
+						return array( 'success' => false, 'message' => 'Failed to parse existing Elementor data' );
+					}
+					$existing_tree = array();
 				}
 
 				if ( ! $force_replace ) {
