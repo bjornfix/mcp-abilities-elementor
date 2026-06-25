@@ -219,7 +219,7 @@ function mcp_abilities_elementor_register_element_lookup_abilities(): void {
 					);
 				}
 
-				update_post_meta( $input['id'], '_elementor_data', wp_slash( $json_data ) );
+				mcp_abilities_elementor_update_guarded_elementor_data( $input['id'], wp_slash( $json_data ) );
 
 				$cache_details = mcp_abilities_elementor_invalidate_after_write(
 					(int) $input['id'],

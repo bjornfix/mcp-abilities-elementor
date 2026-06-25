@@ -520,15 +520,15 @@ function mcp_abilities_elementor_register_template_abilities(): void {
 					if ( false === $json_data ) {
 						return array( 'success' => false, 'message' => 'Failed to encode Elementor document data' );
 					}
-					update_post_meta( $post_id, '_elementor_data', wp_slash( $json_data ) );
+					mcp_abilities_elementor_update_guarded_elementor_data( $post_id, wp_slash( $json_data ) );
 				} else {
 					// Create minimal empty structure.
-					update_post_meta( $post_id, '_elementor_data', '[]' );
+					mcp_abilities_elementor_update_guarded_elementor_data( $post_id, '[]' );
 				}
 
 				// Set page settings if provided.
 				if ( ! empty( $input['page_settings'] ) && is_array( $input['page_settings'] ) ) {
-					update_post_meta( $post_id, '_elementor_page_settings', $input['page_settings'] );
+					mcp_abilities_elementor_update_guarded_page_settings( $post_id, $input['page_settings'] );
 				}
 
 				// Set template sub type if provided.
@@ -707,7 +707,7 @@ function mcp_abilities_elementor_register_template_abilities(): void {
 					if ( false === $json_data ) {
 						return array( 'success' => false, 'message' => 'Failed to encode updated Elementor template data' );
 					}
-					update_post_meta( $post->ID, '_elementor_data', wp_slash( $json_data ) );
+					mcp_abilities_elementor_update_guarded_elementor_data( $post->ID, wp_slash( $json_data ) );
 					delete_post_meta( $post->ID, '_elementor_css' );
 				}
 
@@ -715,11 +715,11 @@ function mcp_abilities_elementor_register_template_abilities(): void {
 				if ( ! empty( $input['page_settings'] ) && is_array( $input['page_settings'] ) ) {
 					$replace = ! empty( $input['replace_settings'] );
 					if ( $replace ) {
-						update_post_meta( $post->ID, '_elementor_page_settings', $input['page_settings'] );
+						mcp_abilities_elementor_update_guarded_page_settings( $post->ID, $input['page_settings'] );
 					} else {
 						$existing = get_post_meta( $post->ID, '_elementor_page_settings', true );
 						$existing = is_array( $existing ) ? $existing : array();
-						update_post_meta( $post->ID, '_elementor_page_settings', array_merge( $existing, $input['page_settings'] ) );
+						mcp_abilities_elementor_update_guarded_page_settings( $post->ID, array_merge( $existing, $input['page_settings'] ) );
 					}
 					delete_post_meta( $post->ID, '_elementor_css' );
 				}
@@ -1624,10 +1624,10 @@ function mcp_abilities_elementor_register_template_abilities(): void {
 				}
 				update_post_meta( $post_id, '_elementor_template_type', $template_type );
 				update_post_meta( $post_id, '_elementor_edit_mode', 'builder' );
-				update_post_meta( $post_id, '_elementor_data', wp_slash( $json_data ) );
+				mcp_abilities_elementor_update_guarded_elementor_data( $post_id, wp_slash( $json_data ) );
 
 				if ( ! empty( $data['page_settings'] ) ) {
-					update_post_meta( $post_id, '_elementor_page_settings', $data['page_settings'] );
+					mcp_abilities_elementor_update_guarded_page_settings( $post_id, $data['page_settings'] );
 				}
 
 				// Set taxonomy.

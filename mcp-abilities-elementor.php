@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.3.17
+ * Version: 2.3.18
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -161,6 +161,159 @@ function mcp_abilities_elementor_get_raw_data_meta( int $post_id ): string {
 	}
 
 	return '';
+}
+
+/**
+ * Filter name for translation sibling providers used by guarded writes.
+ *
+ * @return string
+ */
+function mcp_abilities_elementor_translation_sibling_filter_name(): string {
+	return 'mcp_abilities_elementor_translation_sibling_post_ids';
+}
+
+/**
+ * Get sibling translation post IDs for a post from registered language providers.
+ *
+ * Elementor document meta must be independently editable per language. Some
+ * multilingual plugins can copy custom fields such as _elementor_data to
+ * translation siblings during update_post_meta(), so guarded writes snapshot
+ * sibling rows first and restore them if a sync hook changes them.
+ *
+ * @param int $post_id Source post ID.
+ * @return int[]
+ */
+function mcp_abilities_elementor_get_translation_sibling_post_ids( int $post_id ): array {
+	$post = get_post( $post_id );
+	if ( ! $post ) {
+		return array();
+	}
+
+	$sibling_ids = array();
+
+	$sibling_ids = apply_filters( mcp_abilities_elementor_translation_sibling_filter_name(), $sibling_ids, $post_id, $post );
+
+	if ( ! is_array( $sibling_ids ) ) {
+		return array();
+	}
+
+	return array_values(
+		array_unique(
+			array_filter(
+				array_map( 'intval', $sibling_ids ),
+				static function ( int $sibling_id ) use ( $post_id ): bool {
+					return $sibling_id > 0 && $sibling_id !== $post_id;
+				}
+			)
+		)
+	);
+}
+
+/**
+ * Capture sibling meta values through WordPress metadata APIs.
+ *
+ * @param int[]  $post_ids Post IDs.
+ * @param string $meta_key Meta key.
+ * @return array<int,mixed>
+ */
+function mcp_abilities_elementor_capture_sibling_meta_values( array $post_ids, string $meta_key ): array {
+	$snapshot = array();
+	foreach ( $post_ids as $post_id ) {
+		$post_id = (int) $post_id;
+		if ( $post_id > 0 ) {
+			$snapshot[ $post_id ] = get_post_meta( $post_id, $meta_key, true );
+		}
+	}
+
+	return $snapshot;
+}
+
+/**
+ * Restore sibling _elementor_data values if a multilingual sync changed them.
+ *
+ * @param array<int,mixed> $snapshot Captured sibling values.
+ * @return array
+ */
+function mcp_abilities_elementor_restore_sibling_elementor_data( array $snapshot ): array {
+	$restored = array();
+	foreach ( $snapshot as $post_id => $value ) {
+		$post_id = (int) $post_id;
+		if ( $post_id > 0 && get_post_meta( $post_id, '_elementor_data', true ) !== $value ) {
+			update_post_meta( $post_id, '_elementor_data', $value );
+			$restored[] = $post_id;
+		}
+	}
+
+	return array(
+		'restored_post_ids' => $restored,
+		'restored_count'    => count( $restored ),
+	);
+}
+
+/**
+ * Restore sibling _elementor_page_settings values if a multilingual sync changed them.
+ *
+ * @param array<int,mixed> $snapshot Captured sibling values.
+ * @return array
+ */
+function mcp_abilities_elementor_restore_sibling_page_settings( array $snapshot ): array {
+	$restored = array();
+	foreach ( $snapshot as $post_id => $value ) {
+		$post_id = (int) $post_id;
+		if ( $post_id > 0 && get_post_meta( $post_id, '_elementor_page_settings', true ) !== $value ) {
+			update_post_meta( $post_id, '_elementor_page_settings', $value );
+			$restored[] = $post_id;
+		}
+	}
+
+	return array(
+		'restored_post_ids' => $restored,
+		'restored_count'    => count( $restored ),
+	);
+}
+
+/**
+ * Update _elementor_data while preserving translated sibling documents.
+ *
+ * @param int   $post_id Post ID.
+ * @param mixed $meta_value Meta value.
+ * @return array
+ */
+function mcp_abilities_elementor_update_guarded_elementor_data( int $post_id, $meta_value ): array {
+	$sibling_ids = mcp_abilities_elementor_get_translation_sibling_post_ids( $post_id );
+	$snapshot    = mcp_abilities_elementor_capture_sibling_meta_values( $sibling_ids, '_elementor_data' );
+	$result      = update_post_meta( $post_id, '_elementor_data', $meta_value );
+	$restore     = mcp_abilities_elementor_restore_sibling_elementor_data( $snapshot );
+
+	return array(
+		'updated'            => false !== $result,
+		'protected_post_ids' => $sibling_ids,
+		'protected_count'    => count( $sibling_ids ),
+		'restored_post_ids'  => $restore['restored_post_ids'],
+		'restored_count'     => $restore['restored_count'],
+	);
+}
+
+/**
+ * Update _elementor_page_settings while preserving translated sibling settings.
+ *
+ * @param int   $post_id Post ID.
+ * @param mixed $meta_value Meta value.
+ * @return array
+ */
+function mcp_abilities_elementor_update_guarded_page_settings( int $post_id, $meta_value ): array {
+	$sibling_ids = mcp_abilities_elementor_get_translation_sibling_post_ids( $post_id );
+	$snapshot    = mcp_abilities_elementor_capture_sibling_meta_values( $sibling_ids, '_elementor_page_settings' );
+	$result      = update_post_meta( $post_id, '_elementor_page_settings', $meta_value );
+	$restore     = mcp_abilities_elementor_restore_sibling_page_settings( $snapshot );
+
+	return array(
+		'updated'            => false !== $result,
+		'protected_post_ids' => $sibling_ids,
+		'protected_count'    => count( $sibling_ids ),
+		'restored_post_ids'  => $restore['restored_post_ids'],
+		'restored_count'     => $restore['restored_count'],
+	);
 }
 
 /**
@@ -788,7 +941,7 @@ function mcp_abilities_elementor_save_document_data( int $post_id, array $data, 
 		return array( 'success' => false, 'message' => 'Failed to encode Elementor data to JSON' );
 	}
 
-	update_post_meta( $post_id, '_elementor_data', wp_slash( $json_data ) );
+	mcp_abilities_elementor_update_guarded_elementor_data( $post_id, wp_slash( $json_data ) );
 	update_post_meta( $post_id, '_elementor_edit_mode', 'builder' );
 
 	$cache_details = mcp_abilities_elementor_invalidate_after_write(

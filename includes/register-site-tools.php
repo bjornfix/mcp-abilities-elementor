@@ -283,7 +283,7 @@ function mcp_abilities_elementor_register_site_tool_abilities(): void {
 				$replace = ! empty( $input['replace'] );
 				$final   = $replace ? $input['settings'] : array_merge( $existing, $input['settings'] );
 
-				update_post_meta( $kit_id, '_elementor_page_settings', $final );
+				mcp_abilities_elementor_update_guarded_page_settings( $kit_id, $final );
 
 					// Clear all Elementor CSS cache since kit affects entire site.
 					mcp_abilities_elementor_clear_site_cache();
@@ -859,7 +859,7 @@ function mcp_abilities_elementor_register_site_tool_abilities(): void {
 					$final_settings = array_merge( $existing_settings, $new_settings );
 				}
 
-				update_post_meta( $input['id'], '_elementor_page_settings', $final_settings );
+				mcp_abilities_elementor_update_guarded_page_settings( $input['id'], $final_settings );
 
 				// Clear Elementor CSS cache.
 				delete_post_meta( $input['id'], '_elementor_css' );
