@@ -215,6 +215,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 					'unchanged' => array( 'type' => 'boolean' ),
 					'cache'   => array( 'type' => 'object' ),
 					'elementor_write_guard' => array( 'type' => 'object' ),
+					'elementor_translation_guard' => array( 'type' => 'object' ),
 				),
 			),
 			'execute_callback'    => function ( $input = array() ): array {
@@ -1718,19 +1719,20 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
 				}
 
-				mcp_abilities_elementor_update_guarded_elementor_data( (int) $input['id'], wp_slash( $json_data ) );
+				$translation_guard = mcp_abilities_elementor_update_guarded_elementor_data( (int) $input['id'], wp_slash( $json_data ) );
 				$cache_details = mcp_abilities_elementor_invalidate_after_write( (int) $input['id'], $requested_cache_scope );
 
 				return array(
-					'success'    => true,
-					'id'         => (int) $input['id'],
-					'element_id' => (string) $input['element_id'],
-					'message'    => 'Element settings merged successfully',
-					'link'       => get_permalink( (int) $input['id'] ),
-					'dry_run'    => false,
-					'unchanged'  => false,
-					'settings'   => $merged_element['settings'],
-					'cache'      => $cache_details,
+					'success'                    => true,
+					'id'                         => (int) $input['id'],
+					'element_id'                 => (string) $input['element_id'],
+					'message'                    => 'Element settings merged successfully',
+					'link'                       => get_permalink( (int) $input['id'] ),
+					'dry_run'                    => false,
+					'unchanged'                  => false,
+					'settings'                   => $merged_element['settings'],
+					'cache'                      => $cache_details,
+					'elementor_translation_guard' => $translation_guard,
 				);
 			},
 			'permission_callback' => function (): bool {
