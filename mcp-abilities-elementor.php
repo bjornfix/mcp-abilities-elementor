@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.3.21
+ * Version: 2.3.22
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -229,6 +229,43 @@ function mcp_abilities_elementor_capture_sibling_meta_values( array $post_ids, s
 }
 
 /**
+ * Prepare a captured meta value for safe restore through update_post_meta().
+ *
+ * WordPress unslashes meta values before storage. JSON-backed Elementor meta
+ * captured through get_post_meta() is already unslashed, so restoring it as a
+ * plain string corrupts escaped quotes in values such as links and text editor
+ * HTML. Slashing only the JSON-backed string values mirrors normal Elementor
+ * write paths while leaving scalar/non-JSON meta untouched.
+ *
+ * @param string $meta_key Meta key.
+ * @param mixed  $value    Captured meta value.
+ * @return mixed
+ */
+function mcp_abilities_elementor_prepare_sibling_meta_restore_value( string $meta_key, $value ) {
+	$json_meta_keys = array(
+		'_elementor_data',
+		'_elementor_page_settings',
+		'_elementor_popup_display_settings',
+		'_elementor_conditions',
+	);
+
+	if ( ! in_array( $meta_key, $json_meta_keys, true ) ) {
+		return $value;
+	}
+
+	if ( is_string( $value ) ) {
+		return wp_slash( $value );
+	}
+
+	if ( is_array( $value ) ) {
+		$json = wp_json_encode( $value );
+		return is_string( $json ) ? wp_slash( $json ) : $value;
+	}
+
+	return $value;
+}
+
+/**
  * Restore sibling meta values if a multilingual sync changed them.
  *
  * @param array<int,mixed> $snapshot Captured sibling values.
@@ -240,7 +277,7 @@ function mcp_abilities_elementor_restore_sibling_meta_values( array $snapshot, s
 	foreach ( $snapshot as $post_id => $value ) {
 		$post_id = (int) $post_id;
 		if ( $post_id > 0 && get_post_meta( $post_id, $meta_key, true ) !== $value ) {
-			update_post_meta( $post_id, $meta_key, $value );
+			update_post_meta( $post_id, $meta_key, mcp_abilities_elementor_prepare_sibling_meta_restore_value( $meta_key, $value ) );
 			clean_post_cache( $post_id );
 			$restored[] = $post_id;
 		}

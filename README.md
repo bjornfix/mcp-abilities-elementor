@@ -8,7 +8,7 @@ Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage 
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://php.net)
 
 **Tested up to:** 7.0
-**Stable tag:** 2.3.21
+**Stable tag:** 2.3.22
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -516,6 +516,10 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 - Added: `cache_scope` (`none` / `post` / `site`) to `elementor/update-data`, `elementor/patch-data`, and `elementor/update-element`
 - Improved: stronger cache invalidation after Elementor writes (post cache cleanup, asset meta cleanup, optional site-wide Elementor cache clear)
 - Improved: `elementor/clear-cache` now returns cache details and supports `scope` alias (`post` / `site`)
+
+### 2.3.22
+
+- Fixed translated sibling restore so captured Elementor JSON meta is re-slashed before being written back. This prevents `_elementor_data` corruption when multilingual custom-field sync hooks briefly copy source-language data to translated siblings during a guarded write.
 
 ### 2.3.21
 

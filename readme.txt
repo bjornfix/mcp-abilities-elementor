@@ -3,7 +3,7 @@ Contributors: devenia
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 7.0
-Stable tag: 2.3.21
+Stable tag: 2.3.22
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -14,7 +14,7 @@ Elementor page builder integration for WordPress via MCP.
 
 This add-on plugin exposes Elementor functionality through MCP (Model Context Protocol). Your AI assistant can read Elementor page structures, locate and update elements, manage templates and conditions, and run Elementor tools like maintenance mode, experiments, and URL replacement.
 
-Version 2.3.21 lets `elementor/update-data` repair malformed existing Elementor data when `force_replace=true`. Version 2.3.20 adds a final shutdown restore for translated Elementor sibling documents after late multilingual custom-field sync hooks.
+Version 2.3.22 fixes translated sibling restore so protected Elementor JSON remains parseable after multilingual custom-field sync hooks. Version 2.3.21 lets `elementor/update-data` repair malformed existing Elementor data when `force_replace=true`.
 
 Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilities/) ecosystem.
 
@@ -59,6 +59,9 @@ Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilit
 * [All Add-on Plugins](https://devenia.com/plugins/mcp-expose-abilities/#add-ons)
 
 == Changelog ==
+
+= 2.3.22 =
+* Fixed: translated sibling restore now re-slashes captured Elementor JSON meta before writing it back, preventing invalid `_elementor_data` after WPML/Polylang-style custom-field sync hooks.
 
 = 2.3.21 =
 * Fixed: `elementor/update-data` with `force_replace=true` can now repair a document whose existing `_elementor_data` meta is malformed.
