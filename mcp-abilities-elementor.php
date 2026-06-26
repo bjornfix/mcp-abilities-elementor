@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.3.22
+ * Version: 2.3.23
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -5453,6 +5453,56 @@ function mcp_abilities_elementor_clear_site_cache(): array {
 }
 
 /**
+ * Regenerate Elementor's generated CSS file for a single post.
+ *
+ * @param int $post_id Post/Page ID.
+ * @return array
+ */
+function mcp_abilities_elementor_regenerate_post_css( int $post_id ): array {
+	$details = array(
+		'post_css_regenerated' => false,
+		'post_css_exists'      => false,
+		'post_css_file'        => '',
+		'warnings'             => array(),
+	);
+
+	if ( ! class_exists( '\Elementor\Core\Files\CSS\Post' ) ) {
+		$details['warnings'][] = 'Elementor post CSS generator not available';
+		return $details;
+	}
+
+	try {
+		$post_css = new \Elementor\Core\Files\CSS\Post( $post_id );
+		if ( ! method_exists( $post_css, 'update' ) ) {
+			$details['warnings'][] = 'Elementor post CSS update method not available';
+			return $details;
+		}
+
+		$post_css->update();
+		$details['post_css_regenerated'] = true;
+	} catch ( \Throwable $e ) {
+		$details['warnings'][] = 'Elementor post CSS regeneration failed: ' . $e->getMessage();
+		return $details;
+	}
+
+	$uploads = wp_upload_dir();
+	if ( empty( $uploads['basedir'] ) ) {
+		$details['warnings'][] = 'WordPress upload directory unavailable';
+		return $details;
+	}
+
+	$file = trailingslashit( (string) $uploads['basedir'] ) . 'elementor/css/post-' . $post_id . '.css';
+	$details['post_css_file']   = $file;
+	$details['post_css_exists'] = is_readable( $file );
+
+	if ( ! $details['post_css_exists'] ) {
+		$details['warnings'][] = 'Elementor post CSS file was not created';
+	}
+
+	return $details;
+}
+
+/**
  * Build a cache details response for no-op write paths.
  *
  * @param string $requested_scope Requested cache scope by caller.
@@ -5468,6 +5518,9 @@ function mcp_abilities_elementor_build_noop_cache_details( string $requested_sco
 		'post_cache_cleaned'       => false,
 		'post_touched'             => false,
 		'elementor_cache_cleared'  => false,
+		'post_css_regenerated'     => false,
+		'post_css_exists'          => false,
+		'post_css_file'            => '',
 		'warnings'                 => array(),
 	);
 }
@@ -5491,7 +5544,10 @@ function mcp_abilities_elementor_invalidate_after_write( int $post_id, string $c
 		'post_meta_assets_deleted' => false,
 		'post_cache_cleaned'       => false,
 		'post_touched'             => false,
-		'elementor_cache_cleared' => false,
+		'elementor_cache_cleared'  => false,
+		'post_css_regenerated'     => false,
+		'post_css_exists'          => false,
+		'post_css_file'            => '',
 		'warnings'                 => array(),
 	);
 

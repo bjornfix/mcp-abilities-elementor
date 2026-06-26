@@ -8,7 +8,7 @@ Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage 
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://php.net)
 
 **Tested up to:** 7.0
-**Stable tag:** 2.3.22
+**Stable tag:** 2.3.23
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -217,7 +217,7 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 | `elementor/get-kit-settings` | Get site-wide Elementor settings |
 | `elementor/update-kit-settings` | Update global colors, typography, etc. |
 | `elementor/set-active-kit` | Set the active Elementor kit |
-| `elementor/clear-cache` | Clear Elementor cache (post or site scope) |
+| `elementor/clear-cache` | Clear Elementor cache (post or site scope, optional post CSS regeneration) |
 | `elementor/replace-urls` | Replace URLs inside Elementor data |
 | `elementor/get-maintenance-mode` | Get maintenance mode settings |
 | `elementor/update-maintenance-mode` | Enable or update maintenance mode |
@@ -516,6 +516,10 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 - Added: `cache_scope` (`none` / `post` / `site`) to `elementor/update-data`, `elementor/patch-data`, and `elementor/update-element`
 - Improved: stronger cache invalidation after Elementor writes (post cache cleanup, asset meta cleanup, optional site-wide Elementor cache clear)
 - Improved: `elementor/clear-cache` now returns cache details and supports `scope` alias (`post` / `site`)
+
+### 2.3.23
+
+- Added: `elementor/clear-cache` can regenerate a single post's generated Elementor CSS file with `regenerate_css=true` and reports whether the CSS file exists.
 
 ### 2.3.22
 

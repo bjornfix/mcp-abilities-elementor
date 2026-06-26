@@ -245,6 +245,11 @@ function mcp_abilities_elementor_register_template_abilities(): void {
 						'enum'        => array( 'post', 'site' ),
 						'description' => 'Optional alias for cache scope. `site` behaves like `all=true`. `post` requires `id`.',
 					),
+					'regenerate_css' => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'When clearing a single post, also ask Elementor to regenerate the generated post CSS file and report whether it exists.',
+					),
 				),
 				'additionalProperties' => false,
 			),
@@ -291,9 +296,18 @@ function mcp_abilities_elementor_register_template_abilities(): void {
 					}
 
 					$cache_details = mcp_abilities_elementor_invalidate_after_write( (int) $input['id'], 'post', false );
+					if ( ! empty( $input['regenerate_css'] ) ) {
+						$css_details = mcp_abilities_elementor_regenerate_post_css( (int) $input['id'] );
+						$cache_details['post_css_regenerated'] = ! empty( $css_details['post_css_regenerated'] );
+						$cache_details['post_css_exists']      = ! empty( $css_details['post_css_exists'] );
+						$cache_details['post_css_file']        = isset( $css_details['post_css_file'] ) ? (string) $css_details['post_css_file'] : '';
+						if ( ! empty( $css_details['warnings'] ) && is_array( $css_details['warnings'] ) ) {
+							$cache_details['warnings'] = array_merge( $cache_details['warnings'], $css_details['warnings'] );
+						}
+					}
 
 					return array(
-						'success' => true,
+						'success' => empty( $cache_details['warnings'] ),
 						'message' => "Cache cleared for post {$input['id']}",
 						'cache'   => $cache_details,
 					);
