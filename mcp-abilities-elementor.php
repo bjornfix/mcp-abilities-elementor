@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.3.24
+ * Version: 2.3.25
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -779,6 +779,100 @@ function mcp_abilities_elementor_build_widget_element( string $widget_type, arra
 		'widgetType' => sanitize_key( $widget_type ),
 		'settings'   => $settings,
 		'elements'   => array(),
+	);
+}
+
+/**
+ * Create a native Elementor Nested Tabs widget containing Posts widgets.
+ *
+ * @param array       $tabs Tab definitions.
+ * @param array       $base_posts_settings Settings shared by all Posts widgets.
+ * @param array       $tabs_settings Nested Tabs widget settings.
+ * @param string|null $id Optional tabs widget ID.
+ * @param array       $existing_ids IDs already present in the document.
+ * @return array|WP_Error
+ */
+function mcp_abilities_elementor_build_post_tabs_element( array $tabs, array $base_posts_settings = array(), array $tabs_settings = array(), ?string $id = null, array $existing_ids = array() ) {
+	$existing_ids = array_values( array_unique( array_filter( array_map( 'strval', $existing_ids ) ) ) );
+
+	$next_id = static function ( ?string $requested_id = null ) use ( &$existing_ids ): string {
+		$requested_id = is_string( $requested_id ) ? sanitize_key( $requested_id ) : '';
+		if ( '' !== $requested_id && ! in_array( $requested_id, $existing_ids, true ) ) {
+			$existing_ids[] = $requested_id;
+			return $requested_id;
+		}
+
+		do {
+			$generated = mcp_abilities_elementor_generate_element_id();
+		} while ( in_array( $generated, $existing_ids, true ) );
+
+		$existing_ids[] = $generated;
+		return $generated;
+	};
+
+	$tabs_widget_id = $next_id( $id );
+	$settings      = $tabs_settings;
+	$settings['tabs'] = array();
+	$child_containers  = array();
+
+	foreach ( $tabs as $index => $tab ) {
+		if ( ! is_array( $tab ) ) {
+			return new WP_Error( 'mcp_elementor_invalid_post_tab', 'Each tab must be an object.' );
+		}
+
+		$title = isset( $tab['title'] ) ? sanitize_text_field( (string) $tab['title'] ) : '';
+		if ( '' === $title ) {
+			return new WP_Error( 'mcp_elementor_invalid_post_tab_title', 'Each tab requires a non-empty title.' );
+		}
+
+		$tab_id   = $next_id( isset( $tab['tab_id'] ) ? (string) $tab['tab_id'] : $tabs_widget_id . 'tab' . ( $index + 1 ) );
+		$posts_id = $next_id( isset( $tab['posts_element_id'] ) ? (string) $tab['posts_element_id'] : $tab_id . 'posts' );
+
+		$post_settings = $base_posts_settings;
+		if ( isset( $tab['posts_settings'] ) && is_array( $tab['posts_settings'] ) ) {
+			$post_settings = array_replace_recursive( $post_settings, $tab['posts_settings'] );
+		}
+
+		$settings['tabs'][] = array(
+			'_id'       => $tab_id,
+			'tab_title' => $title,
+		);
+
+		$container_settings = array(
+			'content_width'  => 'full',
+			'flex_direction' => 'column',
+			'padding'        => array(
+				'unit'     => 'px',
+				'top'      => 0,
+				'right'    => 0,
+				'bottom'   => 0,
+				'left'     => 0,
+				'isLinked' => false,
+			),
+		);
+		if ( isset( $tab['container_settings'] ) && is_array( $tab['container_settings'] ) ) {
+			$container_settings = array_replace_recursive( $container_settings, $tab['container_settings'] );
+		}
+
+		$child_containers[] = mcp_abilities_elementor_build_container_element(
+			$container_settings,
+			array(
+				mcp_abilities_elementor_build_widget_element( 'posts', $post_settings, $posts_id ),
+			),
+			$tab_id
+		);
+	}
+
+	if ( empty( $settings['tabs'] ) ) {
+		return new WP_Error( 'mcp_elementor_post_tabs_empty', 'At least one tab is required.' );
+	}
+
+	return array(
+		'id'         => $tabs_widget_id,
+		'elType'     => 'widget',
+		'widgetType' => 'nested-tabs',
+		'settings'   => $settings,
+		'elements'   => $child_containers,
 	);
 }
 

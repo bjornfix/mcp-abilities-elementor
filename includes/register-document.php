@@ -725,6 +725,151 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 	);
 
 	// =========================================================================
+	// ELEMENTOR - Add Post Tabs
+	// =========================================================================
+	mcp_abilities_elementor_register_ability(
+		'elementor/add-post-tabs',
+		array(
+			'label'               => 'Add Elementor Post Tabs',
+			'description'         => 'Adds a native Elementor Nested Tabs widget where each tab contains a native Posts widget. Use this for tabbed blog/post lists instead of manual cards or custom filter markup.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id', 'tabs' ),
+				'properties'           => array(
+					'id'                  => array( 'type' => 'integer', 'description' => 'Post/Page ID.' ),
+					'parent_element_id'   => array( 'type' => 'string', 'description' => 'Optional parent container ID. Omit for top-level insertion.' ),
+					'position'            => array( 'type' => 'integer', 'default' => -1, 'description' => 'Insert position. -1 appends.' ),
+					'element_id'          => array( 'type' => 'string', 'description' => 'Optional explicit Nested Tabs element ID.' ),
+					'tabs_settings'       => array( 'type' => 'object', 'description' => 'Native nested-tabs widget settings.' ),
+					'base_posts_settings' => array( 'type' => 'object', 'description' => 'Native Posts widget settings shared by all tabs.' ),
+					'tabs'                => array(
+						'type'        => 'array',
+						'minItems'    => 1,
+						'description' => 'Tab definitions. Each tab requires title and can override posts_settings/container_settings.',
+						'items'       => array(
+							'type'                 => 'object',
+							'required'             => array( 'title' ),
+							'properties'           => array(
+								'title'            => array( 'type' => 'string' ),
+								'tab_id'           => array( 'type' => 'string', 'description' => 'Optional explicit tab container/repeater ID.' ),
+								'posts_element_id' => array( 'type' => 'string', 'description' => 'Optional explicit Posts widget ID inside this tab.' ),
+								'posts_settings'   => array( 'type' => 'object', 'description' => 'Native Posts widget settings for this tab.' ),
+								'container_settings'=> array( 'type' => 'object', 'description' => 'Native container settings for this tab panel.' ),
+							),
+							'additionalProperties' => false,
+						),
+					),
+					'cache_scope'         => mcp_abilities_elementor_cache_scope_schema(),
+					'dry_run'             => array( 'type' => 'boolean', 'default' => false, 'description' => 'Return the prepared Nested Tabs element without writing.' ),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'    => array( 'type' => 'boolean' ),
+					'id'         => array( 'type' => 'integer' ),
+					'element_id' => array( 'type' => 'string' ),
+					'tab_ids'    => array( 'type' => 'array' ),
+					'posts_widget_ids' => array( 'type' => 'array' ),
+					'message'    => array( 'type' => 'string' ),
+					'link'       => array( 'type' => 'string' ),
+					'cache'      => array( 'type' => 'object' ),
+					'element'    => array( 'type' => 'object' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input   = is_array( $input ) ? $input : array();
+				$post_id = (int) ( $input['id'] ?? 0 );
+				if ( $post_id <= 0 ) {
+					return array( 'success' => false, 'message' => 'Post/Page ID is required' );
+				}
+
+				$post = get_post( $post_id );
+				if ( ! $post ) {
+					return array( 'success' => false, 'message' => 'Post not found' );
+				}
+				if ( ! current_user_can( 'edit_post', $post->ID ) ) {
+					return array( 'success' => false, 'message' => 'You do not have permission to update this post' );
+				}
+
+				$tabs = isset( $input['tabs'] ) && is_array( $input['tabs'] ) ? $input['tabs'] : array();
+				if ( empty( $tabs ) ) {
+					return array( 'success' => false, 'message' => 'tabs array is required' );
+				}
+
+				$data = mcp_abilities_elementor_get_post_elements( $post_id );
+				$element = mcp_abilities_elementor_build_post_tabs_element(
+					$tabs,
+					isset( $input['base_posts_settings'] ) && is_array( $input['base_posts_settings'] ) ? $input['base_posts_settings'] : array(),
+					isset( $input['tabs_settings'] ) && is_array( $input['tabs_settings'] ) ? $input['tabs_settings'] : array(),
+					isset( $input['element_id'] ) ? (string) $input['element_id'] : null,
+					mcp_abilities_elementor_collect_element_ids( $data )
+				);
+
+				if ( is_wp_error( $element ) ) {
+					return array( 'success' => false, 'message' => $element->get_error_message(), 'code' => $element->get_error_code() );
+				}
+
+				$tab_ids = array();
+				$posts_widget_ids = array();
+				foreach ( (array) ( $element['elements'] ?? array() ) as $tab_container ) {
+					if ( is_array( $tab_container ) && isset( $tab_container['id'] ) ) {
+						$tab_ids[] = (string) $tab_container['id'];
+					}
+					$first_child = is_array( $tab_container['elements'][0] ?? null ) ? $tab_container['elements'][0] : array();
+					if ( isset( $first_child['id'] ) ) {
+						$posts_widget_ids[] = (string) $first_child['id'];
+					}
+				}
+
+				if ( ! empty( $input['dry_run'] ) ) {
+					return array(
+						'success'          => true,
+						'id'               => $post_id,
+						'element_id'       => (string) $element['id'],
+						'tab_ids'          => $tab_ids,
+						'posts_widget_ids' => $posts_widget_ids,
+						'message'          => 'Dry run: Elementor post tabs prepared successfully',
+						'element'          => $element,
+					);
+				}
+
+				$inserted = mcp_abilities_elementor_insert_element_in_tree(
+					$data,
+					$element,
+					isset( $input['parent_element_id'] ) ? (string) $input['parent_element_id'] : null,
+					isset( $input['position'] ) ? (int) $input['position'] : -1
+				);
+				if ( ! $inserted ) {
+					return array( 'success' => false, 'message' => 'Parent element not found' );
+				}
+
+				$save = mcp_abilities_elementor_save_document_data( $post_id, $data, (string) ( $input['cache_scope'] ?? 'post' ) );
+				if ( empty( $save['success'] ) ) {
+					return array( 'success' => false, 'message' => (string) ( $save['message'] ?? 'Failed to save Elementor data' ) );
+				}
+
+				return array(
+					'success'          => true,
+					'id'               => $post_id,
+					'element_id'       => (string) $element['id'],
+					'tab_ids'          => $tab_ids,
+					'posts_widget_ids' => $posts_widget_ids,
+					'message'          => 'Elementor post tabs added successfully',
+					'link'             => get_permalink( $post_id ) ?: '',
+					'cache'            => $save['cache'] ?? array(),
+				);
+			},
+			'permission_callback' => function (): bool {
+				return mcp_abilities_elementor_can_edit_posts();
+			},
+			'meta'                => mcp_abilities_elementor_ability_meta( false, false, false ),
+		)
+	);
+
+	// =========================================================================
 	// ELEMENTOR - Move / Remove / Duplicate / Reorder Elements
 	// =========================================================================
 	mcp_abilities_elementor_register_ability(

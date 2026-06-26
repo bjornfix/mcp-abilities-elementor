@@ -8,7 +8,7 @@ Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage 
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://php.net)
 
 **Tested up to:** 7.0
-**Stable tag:** 2.3.24
+**Stable tag:** 2.3.25
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -163,6 +163,7 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 | `elementor/create-page` | Create a new page/post with Elementor builder mode enabled |
 | `elementor/add-container` | Add a top-level or nested Elementor container |
 | `elementor/add-widget` | Add any Elementor widget type with raw settings |
+| `elementor/add-post-tabs` | Add native Nested Tabs where each tab contains a native Posts widget |
 | `elementor/add-heading` | Add a heading widget |
 | `elementor/add-text-editor` | Add a text editor widget |
 | `elementor/add-image` | Add an image widget from an attachment ID or URL |
@@ -516,6 +517,10 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 - Added: `cache_scope` (`none` / `post` / `site`) to `elementor/update-data`, `elementor/patch-data`, and `elementor/update-element`
 - Improved: stronger cache invalidation after Elementor writes (post cache cleanup, asset meta cleanup, optional site-wide Elementor cache clear)
 - Improved: `elementor/clear-cache` now returns cache details and supports `scope` alias (`post` / `site`)
+
+### 2.3.25
+
+- Added: `elementor/add-post-tabs` creates native Elementor Nested Tabs where each tab contains a native Posts widget, for tabbed blog/post sections without manual cards or custom filter markup.
 
 ### 2.3.24
 
