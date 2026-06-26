@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.3.25
+ * Version: 2.3.26
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -811,7 +811,24 @@ function mcp_abilities_elementor_build_post_tabs_element( array $tabs, array $ba
 	};
 
 	$tabs_widget_id = $next_id( $id );
-	$settings      = $tabs_settings;
+	$settings       = array_replace_recursive(
+		array(
+			'tabs_direction'          => 'block-start',
+			'tabs_justify_horizontal' => 'start',
+			'horizontal_scroll'       => 'enable',
+			'breakpoint_selector'     => 'none',
+		),
+		$tabs_settings
+	);
+	if ( isset( $settings['horizontal_scroll_mobile'] ) && ! isset( $settings['horizontal_scroll'] ) ) {
+		$settings['horizontal_scroll'] = $settings['horizontal_scroll_mobile'];
+	}
+	if ( isset( $settings['tabs_direction'] ) && 'row' === $settings['tabs_direction'] ) {
+		$settings['tabs_direction'] = 'block-start';
+	}
+	if ( isset( $settings['tabs_justify_horizontal'] ) && 'flex-start' === $settings['tabs_justify_horizontal'] ) {
+		$settings['tabs_justify_horizontal'] = 'start';
+	}
 	$settings['tabs'] = array();
 	$child_containers  = array();
 
