@@ -3,7 +3,7 @@ Contributors: devenia
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 7.0
-Stable tag: 2.3.23
+Stable tag: 2.3.24
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -14,7 +14,7 @@ Elementor page builder integration for WordPress via MCP.
 
 This add-on plugin exposes Elementor functionality through MCP (Model Context Protocol). Your AI assistant can read Elementor page structures, locate and update elements, manage templates and conditions, and run Elementor tools like maintenance mode, experiments, and URL replacement.
 
-Version 2.3.23 lets `elementor/clear-cache` regenerate a single post's generated Elementor CSS file when requested. Version 2.3.22 fixes translated sibling restore so protected Elementor JSON remains parseable after multilingual custom-field sync hooks.
+Version 2.3.24 clears Cache Enabler page cache through public hooks when Elementor writes or `elementor/clear-cache` invalidate a post or site. Version 2.3.23 lets `elementor/clear-cache` regenerate a single post's generated Elementor CSS file when requested.
 
 Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilities/) ecosystem.
 
@@ -59,6 +59,9 @@ Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilit
 * [All Add-on Plugins](https://devenia.com/plugins/mcp-expose-abilities/#add-ons)
 
 == Changelog ==
+
+= 2.3.24 =
+* Fixed: Elementor write invalidation and `elementor/clear-cache` now clear Cache Enabler page cache through public Cache Enabler hooks when that plugin is active.
 
 = 2.3.23 =
 * Added: `elementor/clear-cache` can regenerate a single post's generated Elementor CSS file with `regenerate_css=true` and reports whether the CSS file exists.

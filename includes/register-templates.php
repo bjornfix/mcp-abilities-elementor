@@ -275,6 +275,9 @@ function mcp_abilities_elementor_register_template_abilities(): void {
 						'requested_scope'         => 'site',
 						'effective_scope'         => ! empty( $site_cache_result['elementor_cache_cleared'] ) ? 'site' : 'none',
 						'elementor_cache_cleared' => ! empty( $site_cache_result['elementor_cache_cleared'] ),
+						'page_cache_provider'     => (string) ( $site_cache_result['page_cache_provider'] ?? '' ),
+						'page_cache_scope'        => (string) ( $site_cache_result['page_cache_scope'] ?? 'none' ),
+						'page_cache_cleared'      => ! empty( $site_cache_result['page_cache_cleared'] ),
 						'warnings'                => ! empty( $site_cache_result['warnings'] ) && is_array( $site_cache_result['warnings'] ) ? $site_cache_result['warnings'] : array(),
 					);
 

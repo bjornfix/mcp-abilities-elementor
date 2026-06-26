@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.3.23
+ * Version: 2.3.24
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -5424,6 +5424,9 @@ function mcp_abilities_elementor_touch_post( int $post_id ): bool {
 function mcp_abilities_elementor_clear_site_cache(): array {
 	$details = array(
 		'elementor_cache_cleared' => false,
+		'page_cache_provider'     => '',
+		'page_cache_scope'        => 'none',
+		'page_cache_cleared'      => false,
 		'warnings'                => array(),
 	);
 
@@ -5447,6 +5450,74 @@ function mcp_abilities_elementor_clear_site_cache(): array {
 		}
 	} catch ( \Throwable $e ) {
 		$details['warnings'][] = 'Elementor cache clear failed: ' . $e->getMessage();
+	}
+
+	$page_cache_details = mcp_abilities_elementor_clear_page_cache( 0, 'site' );
+	$details['page_cache_provider'] = $page_cache_details['provider'];
+	$details['page_cache_scope']    = $page_cache_details['scope'];
+	$details['page_cache_cleared']  = $page_cache_details['cleared'];
+	if ( ! empty( $page_cache_details['warnings'] ) ) {
+		$details['warnings'] = array_merge( $details['warnings'], $page_cache_details['warnings'] );
+	}
+
+	return $details;
+}
+
+/**
+ * Clear known WordPress page-cache plugins after Elementor changes.
+ *
+ * This intentionally uses public plugin APIs instead of deleting cache files.
+ * Supported providers are detected at runtime so sites without them are no-ops.
+ *
+ * @param int    $post_id Post/Page ID for post-scope cache clearing.
+ * @param string $scope Cache scope (`post` or `site`).
+ * @return array{provider:string,scope:string,cleared:bool,warnings:array<int,string>}
+ */
+function mcp_abilities_elementor_clear_page_cache( int $post_id = 0, string $scope = 'post' ): array {
+	$details = array(
+		'provider' => '',
+		'scope'    => 'none',
+		'cleared'  => false,
+		'warnings' => array(),
+	);
+
+	$has_cache_enabler = class_exists( 'Cache_Enabler' )
+		&& (
+			is_callable( array( 'Cache_Enabler', 'clear_site_cache' ) )
+			|| is_callable( array( 'Cache_Enabler', 'clear_page_cache_by_post' ) )
+			|| is_callable( array( 'Cache_Enabler', 'clear_page_cache_by_url' ) )
+		);
+
+	if ( ! $has_cache_enabler ) {
+		return $details;
+	}
+
+	$details['provider'] = 'cache-enabler';
+
+	try {
+		if ( 'site' === $scope && is_callable( array( 'Cache_Enabler', 'clear_site_cache' ) ) ) {
+			Cache_Enabler::clear_site_cache();
+			$details['scope']   = 'site';
+			$details['cleared'] = true;
+			return $details;
+		}
+
+		if ( $post_id > 0 && is_callable( array( 'Cache_Enabler', 'clear_page_cache_by_post' ) ) ) {
+			Cache_Enabler::clear_page_cache_by_post( $post_id );
+			$details['scope']   = 'post';
+			$details['cleared'] = true;
+		}
+
+		if ( $post_id > 0 && is_callable( array( 'Cache_Enabler', 'clear_page_cache_by_url' ) ) ) {
+			$permalink = get_permalink( $post_id );
+			if ( is_string( $permalink ) && '' !== $permalink ) {
+				Cache_Enabler::clear_page_cache_by_url( $permalink );
+				$details['scope']   = 'post';
+				$details['cleared'] = true;
+			}
+		}
+	} catch ( \Throwable $e ) {
+		$details['warnings'][] = 'Cache Enabler clear failed: ' . $e->getMessage();
 	}
 
 	return $details;
@@ -5521,6 +5592,9 @@ function mcp_abilities_elementor_build_noop_cache_details( string $requested_sco
 		'post_css_regenerated'     => false,
 		'post_css_exists'          => false,
 		'post_css_file'            => '',
+		'page_cache_provider'      => '',
+		'page_cache_scope'         => 'none',
+		'page_cache_cleared'       => false,
 		'warnings'                 => array(),
 	);
 }
@@ -5548,6 +5622,9 @@ function mcp_abilities_elementor_invalidate_after_write( int $post_id, string $c
 		'post_css_regenerated'     => false,
 		'post_css_exists'          => false,
 		'post_css_file'            => '',
+		'page_cache_provider'      => '',
+		'page_cache_scope'         => 'none',
+		'page_cache_cleared'       => false,
 		'warnings'                 => array(),
 	);
 
@@ -5569,9 +5646,20 @@ function mcp_abilities_elementor_invalidate_after_write( int $post_id, string $c
 	$details['post_cache_cleaned'] = true;
 	$details['effective_scope']    = 'post';
 
+	$page_cache_details = mcp_abilities_elementor_clear_page_cache( $post_id, 'post' );
+	$details['page_cache_provider'] = $page_cache_details['provider'];
+	$details['page_cache_scope']    = $page_cache_details['scope'];
+	$details['page_cache_cleared']  = $page_cache_details['cleared'];
+	if ( ! empty( $page_cache_details['warnings'] ) ) {
+		$details['warnings'] = array_merge( $details['warnings'], $page_cache_details['warnings'] );
+	}
+
 	if ( 'site' === $cache_scope ) {
 		$site_cache_details = mcp_abilities_elementor_clear_site_cache();
 		$details['elementor_cache_cleared'] = ! empty( $site_cache_details['elementor_cache_cleared'] );
+		$details['page_cache_provider']     = (string) ( $site_cache_details['page_cache_provider'] ?? $details['page_cache_provider'] );
+		$details['page_cache_scope']        = (string) ( $site_cache_details['page_cache_scope'] ?? $details['page_cache_scope'] );
+		$details['page_cache_cleared']      = ! empty( $site_cache_details['page_cache_cleared'] );
 		if ( ! empty( $site_cache_details['warnings'] ) && is_array( $site_cache_details['warnings'] ) ) {
 			$details['warnings'] = array_merge( $details['warnings'], $site_cache_details['warnings'] );
 		}
