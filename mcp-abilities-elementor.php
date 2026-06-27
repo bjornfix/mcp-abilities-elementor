@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.3.27
+ * Version: 2.3.28
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -3828,6 +3828,10 @@ function mcp_abilities_elementor_get_global_color_reference_map(): array {
  */
 function mcp_abilities_elementor_is_local_color_setting_key( string $key ): bool {
 	if ( '__globals__' === $key || '' === $key ) {
+		return false;
+	}
+
+	if ( preg_match( '/_background$/', $key ) ) {
 		return false;
 	}
 

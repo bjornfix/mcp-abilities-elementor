@@ -34,6 +34,20 @@ function assert_same( $expected, $actual, string $message ): void {
 	}
 }
 
+function assert_false( bool $actual, string $message ): void {
+	if ( false !== $actual ) {
+		fwrite( STDERR, "FAIL: {$message}\n" );
+		exit( 1 );
+	}
+}
+
+function assert_true( bool $actual, string $message ): void {
+	if ( true !== $actual ) {
+		fwrite( STDERR, "FAIL: {$message}\n" );
+		exit( 1 );
+	}
+}
+
 $json = '[{"id":"x","settings":{"editor":"<p><a href=\"/en/free-inspection/\">Text</a></p>"}}]';
 assert_same(
 	wp_slash( $json ),
@@ -53,6 +67,16 @@ assert_same(
 	$plain,
 	mcp_abilities_elementor_prepare_sibling_meta_restore_value( '_thumbnail_id', $plain ),
 	'Non-JSON meta is not slashed'
+);
+
+assert_false(
+	mcp_abilities_elementor_is_local_color_setting_key( 'tabs_title_background_color_background' ),
+	'Elementor background mode selector is not treated as a local color'
+);
+
+assert_true(
+	mcp_abilities_elementor_is_local_color_setting_key( 'tabs_title_background_color_color' ),
+	'Elementor background color value remains subject to global color policy'
 );
 
 echo "Restore meta tests passed.\n";
