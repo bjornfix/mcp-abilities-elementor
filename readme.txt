@@ -3,7 +3,7 @@ Contributors: devenia
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 7.0
-Stable tag: 2.3.26
+Stable tag: 2.3.27
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -14,7 +14,7 @@ Elementor page builder integration for WordPress via MCP.
 
 This add-on plugin exposes Elementor functionality through MCP (Model Context Protocol). Your AI assistant can read Elementor page structures, locate and update elements, manage templates and conditions, and run Elementor tools like maintenance mode, experiments, and URL replacement.
 
-Version 2.3.26 fixes native Nested Tabs defaults for tabbed post sections so mobile filters stay above the post grid. Version 2.3.25 adds native tabbed post sections built from Elementor Nested Tabs plus Posts widgets.
+Version 2.3.27 makes native tabbed post sections keep all filter tabs visible by default. Version 2.3.26 fixes native Nested Tabs defaults for tabbed post sections so mobile filters stay above the post grid. Version 2.3.25 adds native tabbed post sections built from Elementor Nested Tabs plus Posts widgets.
 
 Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilities/) ecosystem.
 
@@ -59,6 +59,9 @@ Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilit
 * [All Add-on Plugins](https://devenia.com/plugins/mcp-expose-abilities/#add-ons)
 
 == Changelog ==
+
+= 2.3.27 =
+* Fixed: `elementor/add-post-tabs` now defaults native Nested Tabs horizontal scroll to disabled so all filter tabs stay visible and wrap above the post grid.
 
 = 2.3.26 =
 * Fixed: `elementor/add-post-tabs` now uses valid native Elementor Nested Tabs direction, alignment, scroll, and breakpoint defaults so mobile filters stay above the post grid.

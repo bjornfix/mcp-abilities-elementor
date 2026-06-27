@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.3.26
+ * Version: 2.3.27
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -815,7 +815,7 @@ function mcp_abilities_elementor_build_post_tabs_element( array $tabs, array $ba
 		array(
 			'tabs_direction'          => 'block-start',
 			'tabs_justify_horizontal' => 'start',
-			'horizontal_scroll'       => 'enable',
+			'horizontal_scroll'       => 'disable',
 			'breakpoint_selector'     => 'none',
 		),
 		$tabs_settings
