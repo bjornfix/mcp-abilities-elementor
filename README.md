@@ -8,13 +8,13 @@ Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage 
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://php.net)
 
 **Tested up to:** 7.0
-**Stable tag:** 2.3.33
+**Stable tag:** 2.3.34
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
 ## What It Does
 
-Version 2.3.33 compares the complete legacy-style audit internally so targeted cleanup remains safe even when a page has more than 25 pre-existing violations.
+Version 2.3.34 initializes Elementor version metadata when a native document is first written to an existing WordPress post or page.
 
 Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
 
@@ -335,6 +335,10 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 ```
 
 ## Changelog
+
+### 2.3.34
+
+- Initialize Elementor and Elementor Pro version metadata during native document saves so Theme Builder Post Content renders newly converted posts.
 
 ### 2.3.33
 

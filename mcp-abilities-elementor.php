@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.3.33
+ * Version: 2.3.34
  * Author: basicus
  * Author URI: https://profiles.wordpress.org/basicus/
  * License: GPL-2.0+
@@ -1108,6 +1108,12 @@ function mcp_abilities_elementor_save_document_data( int $post_id, array $data, 
 
 	mcp_abilities_elementor_update_guarded_elementor_data( $post_id, wp_slash( $json_data ) );
 	update_post_meta( $post_id, '_elementor_edit_mode', 'builder' );
+	if ( defined( 'ELEMENTOR_VERSION' ) ) {
+		update_post_meta( $post_id, '_elementor_version', (string) ELEMENTOR_VERSION );
+	}
+	if ( defined( 'ELEMENTOR_PRO_VERSION' ) ) {
+		update_post_meta( $post_id, '_elementor_pro_version', (string) ELEMENTOR_PRO_VERSION );
+	}
 
 	$cache_details = mcp_abilities_elementor_invalidate_after_write(
 		$post_id,
