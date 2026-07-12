@@ -8,13 +8,13 @@ Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage 
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://php.net)
 
 **Tested up to:** 7.0
-**Stable tag:** 2.3.31
+**Stable tag:** 2.3.32
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
 ## What It Does
 
-Version 2.3.31 keeps native element deletion local so unrelated legacy Elementor subtrees are not normalized during the style-preservation comparison.
+Version 2.3.32 routes targeted element replacement through the shared document-save boundary and preserves unchanged legacy styling without normalizing unrelated subtrees.
 
 Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
 
@@ -335,6 +335,15 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 ```
 
 ## Changelog
+
+### 2.3.32
+
+- Added `allow_legacy_style_preservation` to `elementor/update-element` for safe, targeted native replacements.
+- Routed targeted replacement through the shared document-save boundary without normalizing unrelated Elementor subtrees.
+
+### 2.3.31
+
+- Kept native element deletion local so unrelated legacy Elementor subtrees are not normalized during preservation checks.
 
 ### 2.3.30
 

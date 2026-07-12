@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.3.31
+ * Version: 2.3.32
  * Author: basicus
  * Author URI: https://profiles.wordpress.org/basicus/
  * License: GPL-2.0+
@@ -1079,10 +1079,11 @@ function mcp_abilities_elementor_reorder_children_in_tree( array &$elements, arr
  * @param array  $data Elementor data.
  * @param string $cache_scope Cache scope.
  * @param bool   $allow_legacy_style_preservation Allow unchanged legacy style debt.
+ * @param bool   $normalize_background_subtrees Normalize all background container subtrees before validation.
  * @return array
  */
-function mcp_abilities_elementor_save_document_data( int $post_id, array $data, string $cache_scope = 'post', bool $allow_legacy_style_preservation = false ): array {
-	$normalized_data = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
+function mcp_abilities_elementor_save_document_data( int $post_id, array $data, string $cache_scope = 'post', bool $allow_legacy_style_preservation = false, bool $normalize_background_subtrees = true ): array {
+	$normalized_data = $normalize_background_subtrees ? mcp_abilities_elementor_normalize_background_container_subtrees( $data ) : $data;
 	$style_policy    = mcp_abilities_elementor_enforce_global_style_policy( $normalized_data );
 	if ( empty( $style_policy['success'] ) ) {
 		$existing_data   = json_decode( (string) get_post_meta( $post_id, '_elementor_data', true ), true );

@@ -1496,6 +1496,11 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 						'default'     => false,
 						'description' => 'Allow destructive full replacement when the new payload changes element shape (for example container/widget type changes or replacing a populated container with an empty one).',
 					),
+					'allow_legacy_style_preservation' => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'Allow a targeted replacement when every pre-existing style violation outside the replacement remains unchanged.',
+					),
 				),
 				'additionalProperties' => false,
 			),
@@ -1656,12 +1661,6 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 					);
 				}
 
-				$data = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
-				$style_policy = mcp_abilities_elementor_enforce_global_style_policy( $data );
-				if ( empty( $style_policy['success'] ) ) {
-					return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
-				}
-				$data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $data;
 				$write_guard = mcp_abilities_elementor_audit_write_guard( $data );
 				if ( empty( $write_guard['success'] ) ) {
 					return mcp_abilities_elementor_write_guard_error_response( $write_guard );
@@ -1688,12 +1687,18 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 					);
 				}
 
-				mcp_abilities_elementor_update_guarded_elementor_data( $input['id'], wp_slash( $json_data ) );
-
-				$cache_details = mcp_abilities_elementor_invalidate_after_write(
+				$save = mcp_abilities_elementor_save_document_data(
 					(int) $input['id'],
-					$requested_cache_scope
+					$data,
+					$requested_cache_scope,
+					! empty( $input['allow_legacy_style_preservation'] ),
+					false
 				);
+				if ( empty( $save['success'] ) ) {
+					return $save;
+				}
+				$data          = is_array( $save['data'] ?? null ) ? $save['data'] : $data;
+				$cache_details = is_array( $save['cache'] ?? null ) ? $save['cache'] : array();
 
 				$response = array(
 					'success'    => true,
