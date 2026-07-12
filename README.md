@@ -8,13 +8,13 @@ Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage 
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://php.net)
 
 **Tested up to:** 7.0
-**Stable tag:** 2.3.32
+**Stable tag:** 2.3.33
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
 ## What It Does
 
-Version 2.3.32 routes targeted element replacement through the shared document-save boundary and preserves unchanged legacy styling without normalizing unrelated subtrees.
+Version 2.3.33 compares the complete legacy-style audit internally so targeted cleanup remains safe even when a page has more than 25 pre-existing violations.
 
 Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
 
@@ -335,6 +335,10 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 ```
 
 ## Changelog
+
+### 2.3.33
+
+- Compare the complete legacy-style audit internally while keeping public error responses bounded to 25 items.
 
 ### 2.3.32
 

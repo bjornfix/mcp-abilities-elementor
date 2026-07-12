@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.3.32
+ * Version: 2.3.33
  * Author: basicus
  * Author URI: https://profiles.wordpress.org/basicus/
  * License: GPL-2.0+
@@ -1086,9 +1086,15 @@ function mcp_abilities_elementor_save_document_data( int $post_id, array $data, 
 	$normalized_data = $normalize_background_subtrees ? mcp_abilities_elementor_normalize_background_container_subtrees( $data ) : $data;
 	$style_policy    = mcp_abilities_elementor_enforce_global_style_policy( $normalized_data );
 	if ( empty( $style_policy['success'] ) ) {
-		$existing_data   = json_decode( (string) get_post_meta( $post_id, '_elementor_data', true ), true );
-		$existing_policy = is_array( $existing_data ) ? mcp_abilities_elementor_enforce_global_style_policy( $existing_data ) : array();
-		if ( ! $allow_legacy_style_preservation || ! mcp_abilities_elementor_legacy_style_violations_preserved( $existing_policy, $style_policy ) ) {
+		$existing_data = json_decode( (string) get_post_meta( $post_id, '_elementor_data', true ), true );
+		if ( $allow_legacy_style_preservation && is_array( $existing_data ) ) {
+			$existing_policy = mcp_abilities_elementor_enforce_global_style_policy( $existing_data, PHP_INT_MAX );
+			$complete_policy = mcp_abilities_elementor_enforce_global_style_policy( $normalized_data, PHP_INT_MAX );
+		} else {
+			$existing_policy = array();
+			$complete_policy = $style_policy;
+		}
+		if ( ! $allow_legacy_style_preservation || ! mcp_abilities_elementor_legacy_style_violations_preserved( $existing_policy, $complete_policy ) ) {
 			return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
 		}
 	}
@@ -3910,10 +3916,11 @@ function mcp_abilities_elementor_is_local_typography_setting_key( string $key ):
  * @param string $type Violation type.
  * @param mixed  $value Setting value.
  * @param string $message Human-readable message.
+ * @param int    $max_violations Maximum violations to collect.
  * @return void
  */
-function mcp_abilities_elementor_add_global_style_violation( array &$violations, array $element, string $path, string $setting, string $type, $value, string $message ): void {
-	if ( count( $violations ) >= 25 ) {
+function mcp_abilities_elementor_add_global_style_violation( array &$violations, array $element, string $path, string $setting, string $type, $value, string $message, int $max_violations = 25 ): void {
+	if ( count( $violations ) >= $max_violations ) {
 		return;
 	}
 
@@ -3937,9 +3944,10 @@ function mcp_abilities_elementor_add_global_style_violation( array &$violations,
  * @param array  $color_map Exact color-to-global-reference map.
  * @param array  $violations Violation list.
  * @param string $path Data path.
+ * @param int    $max_violations Maximum violations to collect.
  * @return array
  */
-function mcp_abilities_elementor_enforce_global_style_policy_on_element( array $element, array $color_map, array &$violations, string $path ): array {
+function mcp_abilities_elementor_enforce_global_style_policy_on_element( array $element, array $color_map, array &$violations, string $path, int $max_violations = 25 ): array {
 	$settings = isset( $element['settings'] ) && is_array( $element['settings'] ) ? $element['settings'] : array();
 	$globals  = isset( $settings['__globals__'] ) && is_array( $settings['__globals__'] ) ? $settings['__globals__'] : array();
 
@@ -3956,7 +3964,8 @@ function mcp_abilities_elementor_enforce_global_style_policy_on_element( array $
 				$key,
 				'inline_style',
 				$value,
-				'Inline style attributes are not allowed in Elementor write abilities; use widget settings backed by global kit values.'
+				'Inline style attributes are not allowed in Elementor write abilities; use widget settings backed by global kit values.',
+				$max_violations
 			);
 			continue;
 		}
@@ -3974,7 +3983,8 @@ function mcp_abilities_elementor_enforce_global_style_policy_on_element( array $
 				$key,
 				'local_typography',
 				$value,
-				'Local typography settings are not allowed; update the Elementor Kit typography or reference a global typography token instead.'
+				'Local typography settings are not allowed; update the Elementor Kit typography or reference a global typography token instead.',
+				$max_violations
 			);
 			continue;
 		}
@@ -4002,7 +4012,8 @@ function mcp_abilities_elementor_enforce_global_style_policy_on_element( array $
 				$key,
 				'local_color',
 				$value,
-				'Local colors are not allowed; use an Elementor Kit global color token or update the kit first.'
+				'Local colors are not allowed; use an Elementor Kit global color token or update the kit first.',
+				$max_violations
 			);
 		}
 	}
@@ -4019,7 +4030,8 @@ function mcp_abilities_elementor_enforce_global_style_policy_on_element( array $
 					$child,
 					$color_map,
 					$violations,
-					$path . '.elements[' . $index . ']'
+					$path . '.elements[' . $index . ']',
+					$max_violations
 				);
 			}
 		}
@@ -4032,9 +4044,10 @@ function mcp_abilities_elementor_enforce_global_style_policy_on_element( array $
  * Enforce the default Elementor write policy: global colors/typography only.
  *
  * @param array $data Elementor document data.
+ * @param int   $max_violations Maximum violations to collect.
  * @return array
  */
-function mcp_abilities_elementor_enforce_global_style_policy( array $data ): array {
+function mcp_abilities_elementor_enforce_global_style_policy( array $data, int $max_violations = 25 ): array {
 	$color_map  = mcp_abilities_elementor_get_global_color_reference_map();
 	$violations = array();
 
@@ -4044,7 +4057,8 @@ function mcp_abilities_elementor_enforce_global_style_policy( array $data ): arr
 				$element,
 				$color_map,
 				$violations,
-				'data[' . $index . ']'
+				'data[' . $index . ']',
+				$max_violations
 			);
 		}
 	}
