@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.3.28
+ * Version: 2.3.29
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -1078,13 +1078,18 @@ function mcp_abilities_elementor_reorder_children_in_tree( array &$elements, arr
  * @param int    $post_id Post ID.
  * @param array  $data Elementor data.
  * @param string $cache_scope Cache scope.
+ * @param bool   $allow_legacy_style_preservation Allow unchanged legacy style debt.
  * @return array
  */
-function mcp_abilities_elementor_save_document_data( int $post_id, array $data, string $cache_scope = 'post' ): array {
+function mcp_abilities_elementor_save_document_data( int $post_id, array $data, string $cache_scope = 'post', bool $allow_legacy_style_preservation = false ): array {
 	$normalized_data = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
 	$style_policy    = mcp_abilities_elementor_enforce_global_style_policy( $normalized_data );
 	if ( empty( $style_policy['success'] ) ) {
-		return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
+		$existing_data   = json_decode( (string) get_post_meta( $post_id, '_elementor_data', true ), true );
+		$existing_policy = is_array( $existing_data ) ? mcp_abilities_elementor_enforce_global_style_policy( $existing_data ) : array();
+		if ( ! $allow_legacy_style_preservation || ! mcp_abilities_elementor_legacy_style_violations_preserved( $existing_policy, $style_policy ) ) {
+			return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
+		}
 	}
 
 	$normalized_data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $normalized_data;
@@ -1108,6 +1113,7 @@ function mcp_abilities_elementor_save_document_data( int $post_id, array $data, 
 		'data'    => $normalized_data,
 		'style_policy' => array(
 			'enforced' => true,
+			'legacy_preserved' => ! empty( $style_policy['violations'] ),
 			'normalized' => $style_policy['normalized'] ?? array(),
 		),
 	);
@@ -4235,6 +4241,49 @@ function mcp_abilities_elementor_global_style_policy_error_response( array $poli
 		'message'    => 'Global Elementor style policy rejected local style settings. Use Elementor Kit global colors/typography and remove inline style attributes before writing.',
 		'violations' => $policy_result['violations'] ?? array(),
 	);
+}
+
+/**
+ * Allow a narrow legacy document update only when every remaining style
+ * violation already existed at the same element/setting and its style value
+ * is unchanged. Removing legacy violations is allowed; introducing or changing
+ * one is not.
+ *
+ * @param array $before_policy Policy result for the stored document.
+ * @param array $after_policy Policy result for the proposed document.
+ * @return bool
+ */
+function mcp_abilities_elementor_legacy_style_violations_preserved( array $before_policy, array $after_policy ): bool {
+	$before = array();
+	foreach ( (array) ( $before_policy['violations'] ?? array() ) as $violation ) {
+		if ( ! is_array( $violation ) ) {
+			continue;
+		}
+		$key = implode( '|', array( (string) ( $violation['element_id'] ?? '' ), (string) ( $violation['setting'] ?? '' ), (string) ( $violation['type'] ?? '' ) ) );
+		$before[ $key ] = (string) ( $violation['value'] ?? '' );
+	}
+
+	foreach ( (array) ( $after_policy['violations'] ?? array() ) as $violation ) {
+		if ( ! is_array( $violation ) ) {
+			return false;
+		}
+		$key   = implode( '|', array( (string) ( $violation['element_id'] ?? '' ), (string) ( $violation['setting'] ?? '' ), (string) ( $violation['type'] ?? '' ) ) );
+		$value = (string) ( $violation['value'] ?? '' );
+		if ( ! array_key_exists( $key, $before ) ) {
+			return false;
+		}
+		if ( 'inline_style' === (string) ( $violation['type'] ?? '' ) ) {
+			preg_match_all( '/\\sstyle\\s*=\\s*(["\'])(.*?)\\1/is', $before[ $key ], $before_styles );
+			preg_match_all( '/\\sstyle\\s*=\\s*(["\'])(.*?)\\1/is', $value, $after_styles );
+			if ( ( $before_styles[2] ?? array() ) !== ( $after_styles[2] ?? array() ) ) {
+				return false;
+			}
+		} elseif ( $before[ $key ] !== $value ) {
+			return false;
+		}
+	}
+
+	return true;
 }
 
 /**

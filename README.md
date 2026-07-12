@@ -8,7 +8,7 @@ Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage 
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://php.net)
 
 **Tested up to:** 7.0
-**Stable tag:** 2.3.28
+**Stable tag:** 2.3.29
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -333,6 +333,11 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 ```
 
 ## Changelog
+
+### 2.3.29
+
+- Add explicit `allow_legacy_style_preservation` support for targeted text/settings patches and element removal.
+- Require every retained legacy local color, typography value, and inline style attribute to remain unchanged; new or modified local styling is still rejected.
 
 ### 2.3.12
 

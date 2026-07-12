@@ -953,6 +953,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 					'id'           => array( 'type' => 'integer' ),
 					'element_id'   => array( 'type' => 'string' ),
 					'force_delete' => array( 'type' => 'boolean', 'default' => false ),
+					'allow_legacy_style_preservation' => array( 'type' => 'boolean', 'default' => false, 'description' => 'Allow removal when all remaining legacy style violations are unchanged.' ),
 					'cache_scope'  => array( 'type' => 'string', 'enum' => array( 'none', 'post', 'site' ), 'default' => 'post' ),
 				),
 				'additionalProperties' => false,
@@ -980,7 +981,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 				}
 				$removed = array();
 				mcp_abilities_elementor_remove_element_from_tree( $data, $element_id, $removed );
-				$save = mcp_abilities_elementor_save_document_data( $post_id, $data, (string) ( $input['cache_scope'] ?? 'post' ) );
+				$save = mcp_abilities_elementor_save_document_data( $post_id, $data, (string) ( $input['cache_scope'] ?? 'post' ), ! empty( $input['allow_legacy_style_preservation'] ) );
 				if ( empty( $save['success'] ) ) {
 					return array( 'success' => false, 'message' => (string) ( $save['message'] ?? 'Failed to save Elementor data' ) );
 				}
@@ -1309,6 +1310,11 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 						'default'     => false,
 						'description' => 'If true, treat "find" as a regex pattern.',
 					),
+					'allow_legacy_style_preservation' => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'Allow a content-only patch when every pre-existing style violation remains structurally unchanged.',
+					),
 					'cache_scope' => array(
 						'type'        => 'string',
 						'enum'        => array( 'none', 'post', 'site' ),
@@ -1402,7 +1408,11 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 					$normalized_data = mcp_abilities_elementor_normalize_background_container_subtrees( $test_decode );
 					$style_policy    = mcp_abilities_elementor_enforce_global_style_policy( $normalized_data );
 					if ( empty( $style_policy['success'] ) ) {
-						return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
+						$stored_decode   = json_decode( $elementor_data, true );
+						$existing_policy = is_array( $stored_decode ) ? mcp_abilities_elementor_enforce_global_style_policy( $stored_decode ) : array();
+						if ( empty( $input['allow_legacy_style_preservation'] ) || ! mcp_abilities_elementor_legacy_style_violations_preserved( $existing_policy, $style_policy ) ) {
+							return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
+						}
 					}
 					$normalized_data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $normalized_data;
 					$write_guard     = mcp_abilities_elementor_audit_write_guard( $normalized_data );
@@ -1750,6 +1760,11 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 						'default'     => 'post',
 						'description' => 'Cache invalidation scope after write. Ignored when dry_run=true.',
 					),
+					'allow_legacy_style_preservation' => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'Allow a settings/content merge when every pre-existing style violation remains unchanged.',
+					),
 				),
 				'additionalProperties' => false,
 			),
@@ -1852,7 +1867,10 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 
 				$style_policy = mcp_abilities_elementor_enforce_global_style_policy( array( $merged_element ) );
 				if ( empty( $style_policy['success'] ) ) {
-					return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
+					$original_policy = mcp_abilities_elementor_enforce_global_style_policy( array( $original_element ) );
+					if ( empty( $input['allow_legacy_style_preservation'] ) || ! mcp_abilities_elementor_legacy_style_violations_preserved( $original_policy, $style_policy ) ) {
+						return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
+					}
 				}
 				if ( isset( $style_policy['data'][0] ) && is_array( $style_policy['data'][0] ) ) {
 					$merged_element = $style_policy['data'][0];
