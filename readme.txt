@@ -3,7 +3,7 @@ Contributors: devenia
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 7.0
-Stable tag: 2.3.29
+Stable tag: 2.3.30
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -14,7 +14,7 @@ Elementor page builder integration for WordPress via MCP.
 
 This add-on plugin exposes Elementor functionality through MCP (Model Context Protocol). Your AI assistant can read Elementor page structures, locate and update elements, manage templates and conditions, and run Elementor tools like maintenance mode, experiments, and URL replacement.
 
-Version 2.3.29 lets explicit native Elementor operations preserve unchanged legacy style debt while still rejecting new or modified local styles. Version 2.3.28 fixes global style policy handling for native Elementor background controls.
+Version 2.3.30 applies safe legacy-style preservation to the canonical element deletion ability. Version 2.3.29 adds the underlying preservation contract for targeted native operations.
 
 Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilities/) ecosystem.
 
@@ -59,6 +59,9 @@ Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilit
 * [All Add-on Plugins](https://devenia.com/plugins/mcp-expose-abilities/#add-ons)
 
 == Changelog ==
+
+= 2.3.30 =
+* Fixed: the canonical `elementor/delete-element` ability can remove a native Elementor element while preserving all unchanged legacy style debt.
 
 = 2.3.29 =
 * Added: explicit `allow_legacy_style_preservation` support for targeted text/settings patches and element removal.

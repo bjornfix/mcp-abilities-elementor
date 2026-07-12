@@ -8,7 +8,7 @@ Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage 
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://php.net)
 
 **Tested up to:** 7.0
-**Stable tag:** 2.3.29
+**Stable tag:** 2.3.30
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -333,6 +333,10 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 ```
 
 ## Changelog
+
+### 2.3.30
+
+- Let the canonical `elementor/delete-element` ability remove a native Elementor element while preserving all unchanged legacy style debt.
 
 ### 2.3.29
 

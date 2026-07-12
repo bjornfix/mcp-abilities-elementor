@@ -41,6 +41,11 @@ function mcp_abilities_elementor_register_element_lookup_abilities(): void {
 						'default'     => false,
 						'description' => 'Allow deletion of top-level elements or populated containers/widgets that would otherwise be blocked as a safety guard.',
 					),
+					'allow_legacy_style_preservation' => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'Allow deletion when every remaining legacy style violation is unchanged.',
+					),
 					'cache_scope' => array(
 						'type'        => 'string',
 						'enum'        => array( 'none', 'post', 'site' ),
@@ -196,7 +201,11 @@ function mcp_abilities_elementor_register_element_lookup_abilities(): void {
 				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
 				$style_policy = mcp_abilities_elementor_enforce_global_style_policy( $data );
 				if ( empty( $style_policy['success'] ) ) {
-					return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
+					$stored_decode   = json_decode( $elementor_data, true );
+					$existing_policy = is_array( $stored_decode ) ? mcp_abilities_elementor_enforce_global_style_policy( $stored_decode ) : array();
+					if ( empty( $input['allow_legacy_style_preservation'] ) || ! mcp_abilities_elementor_legacy_style_violations_preserved( $existing_policy, $style_policy ) ) {
+						return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
+					}
 				}
 				$data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $data;
 				$json_data = wp_json_encode( $data );
