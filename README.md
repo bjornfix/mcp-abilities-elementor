@@ -8,13 +8,13 @@ Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage 
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://php.net)
 
 **Tested up to:** 7.0
-**Stable tag:** 2.3.34
+**Stable tag:** 2.3.35
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
 ## What It Does
 
-Version 2.3.34 initializes Elementor version metadata when a native document is first written to an existing WordPress post or page.
+Version 2.3.35 keeps the generic Elementor Module free of site-specific campaign recipes.
 
 Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
 
@@ -122,7 +122,6 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 | `elementor/zero-container-padding-subtree` | Zero container padding in a subtree |
 | `elementor/copy-lane-settings` | Copy width/gap lane settings between elements |
 | `elementor/copy-row-balance` | Copy row rhythm and child column balance between rows |
-| `elementor/normalize-campaign-detail-page` | Apply the standard campaign-detail lane/gutter/rhythm recipe |
 | `elementor/image-widget-to-background-container` | Convert an image-widget container into a native background-image container |
 | `elementor/fix-visible-gap-rhythm` | Remove hidden leading-edge spacing that breaks visible gap rhythm |
 | `elementor/enforce-boundary-coherence` | Normalize a subtree to true full-width or coherent boxed left/right boundaries |
@@ -336,6 +335,10 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 
 ## Changelog
 
+### 2.3.35
+
+- Removed the site-specific campaign-detail recipe from the generic Elementor ability catalogue. Site-owned layout recipes now belong in site presentation Adapters.
+
 ### 2.3.34
 
 - Initialize Elementor and Elementor Pro version metadata during native document saves so Theme Builder Post Content renders newly converted posts.
@@ -496,7 +499,6 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 - Added: `elementor/enforce-boundary-coherence` to normalize a subtree to true edge-to-edge full width or a consistent boxed lane with matching outer and inner left/right boundaries
 
 ### 2.2.13
-- Added: `elementor/normalize-campaign-detail-page` to apply the repeated `1140px` lane / zero-gutter / `18px` rhythm / widened-about-block recipe in one call
 - Added: `elementor/image-widget-to-background-container` to convert an image-widget column into a native background-image container with the same local media
 - Added: `elementor/fix-visible-gap-rhythm` to remove hidden top padding/margin that makes visible section gaps look larger than the intended rhythm
 

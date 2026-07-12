@@ -3,7 +3,7 @@ Contributors: basicus
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 7.0
-Stable tag: 2.3.34
+Stable tag: 2.3.35
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -14,7 +14,7 @@ Elementor page builder integration for WordPress via MCP.
 
 This add-on plugin exposes Elementor functionality through MCP (Model Context Protocol). Your AI assistant can read Elementor page structures, locate and update elements, manage templates and conditions, and run Elementor tools like maintenance mode, experiments, and URL replacement.
 
-Version 2.3.34 initializes Elementor version metadata when a native document is first written to an existing WordPress post or page.
+Version 2.3.35 keeps the generic Elementor Module free of site-specific campaign recipes.
 
 Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilities/) ecosystem.
 
@@ -59,6 +59,9 @@ Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilit
 * [All Add-on Plugins](https://devenia.com/plugins/mcp-expose-abilities/#add-ons)
 
 == Changelog ==
+
+= 2.3.35 =
+* Removed the site-specific campaign-detail recipe from the generic Elementor ability catalogue. Site-owned layout recipes now belong in site presentation Adapters.
 
 = 2.3.34 =
 * Fixed: native document saves initialize Elementor and Elementor Pro version metadata so Theme Builder Post Content renders newly converted posts.
@@ -273,7 +276,6 @@ Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilit
 * Added: `elementor/enforce-boundary-coherence` to normalize a subtree to either true full width or a coherent boxed lane with matching outer and inner left/right boundaries
 
 = 2.2.13 =
-* Added: `elementor/normalize-campaign-detail-page` to apply the repeated campaign-detail lane/gutter/rhythm recipe in one call
 * Added: `elementor/image-widget-to-background-container` to convert an image-widget container into a native background-image container using the same media
 * Added: `elementor/fix-visible-gap-rhythm` to remove hidden leading-edge padding/margin that makes visible section gaps drift from the intended rhythm
 
