@@ -198,7 +198,9 @@ function mcp_abilities_elementor_register_element_lookup_abilities(): void {
 					);
 				}
 
-				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
+				// Deletion must not normalize unrelated legacy subtrees. The style
+				// preservation check compares the stored document with the same
+				// document minus the requested element.
 				$style_policy = mcp_abilities_elementor_enforce_global_style_policy( $data );
 				if ( empty( $style_policy['success'] ) ) {
 					$stored_decode   = json_decode( $elementor_data, true );

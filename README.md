@@ -8,11 +8,13 @@ Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage 
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://php.net)
 
 **Tested up to:** 7.0
-**Stable tag:** 2.3.30
+**Stable tag:** 2.3.31
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
 ## What It Does
+
+Version 2.3.31 keeps native element deletion local so unrelated legacy Elementor subtrees are not normalized during the style-preservation comparison.
 
 Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
 
