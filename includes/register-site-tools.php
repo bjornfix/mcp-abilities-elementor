@@ -190,7 +190,7 @@ function mcp_abilities_elementor_register_site_tool_abilities(): void {
 				),
 			),
 			'execute_callback'    => function ( $input = array() ): array {
-				$kit_id = get_option( 'elementor_active_kit' );
+				$kit_id = mcp_abilities_elementor_get_active_kit_id();
 				if ( ! $kit_id ) {
 					return array( 'success' => false, 'message' => 'No active Elementor kit found' );
 				}
@@ -263,7 +263,7 @@ function mcp_abilities_elementor_register_site_tool_abilities(): void {
 					return array( 'success' => false, 'message' => 'Settings object is required' );
 				}
 
-				$kit_id = get_option( 'elementor_active_kit' );
+				$kit_id = mcp_abilities_elementor_get_active_kit_id();
 				if ( ! $kit_id ) {
 					return array( 'success' => false, 'message' => 'No active Elementor kit found' );
 				}

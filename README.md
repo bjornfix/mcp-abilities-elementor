@@ -8,13 +8,13 @@ Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage 
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://php.net)
 
 **Tested up to:** 7.0
-**Stable tag:** 2.3.35
+**Stable tag:** 2.3.36
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
 ## What It Does
 
-Version 2.3.35 keeps the generic Elementor Module free of site-specific campaign recipes.
+Version 2.3.36 normalizes the active Elementor Kit ID before guarded global-style reads and writes.
 
 Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
 

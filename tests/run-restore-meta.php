@@ -25,6 +25,14 @@ function wp_slash( $value ) {
 	return addslashes( (string) $value );
 }
 
+function get_option( string $name, $default = false ) {
+	if ( 'elementor_active_kit' === $name ) {
+		return '259';
+	}
+
+	return $default;
+}
+
 require_once __DIR__ . '/../mcp-abilities-elementor.php';
 
 function assert_same( $expected, $actual, string $message ): void {
@@ -77,6 +85,12 @@ assert_false(
 assert_true(
 	mcp_abilities_elementor_is_local_color_setting_key( 'tabs_title_background_color_color' ),
 	'Elementor background color value remains subject to global color policy'
+);
+
+assert_same(
+	259,
+	mcp_abilities_elementor_get_active_kit_id(),
+	'Active Elementor kit option is normalized to an integer at the owner seam'
 );
 
 echo "Restore meta tests passed.\n";

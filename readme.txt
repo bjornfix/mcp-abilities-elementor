@@ -3,7 +3,7 @@ Contributors: basicus
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 7.0
-Stable tag: 2.3.35
+Stable tag: 2.3.36
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -14,7 +14,7 @@ Elementor page builder integration for WordPress via MCP.
 
 This add-on plugin exposes Elementor functionality through MCP (Model Context Protocol). Your AI assistant can read Elementor page structures, locate and update elements, manage templates and conditions, and run Elementor tools like maintenance mode, experiments, and URL replacement.
 
-Version 2.3.35 keeps the generic Elementor Module free of site-specific campaign recipes.
+Version 2.3.36 normalizes the active Elementor Kit ID before guarded global-style reads and writes.
 
 Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilities/) ecosystem.
 
@@ -59,6 +59,9 @@ Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilit
 * [All Add-on Plugins](https://devenia.com/plugins/mcp-expose-abilities/#add-ons)
 
 == Changelog ==
+
+= 2.3.36 =
+* Fixed: `get-kit-settings` and `update-kit-settings` normalize the active Kit option to an integer before guarded metadata access.
 
 = 2.3.35 =
 * Removed the site-specific campaign-detail recipe from the generic Elementor ability catalogue. Site-owned layout recipes now belong in site presentation Adapters.
