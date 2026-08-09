@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: MCP Abilities - Elementor
- * Plugin URI: https://github.com/bjornfix/mcp-abilities-elementor
+ * Plugin URI: https://devenia.com/plugins/mcp-abilities-elementor/
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
  * Version: 2.3.36
  * Author: basicus
@@ -11,6 +11,7 @@
  * Requires at least: 6.9
  * Tested up to: 7.0
  * Requires PHP: 8.0
+ * Requires Plugins: elementor
  *
  * @package MCP_Abilities_Elementor
  */
@@ -41,7 +42,7 @@ require_once __DIR__ . '/includes/register-site-tools.php';
 function mcp_abilities_elementor_check_dependencies(): bool {
 	if ( ! function_exists( 'wp_register_ability' ) ) {
 		add_action( 'admin_notices', function () {
-			echo '<div class="notice notice-error"><p><strong>MCP Abilities - Elementor</strong> requires the <a href="https://github.com/WordPress/abilities-api">Abilities API</a> plugin to be installed and activated.</p></div>';
+			echo '<div class="notice notice-error"><p><strong>MCP Abilities - Elementor</strong> requires the native <a href="https://developer.wordpress.org/apis/abilities-api/">WordPress Abilities API</a> in WordPress 6.9 or newer.</p></div>';
 		} );
 		return false;
 	}

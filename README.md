@@ -78,44 +78,50 @@ This is a good fit for:
 
 - agencies managing WordPress sites with AI-assisted maintenance
 - operators who want agents to do real WordPress work instead of producing instructions
-- teams already using MCP Expose Abilities
+- teams already using the WordPress MCP Adapter
 - sites where this WordPress area is updated often enough to deserve automation
 
 It is especially useful when the manual version is repetitive enough that important maintenance gets delayed.
 
 ## Documentation
 
-Start with the main plugin page and base stack documentation:
+Start with the plugin page and the runtime dependency sources:
 
-- [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilities/)
 - [Plugin page](https://devenia.com/plugins/mcp-abilities-elementor/)
-- [Getting Started](https://github.com/bjornfix/mcp-expose-abilities/wiki/Getting-Started)
-- [Install Order and Dependencies](https://github.com/bjornfix/mcp-expose-abilities/wiki/Install-Order-and-Dependencies)
+- [WordPress Abilities API](https://developer.wordpress.org/apis/abilities-api/)
+- [WordPress MCP Adapter](https://github.com/WordPress/mcp-adapter/)
+- [Elementor](https://wordpress.org/plugins/elementor/)
 
-If you are using an AI agent, the simplest instruction is often just:
+## Dependencies
 
-- `Read https://github.com/bjornfix/mcp-expose-abilities and figure out the stack before making changes.`
+- [WordPress Abilities API](https://developer.wordpress.org/apis/abilities-api/) in WordPress 6.9 or newer provides native ability registration.
+- [PHP 8.0](https://www.php.net/releases/8.0/en.php) or newer provides the required server runtime.
+- [WordPress MCP Adapter](https://github.com/WordPress/mcp-adapter/) installed and active exposes registered WordPress abilities to MCP clients.
+- [Elementor](https://wordpress.org/plugins/elementor/) installed and active provides the document, template, widget, and site-tool runtime used by the add-on.
+- [Elementor Pro](https://elementor.com/pro/) is optional and enables the Theme Builder, custom-code, and form-submission functions that require Pro.
 
 ## Start Here
 
 If you are new to the stack, use this order:
 
-1. Install **Abilities API**.
-2. Install **MCP Adapter**.
-3. Install **MCP Expose Abilities**.
+1. Confirm **WordPress 6.9 or newer** and **PHP 8.0 or newer**.
+2. Install and activate **WordPress MCP Adapter** and **Elementor**.
+3. Install **Elementor Pro** only when the Pro-specific functions are needed.
 4. Install **MCP Abilities - Elementor**.
 5. Confirm the new abilities appear in discovery.
 6. Give the agent a clear task that uses this add-on.
 
 If you skip base-stack verification and start with add-ons immediately, troubleshooting gets harder than it needs to be.
 
-## Abilities (76)
+## Abilities (89)
 
 ### Page/Post Data
 | Ability | Description |
 |---------|-------------|
 | `elementor/get-data` | Get Elementor JSON structure for a page |
+| `elementor/clone-data` | Copy complete Elementor data and page settings between documents with explicit confirmation |
 | `elementor/get-element` | Get a specific element by ID |
+| `elementor/get-widget-controls` | Inspect the native control keys and metadata for an Elementor widget type |
 | `elementor/find-elements` | Find elements by type, widget, or text |
 | `elementor/update-element` | Update a specific element by ID |
 | `elementor/merge-element-settings` | Deep-merge settings into one element |
@@ -677,9 +683,8 @@ GPL-2.0+
 
 ## Links
 
-- [Plugin Page](https://devenia.com/plugins/mcp-expose-abilities/#add-ons)
-- [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilities/)
-- [GitHub Releases](https://github.com/bjornfix/mcp-abilities-elementor/releases)
+- [Plugin Page](https://devenia.com/plugins/mcp-abilities-elementor/)
+- [Stable Download](https://downloads.devenia.com/mcp-abilities-elementor.zip)
 
 ## Star and Share
 

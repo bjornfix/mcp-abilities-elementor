@@ -5,6 +5,7 @@ Requires at least: 6.9
 Tested up to: 7.0
 Stable tag: 2.3.36
 Requires PHP: 8.0
+Requires Plugins: elementor
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -16,13 +17,13 @@ This add-on plugin exposes Elementor functionality through MCP (Model Context Pr
 
 Version 2.3.36 normalizes the active Elementor Kit ID before guarded global-style reads and writes.
 
-Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilities/) ecosystem.
-
 = Requirements =
 
-* [MCP Expose Abilities](https://github.com/bjornfix/mcp-expose-abilities) (core plugin)
-* [Elementor](https://wordpress.org/plugins/elementor/) plugin
-* Elementor Pro is optional for the Pro-specific abilities
+* [WordPress Abilities API](https://developer.wordpress.org/apis/abilities-api/) in WordPress 6.9 or newer
+* [PHP 8.0](https://www.php.net/releases/8.0/en.php) or newer
+* [WordPress MCP Adapter](https://github.com/WordPress/mcp-adapter/) installed and active
+* [Elementor](https://wordpress.org/plugins/elementor/) installed and active
+* [Elementor Pro](https://elementor.com/pro/) is optional and enables the Pro-specific abilities
 
 = Abilities Included =
 
@@ -46,17 +47,17 @@ Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilit
 
 == Installation ==
 
-1. Install the required plugins (Abilities API, MCP Adapter, MCP Expose Abilities, Elementor)
-2. Download the latest release
-3. Upload via WordPress Admin → Plugins → Add New → Upload Plugin
-4. Activate the plugin
-5. The abilities are now available via the MCP endpoint
+1. Confirm WordPress 6.9 or newer and PHP 8.0 or newer
+2. Install and activate WordPress MCP Adapter and Elementor
+3. Download the latest release
+4. Upload via WordPress Admin → Plugins → Add New → Upload Plugin
+5. Activate the plugin
+6. The abilities are now available via the MCP endpoint
 
 = Links =
 
-* [Plugin Page](https://devenia.com/plugins/mcp-expose-abilities/)
-* [Core Plugin (MCP Expose Abilities)](https://github.com/bjornfix/mcp-expose-abilities)
-* [All Add-on Plugins](https://devenia.com/plugins/mcp-expose-abilities/#add-ons)
+* [Plugin Page](https://devenia.com/plugins/mcp-abilities-elementor/)
+* [Stable Download](https://downloads.devenia.com/mcp-abilities-elementor.zip)
 
 == Changelog ==
 
