@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://devenia.com/plugins/mcp-abilities-elementor/
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.3.37
+ * Version: 2.3.36
  * Author: basicus
  * Author URI: https://profiles.wordpress.org/basicus/
  * License: GPL-2.0+
@@ -6179,14 +6179,9 @@ function mcp_abilities_elementor_build_popup_display_settings( array $popup_disp
 		if ( isset( $timing['show_after'] ) ) {
 			$popup_settings['timing']['page_load_delay'] = (int) $timing['show_after'];
 		}
-		if ( array_key_exists( 'show_times', $timing ) ) {
-			$show_times = (int) $timing['show_times'];
-			if ( $show_times > 0 ) {
-				$popup_settings['timing']['times_count'] = $show_times;
-				$popup_settings['timing']['times']       = 'yes';
-			} else {
-				unset( $popup_settings['timing']['times'], $popup_settings['timing']['times_count'] );
-			}
+		if ( isset( $timing['show_times'] ) ) {
+			$popup_settings['timing']['times_count'] = (int) $timing['show_times'];
+			$popup_settings['timing']['times']       = 'yes';
 		}
 	}
 

@@ -2,19 +2,19 @@
 
 Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
 
-[![Release 2.3.37](https://img.shields.io/badge/release-2.3.37-blue.svg)](https://downloads.devenia.com/mcp-abilities-elementor.zip)
+[![Release 2.3.36](https://img.shields.io/badge/release-2.3.36-blue.svg)](https://downloads.devenia.com/mcp-abilities-elementor.zip)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 [![WordPress](https://img.shields.io/badge/WordPress-6.9%2B-blue.svg)](https://wordpress.org)
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://php.net)
 
 **Tested up to:** 7.0
-**Stable tag:** 2.3.37
+**Stable tag:** 2.3.36
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
 ## What It Does
 
-Version 2.3.37 lets popup updates clear an existing per-visitor display limit through the Elementor template Interface.
+Version 2.3.36 normalizes the active Elementor Kit ID before guarded global-style reads and writes.
 
 Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
 
@@ -340,10 +340,6 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 ```
 
 ## Changelog
-
-### 2.3.37
-
-- Let `elementor/update-template` clear a popup display limit with `popup_display.timing.show_times: 0`.
 
 ### 2.3.35
 

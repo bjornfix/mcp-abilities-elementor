@@ -12,46 +12,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Return the shared popup display settings schema.
- *
- * @return array<string,mixed>
- */
-function mcp_abilities_elementor_popup_display_schema(): array {
-	return array(
-		'type'                 => 'object',
-		'description'          => 'Popup display settings: timing and triggers.',
-		'properties'           => array(
-			'triggers' => array(
-				'type'        => 'array',
-				'items'       => array(
-					'type' => 'string',
-					'enum' => array( 'on_page_load', 'on_scroll', 'on_click', 'on_exit_intent', 'after_inactivity' ),
-				),
-				'description' => 'Trigger types.',
-			),
-			'timing'   => array(
-				'type'                 => 'object',
-				'description'          => 'Popup timing settings.',
-				'properties'           => array(
-					'show_after' => array(
-						'type'        => 'integer',
-						'minimum'     => 0,
-						'description' => 'Seconds before the popup opens.',
-					),
-					'show_times' => array(
-						'type'        => 'integer',
-						'minimum'     => 0,
-						'description' => 'Maximum number of displays per visitor. Set to 0 to clear the limit.',
-					),
-				),
-				'additionalProperties' => false,
-			),
-		),
-		'additionalProperties' => false,
-	);
-}
-
-/**
  * Register template management abilities.
  */
 function mcp_abilities_elementor_register_template_abilities(): void {
@@ -485,7 +445,20 @@ function mcp_abilities_elementor_register_template_abilities(): void {
 						'type'        => 'array',
 						'description' => 'Display conditions for theme builder templates (header/footer/popup). Format: [["include", "general"]] for entire site.',
 					),
-					'popup_display'      => mcp_abilities_elementor_popup_display_schema(),
+					'popup_display'      => array(
+						'type'        => 'object',
+						'description' => 'Popup display settings: timing, triggers, etc.',
+						'properties'  => array(
+							'triggers'         => array(
+								'type'        => 'array',
+								'description' => 'Trigger types: on_page_load, on_scroll, on_click, on_exit_intent, after_inactivity.',
+							),
+							'timing'           => array(
+								'type'        => 'object',
+								'description' => 'Timing settings: show_after (seconds), show_times (times to show), show_times_until (timestamp).',
+							),
+						),
+					),
 				),
 				'additionalProperties' => false,
 			),
@@ -676,7 +649,10 @@ function mcp_abilities_elementor_register_template_abilities(): void {
 						'type'        => 'array',
 						'description' => 'Display conditions for theme builder templates.',
 					),
-					'popup_display'      => mcp_abilities_elementor_popup_display_schema(),
+					'popup_display'      => array(
+						'type'        => 'object',
+						'description' => 'Popup display settings (triggers, timing).',
+					),
 				),
 				'additionalProperties' => false,
 			),

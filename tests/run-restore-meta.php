@@ -93,36 +93,4 @@ assert_same(
 	'Active Elementor kit option is normalized to an integer at the owner seam'
 );
 
-$popup_display_settings = mcp_abilities_elementor_build_popup_display_settings(
-	array(
-		'timing' => array(
-			'show_times' => 0,
-		),
-	),
-	array(
-		'triggers' => array(
-			'page_load' => 'yes',
-		),
-		'timing'   => array(
-			'page_load_delay' => 0,
-			'times'           => 'yes',
-			'times_count'     => 1,
-		),
-	)
-);
-assert_same(
-	array(
-		'page_load_delay' => 0,
-	),
-	$popup_display_settings['timing'],
-	'A zero show-times value clears an existing popup display limit'
-);
-
-$popup_display_schema = mcp_abilities_elementor_popup_display_schema();
-assert_same(
-	0,
-	$popup_display_schema['properties']['timing']['properties']['show_times']['minimum'],
-	'Popup display Interface exposes zero as the explicit limit-clearing value'
-);
-
 echo "Restore meta tests passed.\n";

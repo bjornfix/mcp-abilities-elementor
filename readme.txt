@@ -3,7 +3,7 @@ Contributors: basicus
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 7.0
-Stable tag: 2.3.37
+Stable tag: 2.3.36
 Requires PHP: 8.0
 Requires Plugins: elementor
 License: GPLv2 or later
@@ -15,7 +15,7 @@ Elementor page builder integration for WordPress via MCP.
 
 This add-on plugin exposes Elementor functionality through MCP (Model Context Protocol). Your AI assistant can read Elementor page structures, locate and update elements, manage templates and conditions, and run Elementor tools like maintenance mode, experiments, and URL replacement.
 
-Version 2.3.37 lets popup updates clear an existing per-visitor display limit through the Elementor template Interface.
+Version 2.3.36 normalizes the active Elementor Kit ID before guarded global-style reads and writes.
 
 = Requirements =
 
@@ -60,9 +60,6 @@ Version 2.3.37 lets popup updates clear an existing per-visitor display limit th
 * [Stable Download](https://downloads.devenia.com/mcp-abilities-elementor.zip)
 
 == Changelog ==
-
-= 2.3.37 =
-* Fixed: `elementor/update-template` can clear a popup display limit by setting `popup_display.timing.show_times` to `0`.
 
 = 2.3.36 =
 * Fixed: `get-kit-settings` and `update-kit-settings` normalize the active Kit option to an integer before guarded metadata access.
