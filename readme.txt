@@ -3,7 +3,7 @@ Contributors: basicus
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 7.0
-Stable tag: 2.3.36
+Stable tag: 2.3.37
 Requires PHP: 8.0
 Requires Plugins: elementor
 License: GPLv2 or later
@@ -15,7 +15,7 @@ Elementor page builder integration for WordPress via MCP.
 
 This add-on plugin exposes Elementor functionality through MCP (Model Context Protocol). Your AI assistant can read Elementor page structures, locate and update elements, manage templates and conditions, and run Elementor tools like maintenance mode, experiments, and URL replacement.
 
-Version 2.3.36 normalizes the active Elementor Kit ID before guarded global-style reads and writes.
+Version 2.3.37 decodes Elementor document data without an extra `wp_unslash` pass so UTF-8 characters like `ø`, `æ`, `å`, `é`, `²` and `—` survive the read-write cycle instead of being stored as literal `u00XX` sequences.
 
 = Requirements =
 
@@ -60,6 +60,9 @@ Version 2.3.36 normalizes the active Elementor Kit ID before guarded global-styl
 * [Stable Download](https://downloads.devenia.com/mcp-abilities-elementor.zip)
 
 == Changelog ==
+
+= 2.3.37 =
+* Fixed: UTF-8 corruption in Elementor document data. `mcp_abilities_elementor_get_post_elements()` no longer runs `wp_unslash()` before `json_decode()`, so Unicode characters no longer persist as literal `u00XX` text after abilities that read and rewrite the document tree.
 
 = 2.3.36 =
 * Fixed: `get-kit-settings` and `update-kit-settings` normalize the active Kit option to an integer before guarded metadata access.
