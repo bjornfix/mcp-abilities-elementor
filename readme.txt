@@ -2,8 +2,8 @@
 Contributors: basicus
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
-Tested up to: 7.0
-Stable tag: 2.3.38
+Tested up to: 7.1
+Stable tag: 2.3.39
 Requires PHP: 8.0
 Requires Plugins: elementor
 License: GPLv2 or later
@@ -60,6 +60,10 @@ Version 2.3.37 decodes Elementor document data without an extra `wp_unslash` pas
 * [Stable Download](https://downloads.devenia.com/mcp-abilities-elementor.zip)
 
 == Changelog ==
+
+= 2.3.39 =
+
+* Uses an Elementor-prefixed source-write hook for native Workflow authorization.
 
 = 2.3.38 =
 

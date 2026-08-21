@@ -37,7 +37,7 @@ function mcp_abilities_elementor_register_ability( string $name, array $args ): 
 				$input   = is_array( $input ) ? $input : array();
 				$post_id = absint( $input['id'] ?? $input['post_id'] ?? 0 );
 				if ( $post_id > 0 ) {
-					apply_filters( 'devenia_workflow_elementor_source_write_authorized', false, $post_id, $name, true );
+					apply_filters( 'mcp_abilities_elementor_source_write_authorized', false, $post_id, $name, true );
 				}
 			}
 

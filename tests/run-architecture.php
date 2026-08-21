@@ -30,7 +30,7 @@ function wp_register_ability( string $name, array $args ): void {
 
 function apply_filters( string $hook, $value, ...$args ) {
 	global $workflow_authorizations;
-	if ( 'devenia_workflow_elementor_source_write_authorized' === $hook ) {
+	if ( 'mcp_abilities_elementor_source_write_authorized' === $hook ) {
 		$workflow_authorizations[] = array( $args[0] ?? 0, $args[1] ?? '' );
 	}
 	return $value;
