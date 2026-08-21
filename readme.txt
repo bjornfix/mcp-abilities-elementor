@@ -3,7 +3,7 @@ Contributors: basicus
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 7.0
-Stable tag: 2.3.37
+Stable tag: 2.3.38
 Requires PHP: 8.0
 Requires Plugins: elementor
 License: GPLv2 or later
@@ -60,6 +60,10 @@ Version 2.3.37 decodes Elementor document data without an extra `wp_unslash` pas
 * [Stable Download](https://downloads.devenia.com/mcp-abilities-elementor.zip)
 
 == Changelog ==
+
+= 2.3.38 =
+
+* Adds a generic source-write authorization hook around registered mutating Elementor abilities so native source saves can keep the owning Workflow authority.
 
 = 2.3.37 =
 * Fixed: UTF-8 corruption in Elementor document data. `mcp_abilities_elementor_get_post_elements()` no longer runs `wp_unslash()` before `json_decode()`, so Unicode characters no longer persist as literal `u00XX` text after abilities that read and rewrite the document tree.

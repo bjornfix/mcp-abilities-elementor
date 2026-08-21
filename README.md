@@ -2,13 +2,13 @@
 
 Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
 
-[![Release 2.3.37](https://img.shields.io/badge/release-2.3.37-blue.svg)](https://downloads.devenia.com/mcp-abilities-elementor.zip)
+[![Release 2.3.38](https://img.shields.io/badge/release-2.3.38-blue.svg)](https://downloads.devenia.com/mcp-abilities-elementor.zip)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 [![WordPress](https://img.shields.io/badge/WordPress-6.9%2B-blue.svg)](https://wordpress.org)
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://php.net)
 
 **Tested up to:** 7.0
-**Stable tag:** 2.3.37
+**Stable tag:** 2.3.38
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -17,6 +17,8 @@ Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage 
 Version 2.3.37 decodes Elementor document data without an extra `wp_unslash` pass so UTF-8 characters like `ø`, `æ`, `å`, `é`, `²` and `—` survive the read-write cycle instead of being stored as literal `u00XX` sequences.
 
 Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
+
+Version 2.3.38 adds a generic source-write authorization hook around registered mutating abilities so native source saves can keep the owning Workflow authority.
 
 This plugin is part of the Devenia MCP abilities ecosystem. It gives an MCP-capable agent a focused, authenticated way to work with Elementor work inside WordPress through MCP.
 
@@ -340,6 +342,10 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 ```
 
 ## Changelog
+
+### 2.3.38
+
+- Adds a generic source-write authorization hook around registered mutating Elementor abilities so native source saves can keep the owning Workflow authority.
 
 ### 2.3.37
 

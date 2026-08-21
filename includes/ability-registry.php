@@ -29,6 +29,22 @@ function mcp_abilities_elementor_register_ability( string $name, array $args ): 
 		$args['meta'] = mcp_abilities_elementor_ability_meta( true );
 	}
 
+	if ( isset( $args['execute_callback'] ) && is_callable( $args['execute_callback'] ) ) {
+		$callback = $args['execute_callback'];
+		$readonly = ! empty( $args['meta']['annotations']['readonly'] );
+		$args['execute_callback'] = static function ( $input = array() ) use ( $name, $callback, $readonly ) {
+			if ( ! $readonly ) {
+				$input   = is_array( $input ) ? $input : array();
+				$post_id = absint( $input['id'] ?? $input['post_id'] ?? 0 );
+				if ( $post_id > 0 ) {
+					apply_filters( 'devenia_workflow_elementor_source_write_authorized', false, $post_id, $name, true );
+				}
+			}
+
+			return $callback( $input );
+		};
+	}
+
 	wp_register_ability( $name, $args );
 }
 
@@ -60,4 +76,3 @@ function mcp_abilities_elementor_register_write_ability( string $name, array $ar
 	$args['meta']             = mcp_abilities_elementor_ability_meta( false, $destructive, false );
 	mcp_abilities_elementor_register_ability( $name, $args );
 }
-
