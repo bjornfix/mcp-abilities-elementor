@@ -3,13 +3,13 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://devenia.com/plugins/mcp-abilities-elementor/
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.3.37
+ * Version: 2.3.40
  * Author: basicus
  * Author URI: https://profiles.wordpress.org/basicus/
  * License: GPL-2.0+
  * License URI: http://www.gnu.org/licenses/gpl-2.0.txt
  * Requires at least: 6.9
- * Tested up to: 7.0
+ * Tested up to: 7.1
  * Requires PHP: 8.0
  * Requires Plugins: elementor
  *
@@ -5478,7 +5478,11 @@ function mcp_abilities_elementor_enforce_boundary_coherence_subtree(
 			}
 
 			if ( 0 === $depth ) {
-				$settings['content_width'] = 'full';
+				$target_content_width = 'boxed' === $mode ? 'boxed' : 'full';
+				if ( ( $settings['content_width'] ?? null ) !== $target_content_width ) {
+					$settings['content_width'] = $target_content_width;
+					$changed                  = true;
+				}
 				if ( 'full_width' === $mode ) {
 					if ( array_key_exists( 'boxed_width', $settings ) ) {
 						unset( $settings['boxed_width'] );
