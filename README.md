@@ -2,19 +2,19 @@
 
 Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
 
-[![Release 2.3.39](https://img.shields.io/badge/release-2.3.39-blue.svg)](https://downloads.devenia.com/mcp-abilities-elementor.zip)
+[![Release 2.3.41](https://img.shields.io/badge/release-2.3.41-blue.svg)](https://downloads.devenia.com/mcp-abilities-elementor.zip)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 [![WordPress](https://img.shields.io/badge/WordPress-6.9%2B-blue.svg)](https://wordpress.org)
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://php.net)
 
 **Tested up to:** 7.1
-**Stable tag:** 2.3.39
+**Stable tag:** 2.3.41
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
 ## What It Does
 
-Version 2.3.37 decodes Elementor document data without an extra `wp_unslash` pass so UTF-8 characters like `ø`, `æ`, `å`, `é`, `²` and `—` survive the read-write cycle instead of being stored as literal `u00XX` sequences.
+Version 2.3.41 makes boxed boundary normalization select Elementor's native boxed content mode, while full-width normalization selects native full-width mode.
 
 Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
 
@@ -342,6 +342,10 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 ```
 
 ## Changelog
+
+### 2.3.41
+
+- Fixed `elementor/enforce-boundary-coherence` so `mode=boxed` sets native `content_width=boxed`, and `mode=full_width` sets native `content_width=full` even when no `boxed_width` value needs removal.
 
 ### 2.3.39
 
