@@ -3779,11 +3779,17 @@ function mcp_abilities_elementor_get_active_kit_id(): int {
  */
 function mcp_abilities_elementor_get_active_kit_settings(): array {
 	$kit_id = mcp_abilities_elementor_get_active_kit_id();
-	if ( $kit_id <= 0 ) {
+	if ( $kit_id <= 0 || ! class_exists( '\Elementor\Plugin' ) ) {
 		return array();
 	}
 
-	$settings = get_post_meta( $kit_id, '_elementor_page_settings', true );
+	// Native Kit settings include Elementor defaults that are absent from post meta.
+	// Fetch the existing document, rather than creating a Kit during validation.
+	$kit = \Elementor\Plugin::$instance->documents->get( $kit_id );
+	if ( ! $kit || 'kit' !== $kit->get_name() ) {
+		return array();
+	}
+	$settings = $kit->get_settings();
 	return is_array( $settings ) ? $settings : array();
 }
 

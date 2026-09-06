@@ -57,6 +57,16 @@ namespace {
 	\Elementor\Plugin::$instance = (object) array( 'widgets_manager' => new class {
 		public function get_widget_types( string $name ) { return 'template' === $name ? (object) array() : null; }
 	} );
+	\Elementor\Plugin::$instance->documents = new class {
+		public function get( int $id ) {
+			return new class( $id ) {
+				private int $id;
+				public function __construct( int $id ) { $this->id = $id; }
+				public function get_name(): string { return 'kit'; }
+				public function get_settings(): array { return (array) get_post_meta( $this->id, '_elementor_page_settings', true ); }
+			};
+		}
+	};
 	require_once __DIR__ . '/../mcp-abilities-elementor.php';
 	mcp_abilities_elementor_register_document_abilities();
 	mcp_abilities_elementor_register_element_lookup_abilities();

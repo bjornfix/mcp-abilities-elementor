@@ -1,18 +1,29 @@
 <?php
 /**
- * Verify that the compact style guide retains custom Kit tokens.
+ * Verify that the compact style guide uses native resolved Kit tokens.
  *
  * @package MCP_Abilities_Elementor
  */
 declare( strict_types=1 );
+namespace Elementor {
+	class Plugin {
+		public static $instance;
+	}
+}
+namespace {
 define( 'ABSPATH', __DIR__ );
 function add_action( ...$args ): void {}
 function get_option( string $name, $default = false ) {
 	return 'elementor_active_kit' === $name ? 259 : $default;
 }
-function get_post_meta( int $id, string $key, bool $single ) {
-	return $GLOBALS['kit_settings'];
-}
+\Elementor\Plugin::$instance = (object) array( 'documents' => new class {
+	public function get( int $id ) {
+		return new class {
+			public function get_name(): string { return 'kit'; }
+			public function get_settings(): array { return $GLOBALS['kit_settings']; }
+		};
+	}
+} );
 require_once __DIR__ . '/../mcp-abilities-elementor.php';
 $kit_settings = array(
 	'system_colors' => array( array( '_id' => 'primary', 'color' => '#112233' ) ),
@@ -34,3 +45,4 @@ if ( array() !== $guide['global_colors'] || array() !== $guide['global_typograph
 	exit( 1 );
 }
 echo "Style guide tests passed.\n";
+}
