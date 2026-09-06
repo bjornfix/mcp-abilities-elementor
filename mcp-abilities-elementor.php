@@ -5861,6 +5861,14 @@ function mcp_abilities_elementor_invalidate_after_write( int $post_id, string $c
 		return $details;
 	}
 
+	// Match native document saves: cached element HTML must expire with the data.
+	if ( class_exists( '\Elementor\Plugin' ) && defined( '\Elementor\Core\Base\Document::CACHE_META_KEY' ) ) {
+		$document = \Elementor\Plugin::$instance->documents->get( $post_id );
+		if ( $document ) {
+			$document->delete_meta( \Elementor\Core\Base\Document::CACHE_META_KEY );
+		}
+	}
+
 	$css_deleted = delete_post_meta( $post_id, '_elementor_css' );
 	$assets_deleted = delete_post_meta( $post_id, '_elementor_page_assets' );
 	$details['post_meta_css_deleted'] = (bool) $css_deleted;

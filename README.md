@@ -345,6 +345,7 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 
 - Apply one validation and save path to document, element, and template writes, including dry runs.
 - Validate system and custom global color and typography references against the active Kit.
+- Expire native Elementor document HTML caches after writes so linked templates render current content.
 - Compare all existing style violations when preserving legacy styles.
 - Require a real native link to a published template for matched_template_used; add-container accepts native child elements.
 - Expose custom Kit tokens in the compact style guide and guide authoring toward shared styles and linked templates.
