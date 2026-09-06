@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://devenia.com/plugins/mcp-abilities-elementor/
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.3.41
+ * Version: 2.3.42
  * Author: basicus
  * Author URI: https://profiles.wordpress.org/basicus/
  * License: GPL-2.0+
@@ -1081,33 +1081,30 @@ function mcp_abilities_elementor_reorder_children_in_tree( array &$elements, arr
  * @param string $cache_scope Cache scope.
  * @param bool   $allow_legacy_style_preservation Allow unchanged legacy style debt.
  * @param bool   $normalize_background_subtrees Normalize all background container subtrees before validation.
+ * @param bool   $dry_run Validate and return normalized data without writing.
  * @return array
  */
-function mcp_abilities_elementor_save_document_data( int $post_id, array $data, string $cache_scope = 'post', bool $allow_legacy_style_preservation = false, bool $normalize_background_subtrees = true ): array {
-	$normalized_data = $normalize_background_subtrees ? mcp_abilities_elementor_normalize_background_container_subtrees( $data ) : $data;
-	$style_policy    = mcp_abilities_elementor_enforce_global_style_policy( $normalized_data );
-	if ( empty( $style_policy['success'] ) ) {
-		$existing_data = json_decode( (string) get_post_meta( $post_id, '_elementor_data', true ), true );
-		if ( $allow_legacy_style_preservation && is_array( $existing_data ) ) {
-			$existing_policy = mcp_abilities_elementor_enforce_global_style_policy( $existing_data, PHP_INT_MAX );
-			$complete_policy = mcp_abilities_elementor_enforce_global_style_policy( $normalized_data, PHP_INT_MAX );
-		} else {
-			$existing_policy = array();
-			$complete_policy = $style_policy;
-		}
-		if ( ! $allow_legacy_style_preservation || ! mcp_abilities_elementor_legacy_style_violations_preserved( $existing_policy, $complete_policy ) ) {
-			return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
-		}
+function mcp_abilities_elementor_save_document_data( int $post_id, array $data, string $cache_scope = 'post', bool $allow_legacy_style_preservation = false, bool $normalize_background_subtrees = true, bool $dry_run = false ): array {
+	$prepared = mcp_abilities_elementor_prepare_document_data( $post_id, $data, $allow_legacy_style_preservation, $normalize_background_subtrees );
+	if ( empty( $prepared['success'] ) ) {
+		return $prepared;
 	}
-
-	$normalized_data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $normalized_data;
-	$json_data       = wp_json_encode( $normalized_data );
-
-	if ( false === $json_data ) {
-		return array( 'success' => false, 'message' => 'Failed to encode Elementor data to JSON' );
+	$json_data = $prepared['json'];
+	unset( $prepared['json'] );
+	$scope = mcp_abilities_elementor_normalize_cache_scope( $cache_scope, 'post' );
+	$unchanged = $json_data === get_post_meta( $post_id, '_elementor_data', true ) && 'builder' === get_post_meta( $post_id, '_elementor_edit_mode', true );
+	$prepared['dry_run'] = $dry_run;
+	$prepared['unchanged'] = $unchanged;
+	if ( $dry_run || $unchanged ) {
+		$prepared['cache'] = mcp_abilities_elementor_build_noop_cache_details( $scope );
+		$prepared['cache']['post_id'] = $post_id;
+		$prepared['elementor_translation_guard'] = array( 'updated' => false, 'protected_post_ids' => array(), 'protected_count' => 0, 'restored_post_ids' => array(), 'restored_count' => 0, 'shutdown_restore_scheduled' => false );
+		return $prepared;
 	}
-
-	mcp_abilities_elementor_update_guarded_elementor_data( $post_id, wp_slash( $json_data ) );
+	$translation_guard = mcp_abilities_elementor_update_guarded_elementor_data( $post_id, wp_slash( $json_data ) );
+	if ( $json_data !== get_post_meta( $post_id, '_elementor_data', true ) ) {
+		return array( 'success' => false, 'message' => 'Elementor data could not be saved.' );
+	}
 	update_post_meta( $post_id, '_elementor_edit_mode', 'builder' );
 	if ( defined( 'ELEMENTOR_VERSION' ) ) {
 		update_post_meta( $post_id, '_elementor_version', (string) ELEMENTOR_VERSION );
@@ -1115,20 +1112,49 @@ function mcp_abilities_elementor_save_document_data( int $post_id, array $data, 
 	if ( defined( 'ELEMENTOR_PRO_VERSION' ) ) {
 		update_post_meta( $post_id, '_elementor_pro_version', (string) ELEMENTOR_PRO_VERSION );
 	}
+	$prepared['cache'] = mcp_abilities_elementor_invalidate_after_write( $post_id, $scope );
+	$prepared['elementor_translation_guard'] = $translation_guard;
+	return $prepared;
+}
 
-	$cache_details = mcp_abilities_elementor_invalidate_after_write(
-		$post_id,
-		mcp_abilities_elementor_normalize_cache_scope( $cache_scope, 'post' )
-	);
-
+/**
+ * Normalize and validate a proposed document without changing WordPress state.
+ *
+ * @param int   $post_id Existing document ID, or zero for a new document.
+ * @param array $data Proposed document.
+ * @param bool  $allow_legacy_style_preservation Allow unchanged existing style violations.
+ * @param bool  $normalize_background_subtrees Normalize background containers.
+ * @return array
+ */
+function mcp_abilities_elementor_prepare_document_data( int $post_id, array $data, bool $allow_legacy_style_preservation = false, bool $normalize_background_subtrees = true ): array {
+	$data = $normalize_background_subtrees ? mcp_abilities_elementor_normalize_background_container_subtrees( $data ) : $data;
+	// Compare the complete violation sets; limit only the response shown to callers.
+	$policy = mcp_abilities_elementor_enforce_global_style_policy( $data, PHP_INT_MAX );
+	if ( empty( $policy['success'] ) ) {
+		$existing = $allow_legacy_style_preservation ? json_decode( (string) get_post_meta( $post_id, '_elementor_data', true ), true ) : null;
+		$before = is_array( $existing ) ? mcp_abilities_elementor_enforce_global_style_policy( $existing, PHP_INT_MAX ) : array();
+		if ( in_array( 'invalid_global_reference', array_column( $policy['violations'], 'type' ), true ) || ! $allow_legacy_style_preservation || ! mcp_abilities_elementor_legacy_style_violations_preserved( $before, $policy ) ) {
+			$policy['violations'] = array_slice( $policy['violations'], 0, 25 );
+			return mcp_abilities_elementor_global_style_policy_error_response( $policy );
+		}
+	}
+	$data = $policy['data'];
+	$guard = mcp_abilities_elementor_audit_write_guard( $data );
+	if ( empty( $guard['success'] ) ) {
+		return mcp_abilities_elementor_write_guard_error_response( $guard );
+	}
+	$json = wp_json_encode( $data );
+	if ( false === $json ) {
+		return array( 'success' => false, 'message' => 'Failed to encode Elementor data to JSON' );
+	}
 	return array(
 		'success' => true,
-		'cache'   => $cache_details,
-		'data'    => $normalized_data,
+		'data' => $data,
+		'json' => $json,
 		'style_policy' => array(
 			'enforced' => true,
-			'legacy_preserved' => ! empty( $style_policy['violations'] ),
-			'normalized' => $style_policy['normalized'] ?? array(),
+			'legacy_preserved' => ! empty( $policy['violations'] ),
+			'normalized' => $policy['normalized'],
 		),
 	);
 }
@@ -3788,10 +3814,10 @@ function mcp_abilities_elementor_normalize_hex_color( $value ): string {
 /**
  * Build an exact color-to-global-reference map from the active Elementor kit.
  *
+ * @param array $settings Active Kit settings.
  * @return array
  */
-function mcp_abilities_elementor_get_global_color_reference_map(): array {
-	$settings = mcp_abilities_elementor_get_active_kit_settings();
+function mcp_abilities_elementor_get_global_color_reference_map( array $settings ): array {
 	$groups   = array( 'system_colors', 'custom_colors' );
 	$map      = array();
 
@@ -3927,11 +3953,33 @@ function mcp_abilities_elementor_add_global_style_violation( array &$violations,
  * @param array  $violations Violation list.
  * @param string $path Data path.
  * @param int    $max_violations Maximum violations to collect.
+ * @param array  $global_references Active Kit reference types.
  * @return array
  */
-function mcp_abilities_elementor_enforce_global_style_policy_on_element( array $element, array $color_map, array &$violations, string $path, int $max_violations = 25 ): array {
+function mcp_abilities_elementor_enforce_global_style_policy_on_element( array $element, array $color_map, array &$violations, string $path, int $max_violations = 25, array $global_references = array() ): array {
 	$settings = isset( $element['settings'] ) && is_array( $element['settings'] ) ? $element['settings'] : array();
 	$globals  = isset( $settings['__globals__'] ) && is_array( $settings['__globals__'] ) ? $settings['__globals__'] : array();
+
+	foreach ( $globals as $key => $reference ) {
+		// Elementor uses an empty reference to inherit the default style.
+		if ( '' === $reference || null === $reference ) {
+			continue;
+		}
+		$valid = is_string( $reference ) && isset( $global_references[ $reference ] );
+		if ( $valid && mcp_abilities_elementor_is_local_color_setting_key( (string) $key ) ) {
+			$valid = 'colors' === $global_references[ $reference ];
+		} elseif ( $valid && mcp_abilities_elementor_is_local_typography_setting_key( (string) $key ) ) {
+			$valid = 'typography' === $global_references[ $reference ];
+		}
+		if ( ! $valid ) {
+			mcp_abilities_elementor_add_global_style_violation(
+				$violations, $element, $path . '.settings.__globals__.' . $key,
+				(string) $key, 'invalid_global_reference', $reference,
+				'Global style reference must identify an existing token of the correct type in the active Elementor Kit. Call elementor/get-style-guide and use its current token IDs.',
+				$max_violations
+			);
+		}
+	}
 
 	foreach ( $settings as $key => $value ) {
 		if ( '__globals__' === $key || ! is_string( $key ) ) {
@@ -3954,7 +4002,7 @@ function mcp_abilities_elementor_enforce_global_style_policy_on_element( array $
 
 		if ( mcp_abilities_elementor_is_local_typography_setting_key( $key ) ) {
 			$global_ref = isset( $globals[ $key ] ) && is_string( $globals[ $key ] ) ? $globals[ $key ] : '';
-			if ( 0 === strpos( $global_ref, 'globals/typography?id=' ) ) {
+			if ( isset( $global_references[ $global_ref ] ) && 'typography' === $global_references[ $global_ref ] ) {
 				continue;
 			}
 
@@ -3977,7 +4025,7 @@ function mcp_abilities_elementor_enforce_global_style_policy_on_element( array $
 
 		if ( mcp_abilities_elementor_is_local_color_setting_key( $key ) && is_string( $value ) && '' !== trim( $value ) ) {
 			$global_ref = isset( $globals[ $key ] ) && is_string( $globals[ $key ] ) ? $globals[ $key ] : '';
-			if ( 0 === strpos( $global_ref, 'globals/colors?id=' ) ) {
+			if ( isset( $global_references[ $global_ref ] ) && 'colors' === $global_references[ $global_ref ] ) {
 				continue;
 			}
 
@@ -4013,7 +4061,8 @@ function mcp_abilities_elementor_enforce_global_style_policy_on_element( array $
 					$color_map,
 					$violations,
 					$path . '.elements[' . $index . ']',
-					$max_violations
+					$max_violations,
+					$global_references
 				);
 			}
 		}
@@ -4030,7 +4079,18 @@ function mcp_abilities_elementor_enforce_global_style_policy_on_element( array $
  * @return array
  */
 function mcp_abilities_elementor_enforce_global_style_policy( array $data, int $max_violations = 25 ): array {
-	$color_map  = mcp_abilities_elementor_get_global_color_reference_map();
+	$settings = mcp_abilities_elementor_get_active_kit_settings();
+	$global_references = array();
+	foreach ( array( 'colors', 'typography' ) as $type ) {
+		foreach ( array( 'system_', 'custom_' ) as $prefix ) {
+			foreach ( (array) ( $settings[ $prefix . $type ] ?? array() ) as $token ) {
+				if ( is_array( $token ) && is_string( $token['_id'] ?? null ) && '' !== $token['_id'] ) {
+					$global_references[ 'globals/' . $type . '?id=' . $token['_id'] ] = $type;
+				}
+			}
+		}
+	}
+	$color_map  = mcp_abilities_elementor_get_global_color_reference_map( $settings );
 	$violations = array();
 
 	foreach ( $data as $index => $element ) {
@@ -4040,7 +4100,8 @@ function mcp_abilities_elementor_enforce_global_style_policy( array $data, int $
 				$color_map,
 				$violations,
 				'data[' . $index . ']',
-				$max_violations
+				$max_violations,
+				$global_references
 			);
 		}
 	}
@@ -4074,7 +4135,7 @@ function mcp_abilities_elementor_slider_size_value( $value ): ?float {
 }
 
 /**
- * Add a bounded Elementor write guard issue.
+ * Add an Elementor write guard issue before response limiting.
  *
  * @param array  $issues Issue list.
  * @param array  $element Elementor element.
@@ -4086,10 +4147,6 @@ function mcp_abilities_elementor_slider_size_value( $value ): ?float {
  * @return void
  */
 function mcp_abilities_elementor_add_write_guard_issue( array &$issues, array $element, string $path, string $setting, string $type, string $severity, string $message ): void {
-	if ( count( $issues ) >= 25 ) {
-		return;
-	}
-
 	$issues[] = array(
 		'element_id'  => isset( $element['id'] ) && is_string( $element['id'] ) ? $element['id'] : '',
 		'el_type'     => isset( $element['elType'] ) && is_string( $element['elType'] ) ? $element['elType'] : '',
@@ -4208,7 +4265,7 @@ function mcp_abilities_elementor_audit_write_guard( array $data ): array {
 		'success'       => empty( $errors ),
 		'error_count'   => count( $errors ),
 		'warning_count' => count( $issues ) - count( $errors ),
-		'issues'        => array_values( $issues ),
+		'issues'        => array_slice( array_merge( $errors, array_values( array_filter( $issues, static fn( array $issue ): bool => 'error' !== ( $issue['severity'] ?? '' ) ) ) ), 0, 25 ),
 	);
 }
 
@@ -4235,7 +4292,7 @@ function mcp_abilities_elementor_write_guard_error_response( array $guard_result
 function mcp_abilities_elementor_global_style_policy_error_response( array $policy_result ): array {
 	return array(
 		'success'    => false,
-		'message'    => 'Global Elementor style policy rejected local style settings. Remove inline style attributes. ' . mcp_abilities_elementor_authoring_guidance(),
+		'message'    => 'Global Elementor style policy rejected local settings or invalid global references. Remove inline style attributes. ' . mcp_abilities_elementor_authoring_guidance(),
 		'violations' => $policy_result['violations'] ?? array(),
 	);
 }

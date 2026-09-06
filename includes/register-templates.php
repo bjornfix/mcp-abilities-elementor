@@ -505,6 +505,11 @@ function mcp_abilities_elementor_register_template_abilities(): void {
 					return array( 'success' => false, 'message' => 'Document type "' . $input['type'] . '" is not registered. Make sure Elementor Pro is active for theme builder templates.' );
 				}
 
+				$prepared = mcp_abilities_elementor_prepare_document_data( 0, $input['data'] ?? array() );
+				if ( empty( $prepared['success'] ) ) {
+					return $prepared;
+				}
+
 				// Create the document using Elementor's native API.
 				$post_data = array(
 					'post_title'  => sanitize_text_field( $input['title'] ),
@@ -524,23 +529,10 @@ function mcp_abilities_elementor_register_template_abilities(): void {
 
 				$post_id = $document->get_main_id();
 
-				// Set Elementor data.
-				$elementor_data = $input['data'] ?? array();
-				$elementor_data = mcp_abilities_elementor_normalize_background_container_subtrees( $elementor_data );
-				if ( ! empty( $elementor_data ) ) {
-					$style_policy = mcp_abilities_elementor_enforce_global_style_policy( $elementor_data );
-					if ( empty( $style_policy['success'] ) ) {
-						return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
-					}
-					$elementor_data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $elementor_data;
-					$json_data = wp_json_encode( $elementor_data );
-					if ( false === $json_data ) {
-						return array( 'success' => false, 'message' => 'Failed to encode Elementor document data' );
-					}
-					mcp_abilities_elementor_update_guarded_elementor_data( $post_id, wp_slash( $json_data ) );
-				} else {
-					// Create minimal empty structure.
-					mcp_abilities_elementor_update_guarded_elementor_data( $post_id, '[]' );
+				$save = mcp_abilities_elementor_save_document_data( (int) $post_id, $prepared['data'], 'none' );
+				if ( empty( $save['success'] ) ) {
+					wp_delete_post( (int) $post_id, true );
+					return $save;
 				}
 
 				// Set page settings if provided.
@@ -691,6 +683,13 @@ function mcp_abilities_elementor_register_template_abilities(): void {
 
 				$template_type = get_post_meta( $post->ID, '_elementor_template_type', true );
 
+				if ( isset( $input['data'] ) && is_array( $input['data'] ) ) {
+					$save = mcp_abilities_elementor_save_document_data( (int) $post->ID, $input['data'], 'post' );
+					if ( empty( $save['success'] ) ) {
+						return $save;
+					}
+					}
+
 				// Update post data if provided.
 				$post_update = array( 'ID' => $post->ID );
 				$needs_update = false;
@@ -710,22 +709,6 @@ function mcp_abilities_elementor_register_template_abilities(): void {
 					if ( is_wp_error( $result ) ) {
 						return array( 'success' => false, 'message' => 'Failed to update template: ' . $result->get_error_message() );
 					}
-				}
-
-				// Update Elementor data if provided.
-				if ( isset( $input['data'] ) && is_array( $input['data'] ) ) {
-					$normalized_data = mcp_abilities_elementor_normalize_background_container_subtrees( $input['data'] );
-					$style_policy = mcp_abilities_elementor_enforce_global_style_policy( $normalized_data );
-					if ( empty( $style_policy['success'] ) ) {
-						return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
-					}
-					$normalized_data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $normalized_data;
-					$json_data = wp_json_encode( $normalized_data );
-					if ( false === $json_data ) {
-						return array( 'success' => false, 'message' => 'Failed to encode updated Elementor template data' );
-					}
-					mcp_abilities_elementor_update_guarded_elementor_data( $post->ID, wp_slash( $json_data ) );
-					delete_post_meta( $post->ID, '_elementor_css' );
 				}
 
 				// Update page settings if provided.
@@ -1412,6 +1395,16 @@ function mcp_abilities_elementor_register_template_abilities(): void {
 					return array( 'success' => false, 'message' => 'You do not have permission to duplicate this template' );
 				}
 
+				$source_json = get_post_meta( $original->ID, '_elementor_data', true );
+				$source_data = '' === $source_json ? array() : json_decode( (string) $source_json, true );
+				if ( ! is_array( $source_data ) ) {
+					return array( 'success' => false, 'message' => 'Source template contains invalid Elementor data.' );
+				}
+				$prepared = mcp_abilities_elementor_prepare_document_data( 0, $source_data );
+				if ( empty( $prepared['success'] ) ) {
+					return $prepared;
+				}
+
 				$new_title = $input['title'] ?? 'Copy of ' . $original->post_title;
 
 				// Create new post.
@@ -1425,12 +1418,16 @@ function mcp_abilities_elementor_register_template_abilities(): void {
 					return array( 'success' => false, 'message' => 'Failed to create template: ' . $new_post_id->get_error_message() );
 				}
 
-				// Copy all meta.
+				$save = mcp_abilities_elementor_save_document_data( (int) $new_post_id, $prepared['data'], 'none' );
+				if ( empty( $save['success'] ) ) {
+					wp_delete_post( (int) $new_post_id, true );
+					return $save;
+				}
+
+				// Copy template settings.
 				$meta_keys = array(
 					'_elementor_template_type',
 					'_elementor_template_sub_type',
-					'_elementor_edit_mode',
-					'_elementor_data',
 					'_elementor_page_settings',
 					'_elementor_conditions',
 					'_elementor_popup_display_settings',
@@ -1617,6 +1614,11 @@ function mcp_abilities_elementor_register_template_abilities(): void {
 				$template_type = $data['type'] ?? 'page';
 				$status        = $input['status'] ?? 'draft';
 
+				$prepared = mcp_abilities_elementor_prepare_document_data( 0, $data['content'] );
+				if ( empty( $prepared['success'] ) ) {
+					return $prepared;
+				}
+
 				// Create the template.
 				$post_id = wp_insert_post( array(
 					'post_title'  => sanitize_text_field( $title ),
@@ -1628,20 +1630,12 @@ function mcp_abilities_elementor_register_template_abilities(): void {
 					return array( 'success' => false, 'message' => 'Failed to create template: ' . $post_id->get_error_message() );
 				}
 
-				// Set meta.
-				$normalized_content = mcp_abilities_elementor_normalize_background_container_subtrees( $data['content'] );
-				$style_policy = mcp_abilities_elementor_enforce_global_style_policy( $normalized_content );
-				if ( empty( $style_policy['success'] ) ) {
-					return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
-				}
-				$normalized_content = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $normalized_content;
-				$json_data = wp_json_encode( $normalized_content );
-				if ( false === $json_data ) {
-					return array( 'success' => false, 'message' => 'Failed to encode imported Elementor template data' );
+				$save = mcp_abilities_elementor_save_document_data( (int) $post_id, $prepared['data'], 'none' );
+				if ( empty( $save['success'] ) ) {
+					wp_delete_post( (int) $post_id, true );
+					return $save;
 				}
 				update_post_meta( $post_id, '_elementor_template_type', $template_type );
-				update_post_meta( $post_id, '_elementor_edit_mode', 'builder' );
-				mcp_abilities_elementor_update_guarded_elementor_data( $post_id, wp_slash( $json_data ) );
 
 				if ( ! empty( $data['page_settings'] ) ) {
 					mcp_abilities_elementor_update_guarded_page_settings( $post_id, $data['page_settings'] );

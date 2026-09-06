@@ -100,7 +100,7 @@ function mcp_abilities_elementor_get_template_lookup_schema_properties(): array 
 		'template_lookup_status' => array(
 			'type'        => 'string',
 			'enum'        => array( 'matched_template_used', 'no_matching_template_create_first', 'not_a_reusable_pattern' ),
-			'description' => 'Required for raw container authoring. Call elementor/find-template-for-pattern first when the work resembles a reusable pattern. Use matched_template_used when a saved template was reused, no_matching_template_create_first when a reusable pattern has no saved template yet, or not_a_reusable_pattern for one-off structural edits.',
+			'description' => 'Required for raw container authoring. Call elementor/find-template-for-pattern first when the work resembles a reusable pattern. Use matched_template_used only when the submitted data contains a native linked template widget or template shortcode, no_matching_template_create_first when a reusable pattern has no saved template yet, or not_a_reusable_pattern for one-off structural edits.',
 		),
 		'template_pattern' => array(
 			'type'        => 'string',
@@ -109,7 +109,7 @@ function mcp_abilities_elementor_get_template_lookup_schema_properties(): array 
 		),
 		'template_id' => array(
 			'type'        => 'integer',
-			'description' => 'Saved Elementor template ID used for this authoring step, when template_lookup_status is matched_template_used.',
+			'description' => 'Existing readable Elementor template ID linked in the submitted data (or add-container elements). Copied template content does not count as a linked use.',
 		),
 	);
 }
@@ -122,9 +122,10 @@ function mcp_abilities_elementor_get_template_lookup_schema_properties(): array 
  *
  * @param array  $input Ability input.
  * @param string $ability_name Ability name.
+ * @param array  $data Proposed new elements to check for a native template link.
  * @return array|null Error response or null when allowed.
  */
-function mcp_abilities_elementor_template_lookup_guard_response( array $input, string $ability_name ): ?array {
+function mcp_abilities_elementor_template_lookup_guard_response( array $input, string $ability_name, array $data = array() ): ?array {
 	$status = isset( $input['template_lookup_status'] ) && is_string( $input['template_lookup_status'] )
 		? sanitize_key( $input['template_lookup_status'] )
 		: '';
@@ -149,13 +150,21 @@ function mcp_abilities_elementor_template_lookup_guard_response( array $input, s
 		);
 	}
 
-	if ( 'matched_template_used' === $status && empty( $input['template_id'] ) ) {
-		return array(
-			'success' => false,
-			'message' => 'template_id is required when template_lookup_status is matched_template_used.',
-			'ability' => $ability_name,
-			'template_first_required' => true,
-		);
+	if ( 'matched_template_used' === $status ) {
+		$template_id = (int) ( $input['template_id'] ?? 0 );
+		$template = $template_id > 0 ? get_post( $template_id ) : null;
+		if ( ! $template || 'elementor_library' !== $template->post_type || in_array( $template->post_status, array( 'trash', 'auto-draft' ), true ) || ! current_user_can( 'read_post', $template_id ) ) {
+			return array( 'success' => false, 'message' => 'template_id must identify an existing, readable Elementor template.', 'ability' => $ability_name, 'template_first_required' => true );
+		}
+		if ( ! mcp_abilities_elementor_has_linked_template( $data, $template_id ) ) {
+			return array(
+				'success' => false,
+				'message' => 'matched_template_used requires a native template widget or active elementor-template shortcode linked to template_id in the submitted data. For add-container, provide the linked widget in elements. Copied template content does not stay linked.',
+				'ability' => $ability_name,
+				'template_first_required' => true,
+				'required_next_step' => 'elementor/get-widget-controls',
+			);
+		}
 	}
 
 	if ( ! in_array( $status, array( 'matched_template_used', 'not_a_reusable_pattern' ), true ) ) {
@@ -168,6 +177,44 @@ function mcp_abilities_elementor_template_lookup_guard_response( array $input, s
 	}
 
 	return null;
+}
+
+/**
+ * Recognize native linked templates in the submitted subtree, not arbitrary IDs.
+ *
+ * @param array $data New elements.
+ * @param int   $template_id Referenced library document.
+ * @return bool
+ */
+function mcp_abilities_elementor_has_linked_template( array $data, int $template_id ): bool {
+	foreach ( $data as $element ) {
+		if ( ! is_array( $element ) ) {
+			continue;
+		}
+		$settings = is_array( $element['settings'] ?? null ) ? $element['settings'] : array();
+		if ( 'widget' === ( $element['elType'] ?? '' ) ) {
+			$type = $element['widgetType'] ?? '';
+			if ( 'template' === $type && $template_id === (int) ( $settings['template_id'] ?? 0 ) && class_exists( '\Elementor\Plugin' ) && \Elementor\Plugin::$instance->widgets_manager->get_widget_types( 'template' ) ) {
+				return true;
+			}
+			if ( 'shortcode' === $type && is_string( $settings['shortcode'] ?? null ) && shortcode_exists( 'elementor-template' ) ) {
+				preg_match_all( '/' . get_shortcode_regex( array( 'elementor-template' ) ) . '/s', $settings['shortcode'], $matches, PREG_SET_ORDER );
+				foreach ( $matches as $match ) {
+					if ( '[' === $match[1] && ']' === $match[6] ) {
+						continue;
+					}
+					$attributes = shortcode_parse_atts( $match[3] );
+					if ( is_array( $attributes ) && $template_id === (int) ( $attributes['id'] ?? 0 ) ) {
+						return true;
+					}
+				}
+			}
+		}
+		if ( is_array( $element['elements'] ?? null ) && mcp_abilities_elementor_has_linked_template( $element['elements'], $template_id ) ) {
+			return true;
+		}
+	}
+	return false;
 }
 
 /**

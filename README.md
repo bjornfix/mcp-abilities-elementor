@@ -2,19 +2,19 @@
 
 Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
 
-[![Release 2.3.41](https://img.shields.io/badge/release-2.3.41-blue.svg)](https://downloads.devenia.com/mcp-abilities-elementor.zip)
+[![Release 2.3.42](https://img.shields.io/badge/release-2.3.42-blue.svg)](https://downloads.devenia.com/mcp-abilities-elementor.zip)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 [![WordPress](https://img.shields.io/badge/WordPress-6.9%2B-blue.svg)](https://wordpress.org)
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://php.net)
 
 **Tested up to:** 7.1
-**Stable tag:** 2.3.41
+**Stable tag:** 2.3.42
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
 ## What It Does
 
-Version 2.3.41 makes boxed boundary normalization select Elementor's native boxed content mode, while full-width normalization selects native full-width mode.
+Version 2.3.42 applies the same document checks to saving and dry runs, validates global style references against the active Kit, and verifies linked template reuse.
 
 Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
 
@@ -340,6 +340,15 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 ```
 
 ## Changelog
+
+### 2.3.42
+
+- Apply one validation and save path to document, element, and template writes, including dry runs.
+- Validate system and custom global color and typography references against the active Kit.
+- Compare all existing style violations when preserving legacy styles.
+- Require a real native template link for matched_template_used; add-container accepts native child elements.
+- Expose custom Kit tokens in the compact style guide and guide authoring toward shared styles and linked templates.
+- Remove unused helpers and the retired Workflow notification hook.
 
 ### 2.3.41
 

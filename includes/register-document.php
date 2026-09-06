@@ -274,55 +274,20 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 					}
 					}
 
-					$normalized_data = mcp_abilities_elementor_normalize_background_container_subtrees( $input['data'] );
-					$style_policy    = mcp_abilities_elementor_enforce_global_style_policy( $normalized_data );
-					if ( empty( $style_policy['success'] ) ) {
-						return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
-					}
-					$normalized_data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $normalized_data;
-					$write_guard     = mcp_abilities_elementor_audit_write_guard( $normalized_data );
-					if ( empty( $write_guard['success'] ) ) {
-						return mcp_abilities_elementor_write_guard_error_response( $write_guard );
-					}
-
-					// Encode data to JSON.
-					$json_data = wp_json_encode( $normalized_data );
-				if ( false === $json_data ) {
-					return array( 'success' => false, 'message' => 'Failed to encode data to JSON' );
+				$save = mcp_abilities_elementor_save_document_data( (int) $input['id'], $input['data'], (string) ( $input['cache_scope'] ?? 'post' ) );
+				if ( empty( $save['success'] ) ) {
+					return $save;
 				}
-
-				$edit_mode     = get_post_meta( $input['id'], '_elementor_edit_mode', true );
-				$requested_cache_scope = mcp_abilities_elementor_normalize_cache_scope( $input['cache_scope'] ?? 'post', 'post' );
-				if ( is_string( $existing_data ) && $existing_data === $json_data && 'builder' === $edit_mode ) {
-					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
-					$cache_details['post_id'] = (int) $input['id'];
-					return array(
-						'success'   => true,
-						'id'        => $input['id'],
-						'message'   => 'Elementor data unchanged - no write performed',
-						'link'      => get_permalink( $input['id'] ),
-						'unchanged' => true,
-						'cache'     => $cache_details,
-					);
-				}
-
-				// Update Elementor data.
-				$translation_guard = mcp_abilities_elementor_update_guarded_elementor_data( $input['id'], wp_slash( $json_data ) );
-
-				// Ensure edit mode is set to builder.
-				update_post_meta( $input['id'], '_elementor_edit_mode', 'builder' );
-
-				$cache_details = mcp_abilities_elementor_invalidate_after_write(
-					(int) $input['id'],
-					$requested_cache_scope
-				);
+				$cache_details = $save['cache'];
+				$normalized_data = $save['data'];
+				$translation_guard = $save['elementor_translation_guard'];
 
 				$response = array(
 					'success'   => true,
 					'id'        => $input['id'],
 					'message'   => 'Elementor data updated successfully',
 					'link'      => get_permalink( $input['id'] ),
-					'unchanged' => false,
+					'unchanged' => $save['unchanged'],
 					'cache'     => $cache_details,
 					'elementor_translation_guard' => $translation_guard,
 				);
@@ -370,7 +335,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 					),
 					mcp_abilities_elementor_get_template_lookup_schema_properties(),
 					array(
-						'cache_scope' => mcp_abilities_elementor_cache_scope_schema(),
+							'cache_scope' => mcp_abilities_elementor_cache_scope_schema(),
 					)
 				),
 				'additionalProperties' => false,
@@ -399,8 +364,8 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 					return array( 'success' => false, 'message' => 'Invalid post_type' );
 				}
 
-				if ( isset( $input['data'] ) && is_array( $input['data'] ) && ! empty( $input['data'] ) ) {
-					$template_guard = mcp_abilities_elementor_template_lookup_guard_response( $input, 'elementor/create-page' );
+				if ( ! empty( $input['data'] ) || 'matched_template_used' === ( $input['template_lookup_status'] ?? '' ) ) {
+					$template_guard = mcp_abilities_elementor_template_lookup_guard_response( $input, 'elementor/create-page', is_array( $input['data'] ?? null ) ? $input['data'] : array() );
 					if ( null !== $template_guard ) {
 						return $template_guard;
 					}
@@ -490,7 +455,8 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 					),
 					mcp_abilities_elementor_get_template_lookup_schema_properties(),
 					array(
-						'cache_scope' => mcp_abilities_elementor_cache_scope_schema(),
+						'elements' => array( 'type' => 'array', 'items' => array( 'type' => 'object' ), 'description' => 'Native child elements. For matched_template_used, include a linked template widget here.' ),
+					'cache_scope' => mcp_abilities_elementor_cache_scope_schema(),
 					)
 				),
 				'additionalProperties' => false,
@@ -520,7 +486,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 					return array( 'success' => false, 'message' => 'You do not have permission to update this post' );
 				}
 
-				$template_guard = mcp_abilities_elementor_template_lookup_guard_response( $input, 'elementor/add-container' );
+				$template_guard = mcp_abilities_elementor_template_lookup_guard_response( $input, 'elementor/add-container', is_array( $input['elements'] ?? null ) ? $input['elements'] : array() );
 				if ( null !== $template_guard ) {
 					return $template_guard;
 				}
@@ -529,7 +495,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 				$element_id = mcp_abilities_elementor_unique_element_id( $data, isset( $input['element_id'] ) ? (string) $input['element_id'] : null );
 				$container = mcp_abilities_elementor_build_container_element(
 					isset( $input['settings'] ) && is_array( $input['settings'] ) ? $input['settings'] : array(),
-					array(),
+					is_array( $input['elements'] ?? null ) ? $input['elements'] : array(),
 					$element_id
 				);
 
@@ -545,7 +511,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 
 				$save = mcp_abilities_elementor_save_document_data( $post_id, $data, (string) ( $input['cache_scope'] ?? 'post' ) );
 				if ( empty( $save['success'] ) ) {
-					return array( 'success' => false, 'message' => (string) ( $save['message'] ?? 'Failed to save Elementor data' ) );
+					return $save;
 				}
 
 				return array(
@@ -641,7 +607,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 
 					$save = mcp_abilities_elementor_save_document_data( $post_id, $data, (string) ( $input['cache_scope'] ?? 'post' ) );
 					if ( empty( $save['success'] ) ) {
-						return array( 'success' => false, 'message' => (string) ( $save['message'] ?? 'Failed to save Elementor data' ) );
+						return $save;
 					}
 
 					return array(
@@ -824,18 +790,6 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 					}
 				}
 
-				if ( ! empty( $input['dry_run'] ) ) {
-					return array(
-						'success'          => true,
-						'id'               => $post_id,
-						'element_id'       => (string) $element['id'],
-						'tab_ids'          => $tab_ids,
-						'posts_widget_ids' => $posts_widget_ids,
-						'message'          => 'Dry run: Elementor post tabs prepared successfully',
-						'element'          => $element,
-					);
-				}
-
 				$inserted = mcp_abilities_elementor_insert_element_in_tree(
 					$data,
 					$element,
@@ -846,9 +800,22 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 					return array( 'success' => false, 'message' => 'Parent element not found' );
 				}
 
-				$save = mcp_abilities_elementor_save_document_data( $post_id, $data, (string) ( $input['cache_scope'] ?? 'post' ) );
+				$save = mcp_abilities_elementor_save_document_data( $post_id, $data, (string) ( $input['cache_scope'] ?? 'post' ), false, true, ! empty( $input['dry_run'] ) );
 				if ( empty( $save['success'] ) ) {
-					return array( 'success' => false, 'message' => (string) ( $save['message'] ?? 'Failed to save Elementor data' ) );
+					return $save;
+				}
+				$element = mcp_abilities_elementor_find_element_meta( $save['data'], (string) $element['id'] )['element'];
+
+				if ( ! empty( $input['dry_run'] ) ) {
+					return array(
+						'success'          => true,
+						'id'               => $post_id,
+						'element_id'       => (string) $element['id'],
+						'tab_ids'          => $tab_ids,
+						'posts_widget_ids' => $posts_widget_ids,
+						'message'          => 'Dry run: Elementor post tabs prepared successfully',
+						'element'          => $element,
+					);
 				}
 
 				return array(
@@ -929,7 +896,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 				}
 				$save = mcp_abilities_elementor_save_document_data( $post_id, $data, (string) ( $input['cache_scope'] ?? 'post' ) );
 				if ( empty( $save['success'] ) ) {
-					return array( 'success' => false, 'message' => (string) ( $save['message'] ?? 'Failed to save Elementor data' ) );
+					return $save;
 				}
 				return array( 'success' => true, 'id' => $post_id, 'element_id' => $element_id, 'message' => 'Element moved successfully', 'link' => get_permalink( $post_id ) ?: '', 'cache' => $save['cache'] ?? array() );
 			},
@@ -983,7 +950,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 				mcp_abilities_elementor_remove_element_from_tree( $data, $element_id, $removed );
 				$save = mcp_abilities_elementor_save_document_data( $post_id, $data, (string) ( $input['cache_scope'] ?? 'post' ), ! empty( $input['allow_legacy_style_preservation'] ) );
 				if ( empty( $save['success'] ) ) {
-					return array( 'success' => false, 'message' => (string) ( $save['message'] ?? 'Failed to save Elementor data' ) );
+					return $save;
 				}
 				return array( 'success' => true, 'id' => $post_id, 'element_id' => $element_id, 'message' => 'Element removed successfully', 'link' => get_permalink( $post_id ) ?: '', 'cache' => $save['cache'] ?? array() );
 			},
@@ -1042,7 +1009,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 				}
 				$save = mcp_abilities_elementor_save_document_data( $post_id, $data, (string) ( $input['cache_scope'] ?? 'post' ) );
 				if ( empty( $save['success'] ) ) {
-					return array( 'success' => false, 'message' => (string) ( $save['message'] ?? 'Failed to save Elementor data' ) );
+					return $save;
 				}
 				return array( 'success' => true, 'id' => $post_id, 'element_id' => $element_id, 'new_element_id' => (string) $duplicate['id'], 'message' => 'Element duplicated successfully', 'link' => get_permalink( $post_id ) ?: '', 'cache' => $save['cache'] ?? array() );
 			},
@@ -1089,7 +1056,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 				}
 				$save = mcp_abilities_elementor_save_document_data( $post_id, $data, (string) ( $input['cache_scope'] ?? 'post' ) );
 				if ( empty( $save['success'] ) ) {
-					return array( 'success' => false, 'message' => (string) ( $save['message'] ?? 'Failed to save Elementor data' ) );
+					return $save;
 				}
 				return array( 'success' => true, 'id' => $post_id, 'message' => 'Elements reordered successfully', 'link' => get_permalink( $post_id ) ?: '', 'cache' => $save['cache'] ?? array() );
 			},
@@ -1229,18 +1196,11 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 					);
 				}
 
-				$style_policy = mcp_abilities_elementor_enforce_global_style_policy( $normalized_source_data );
-				if ( empty( $style_policy['success'] ) ) {
-					return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
+				$save = mcp_abilities_elementor_save_document_data( (int) $target->ID, $normalized_source_data, 'none' );
+				if ( empty( $save['success'] ) ) {
+					return $save;
 				}
-				$normalized_source_data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $normalized_source_data;
-				$json_data = wp_json_encode( $normalized_source_data );
-				if ( false === $json_data ) {
-					return array( 'success' => false, 'message' => 'Failed to encode cloned Elementor data after global style policy normalization' );
-				}
-
-				mcp_abilities_elementor_update_guarded_elementor_data( $target->ID, wp_slash( $json_data ) );
-				update_post_meta( $target->ID, '_elementor_edit_mode', 'builder' );
+				$normalized_source_data = $save['data'];
 
 				if ( $include_page_settings ) {
 					mcp_abilities_elementor_update_guarded_page_settings( $target->ID, $source_page_settings ?: array() );
@@ -1405,32 +1365,12 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 					return array( 'success' => false, 'message' => 'Replacement would result in invalid JSON - aborted' );
 				}
 
-					$normalized_data = mcp_abilities_elementor_normalize_background_container_subtrees( $test_decode );
-					$style_policy    = mcp_abilities_elementor_enforce_global_style_policy( $normalized_data );
-					if ( empty( $style_policy['success'] ) ) {
-						$stored_decode   = json_decode( $elementor_data, true );
-						$existing_policy = is_array( $stored_decode ) ? mcp_abilities_elementor_enforce_global_style_policy( $stored_decode ) : array();
-						if ( empty( $input['allow_legacy_style_preservation'] ) || ! mcp_abilities_elementor_legacy_style_violations_preserved( $existing_policy, $style_policy ) ) {
-							return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
-						}
-					}
-					$normalized_data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $normalized_data;
-					$write_guard     = mcp_abilities_elementor_audit_write_guard( $normalized_data );
-					if ( empty( $write_guard['success'] ) ) {
-						return mcp_abilities_elementor_write_guard_error_response( $write_guard );
-					}
-					$normalized_json = wp_json_encode( $normalized_data );
-					if ( false === $normalized_json ) {
-						return array( 'success' => false, 'message' => 'Replacement produced valid JSON but failed to re-encode after normalization' );
+				$save = mcp_abilities_elementor_save_document_data( (int) $input['id'], $test_decode, (string) ( $input['cache_scope'] ?? 'post' ), ! empty( $input['allow_legacy_style_preservation'] ) );
+				if ( empty( $save['success'] ) ) {
+					return $save;
 				}
-
-				// Update Elementor data.
-				mcp_abilities_elementor_update_guarded_elementor_data( $input['id'], wp_slash( $normalized_json ) );
-
-				$cache_details = mcp_abilities_elementor_invalidate_after_write(
-					(int) $input['id'],
-					mcp_abilities_elementor_normalize_cache_scope( $input['cache_scope'] ?? 'post', 'post' )
-				);
+				$cache_details = $save['cache'];
+				$normalized_data = $save['data'];
 
 				$response = array(
 					'success'      => true,
@@ -1661,32 +1601,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 					);
 				}
 
-				$write_guard = mcp_abilities_elementor_audit_write_guard( $data );
-				if ( empty( $write_guard['success'] ) ) {
-					return mcp_abilities_elementor_write_guard_error_response( $write_guard );
-				}
-
-				// Encode and save.
-				$json_data = wp_json_encode( $data );
-				if ( false === $json_data ) {
-					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
-				}
-
 				$requested_cache_scope = mcp_abilities_elementor_normalize_cache_scope( $input['cache_scope'] ?? 'post', 'post' );
-				if ( is_string( $elementor_data ) && $elementor_data === $json_data ) {
-					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
-					$cache_details['post_id'] = (int) $input['id'];
-					return array(
-						'success'    => true,
-						'id'         => $input['id'],
-						'element_id' => $input['element_id'],
-						'message'    => 'Element update produced no change - no write performed',
-						'link'       => get_permalink( $input['id'] ),
-						'unchanged'  => true,
-						'cache'      => $cache_details,
-					);
-				}
-
 				$save = mcp_abilities_elementor_save_document_data(
 					(int) $input['id'],
 					$data,
@@ -1706,7 +1621,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 					'element_id' => $input['element_id'],
 					'message'    => 'Element "' . $input['element_id'] . '" updated successfully',
 					'link'       => get_permalink( $input['id'] ),
-					'unchanged'  => false,
+					'unchanged'  => $save['unchanged'],
 					'cache'      => $cache_details,
 				);
 
@@ -1854,9 +1769,17 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 					);
 				}
 
+				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['element_id'], $merged_element );
+				$save = mcp_abilities_elementor_save_document_data( (int) $input['id'], $data, $requested_cache_scope, ! empty( $input['allow_legacy_style_preservation'] ), true, $dry_run );
+				if ( empty( $save['success'] ) ) {
+					return $save;
+				}
+				$data = $save['data'];
+				$cache_details = $save['cache'];
+				$translation_guard = $save['elementor_translation_guard'];
+				$merged_element = mcp_abilities_elementor_find_element_meta( $data, (string) $input['element_id'] )['element'];
+
 				if ( $dry_run ) {
-					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
-					$cache_details['post_id'] = (int) $input['id'];
 					return array(
 						'success'    => true,
 						'id'         => (int) $input['id'],
@@ -1869,31 +1792,6 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 						'cache'      => $cache_details,
 					);
 				}
-
-				$style_policy = mcp_abilities_elementor_enforce_global_style_policy( array( $merged_element ) );
-				if ( empty( $style_policy['success'] ) ) {
-					$original_policy = mcp_abilities_elementor_enforce_global_style_policy( array( $original_element ) );
-					if ( empty( $input['allow_legacy_style_preservation'] ) || ! mcp_abilities_elementor_legacy_style_violations_preserved( $original_policy, $style_policy ) ) {
-						return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
-					}
-				}
-				if ( isset( $style_policy['data'][0] ) && is_array( $style_policy['data'][0] ) ) {
-					$merged_element = $style_policy['data'][0];
-				}
-
-				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['element_id'], $merged_element );
-				$data = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
-				$write_guard = mcp_abilities_elementor_audit_write_guard( $data );
-				if ( empty( $write_guard['success'] ) ) {
-					return mcp_abilities_elementor_write_guard_error_response( $write_guard );
-				}
-				$json_data = wp_json_encode( $data );
-				if ( false === $json_data ) {
-					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
-				}
-
-				$translation_guard = mcp_abilities_elementor_update_guarded_elementor_data( (int) $input['id'], wp_slash( $json_data ) );
-				$cache_details = mcp_abilities_elementor_invalidate_after_write( (int) $input['id'], $requested_cache_scope );
 
 				return array(
 					'success'                    => true,
@@ -2048,9 +1946,15 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 					);
 				}
 
+				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['element_id'], $updated_element );
+				$save = mcp_abilities_elementor_save_document_data( (int) $input['id'], $data, $requested_cache_scope, false, true, $dry_run );
+				if ( empty( $save['success'] ) ) {
+					return $save;
+				}
+				$data = $save['data'];
+				$cache_details = $save['cache'];
+
 				if ( $dry_run ) {
-					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
-					$cache_details['post_id'] = (int) $input['id'];
 					return array(
 						'success'       => true,
 						'id'            => (int) $input['id'],
@@ -2063,21 +1967,6 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 						'cache'         => $cache_details,
 					);
 				}
-
-				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['element_id'], $updated_element );
-				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
-				$style_policy = mcp_abilities_elementor_enforce_global_style_policy( $data );
-				if ( empty( $style_policy['success'] ) ) {
-					return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
-				}
-				$data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $data;
-				$json_data = wp_json_encode( $data );
-				if ( false === $json_data ) {
-					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
-				}
-
-				mcp_abilities_elementor_update_guarded_elementor_data( (int) $input['id'], wp_slash( $json_data ) );
-				$cache_details = mcp_abilities_elementor_invalidate_after_write( (int) $input['id'], $requested_cache_scope );
 
 				return array(
 					'success'       => true,
@@ -2233,9 +2122,15 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 					);
 				}
 
+				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['target_element_id'], $target_element );
+				$save = mcp_abilities_elementor_save_document_data( (int) $input['id'], $data, $requested_cache_scope, false, true, $dry_run );
+				if ( empty( $save['success'] ) ) {
+					return $save;
+				}
+				$data = $save['data'];
+				$cache_details = $save['cache'];
+
 				if ( $dry_run ) {
-					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
-					$cache_details['post_id'] = (int) $input['id'];
 					return array(
 						'success'           => true,
 						'id'                => (int) $input['id'],
@@ -2250,21 +2145,6 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 						'cache'             => $cache_details,
 					);
 				}
-
-				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['target_element_id'], $target_element );
-				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
-				$style_policy = mcp_abilities_elementor_enforce_global_style_policy( $data );
-				if ( empty( $style_policy['success'] ) ) {
-					return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
-				}
-				$data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $data;
-				$json_data = wp_json_encode( $data );
-				if ( false === $json_data ) {
-					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
-				}
-
-				mcp_abilities_elementor_update_guarded_elementor_data( (int) $input['id'], wp_slash( $json_data ) );
-				$cache_details = mcp_abilities_elementor_invalidate_after_write( (int) $input['id'], $requested_cache_scope );
 
 				return array(
 					'success'           => true,
@@ -2457,9 +2337,15 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 					);
 				}
 
+				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['target_element_id'], $target_element );
+				$save = mcp_abilities_elementor_save_document_data( (int) $input['id'], $data, $requested_cache_scope, false, true, $dry_run );
+				if ( empty( $save['success'] ) ) {
+					return $save;
+				}
+				$data = $save['data'];
+				$cache_details = $save['cache'];
+
 				if ( $dry_run ) {
-					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
-					$cache_details['post_id'] = (int) $input['id'];
 					return array(
 						'success'           => true,
 						'id'                => (int) $input['id'],
@@ -2476,21 +2362,6 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 						'cache'             => $cache_details,
 					);
 				}
-
-				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['target_element_id'], $target_element );
-				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
-				$style_policy = mcp_abilities_elementor_enforce_global_style_policy( $data );
-				if ( empty( $style_policy['success'] ) ) {
-					return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
-				}
-				$data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $data;
-				$json_data = wp_json_encode( $data );
-				if ( false === $json_data ) {
-					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
-				}
-
-				mcp_abilities_elementor_update_guarded_elementor_data( (int) $input['id'], wp_slash( $json_data ) );
-				$cache_details = mcp_abilities_elementor_invalidate_after_write( (int) $input['id'], $requested_cache_scope );
 
 				return array(
 					'success'           => true,
@@ -2723,9 +2594,15 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 					);
 				}
 
+				mcp_abilities_elementor_replace_element_in_tree( $data, $container_id, $replacement_element );
+				$save = mcp_abilities_elementor_save_document_data( (int) $input['id'], $data, $requested_cache_scope, false, true, $dry_run );
+				if ( empty( $save['success'] ) ) {
+					return $save;
+				}
+				$data = $save['data'];
+				$cache_details = $save['cache'];
+
 				if ( $dry_run ) {
-					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
-					$cache_details['post_id'] = (int) $input['id'];
 					return array(
 						'success'              => true,
 						'id'                   => (int) $input['id'],
@@ -2739,21 +2616,6 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 						'cache'                => $cache_details,
 					);
 				}
-
-				mcp_abilities_elementor_replace_element_in_tree( $data, $container_id, $replacement_element );
-				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
-				$style_policy = mcp_abilities_elementor_enforce_global_style_policy( $data );
-				if ( empty( $style_policy['success'] ) ) {
-					return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
-				}
-				$data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $data;
-				$json_data = wp_json_encode( $data );
-				if ( false === $json_data ) {
-					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
-				}
-
-				mcp_abilities_elementor_update_guarded_elementor_data( (int) $input['id'], wp_slash( $json_data ) );
-				$cache_details = mcp_abilities_elementor_invalidate_after_write( (int) $input['id'], $requested_cache_scope );
 
 				return array(
 					'success'              => true,
@@ -2957,9 +2819,15 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 					);
 				}
 
+				mcp_abilities_elementor_replace_element_in_tree( $data, $target_id, $container );
+				$save = mcp_abilities_elementor_save_document_data( (int) $input['id'], $data, $requested_cache_scope, false, true, $dry_run );
+				if ( empty( $save['success'] ) ) {
+					return $save;
+				}
+				$data = $save['data'];
+				$cache_details = $save['cache'];
+
 				if ( $dry_run ) {
-					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
-					$cache_details['post_id'] = (int) $input['id'];
 					return array(
 						'success'       => true,
 						'id'            => (int) $input['id'],
@@ -2971,21 +2839,6 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 						'cache'         => $cache_details,
 					);
 				}
-
-				mcp_abilities_elementor_replace_element_in_tree( $data, $target_id, $container );
-				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
-				$style_policy = mcp_abilities_elementor_enforce_global_style_policy( $data );
-				if ( empty( $style_policy['success'] ) ) {
-					return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
-				}
-				$data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $data;
-				$json_data = wp_json_encode( $data );
-				if ( false === $json_data ) {
-					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
-				}
-
-				mcp_abilities_elementor_update_guarded_elementor_data( (int) $input['id'], wp_slash( $json_data ) );
-				$cache_details = mcp_abilities_elementor_invalidate_after_write( (int) $input['id'], $requested_cache_scope );
 
 				return array(
 					'success'       => true,
@@ -3191,9 +3044,15 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 					);
 				}
 
+				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['element_id'], $updated_element );
+				$save = mcp_abilities_elementor_save_document_data( (int) $input['id'], $data, $requested_cache_scope, false, true, $dry_run );
+				if ( empty( $save['success'] ) ) {
+					return $save;
+				}
+				$data = $save['data'];
+				$cache_details = $save['cache'];
+
 				if ( $dry_run ) {
-					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
-					$cache_details['post_id'] = (int) $input['id'];
 					return array(
 						'success'       => true,
 						'id'            => (int) $input['id'],
@@ -3207,21 +3066,6 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 						'cache'         => $cache_details,
 					);
 				}
-
-				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['element_id'], $updated_element );
-				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
-				$style_policy = mcp_abilities_elementor_enforce_global_style_policy( $data );
-				if ( empty( $style_policy['success'] ) ) {
-					return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
-				}
-				$data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $data;
-				$json_data = wp_json_encode( $data );
-				if ( false === $json_data ) {
-					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
-				}
-
-				mcp_abilities_elementor_update_guarded_elementor_data( (int) $input['id'], wp_slash( $json_data ) );
-				$cache_details = mcp_abilities_elementor_invalidate_after_write( (int) $input['id'], $requested_cache_scope );
 
 				return array(
 					'success'       => true,
@@ -3375,9 +3219,15 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 					);
 				}
 
+				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['element_id'], $updated_element );
+				$save = mcp_abilities_elementor_save_document_data( (int) $input['id'], $data, $requested_cache_scope, false, true, $dry_run );
+				if ( empty( $save['success'] ) ) {
+					return $save;
+				}
+				$data = $save['data'];
+				$cache_details = $save['cache'];
+
 				if ( $dry_run ) {
-					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
-					$cache_details['post_id'] = (int) $input['id'];
 					return array(
 						'success'       => true,
 						'id'            => (int) $input['id'],
@@ -3390,21 +3240,6 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 						'cache'         => $cache_details,
 					);
 				}
-
-				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['element_id'], $updated_element );
-				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
-				$style_policy = mcp_abilities_elementor_enforce_global_style_policy( $data );
-				if ( empty( $style_policy['success'] ) ) {
-					return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
-				}
-				$data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $data;
-				$json_data = wp_json_encode( $data );
-				if ( false === $json_data ) {
-					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
-				}
-
-				mcp_abilities_elementor_update_guarded_elementor_data( (int) $input['id'], wp_slash( $json_data ) );
-				$cache_details = mcp_abilities_elementor_invalidate_after_write( (int) $input['id'], $requested_cache_scope );
 
 				return array(
 					'success'       => true,
@@ -3557,9 +3392,15 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 					);
 				}
 
+				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['element_id'], $updated );
+				$save = mcp_abilities_elementor_save_document_data( (int) $input['id'], $data, $requested_cache_scope, false, true, $dry_run );
+				if ( empty( $save['success'] ) ) {
+					return $save;
+				}
+				$data = $save['data'];
+				$cache_details = $save['cache'];
+
 				if ( $dry_run ) {
-					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
-					$cache_details['post_id'] = (int) $input['id'];
 					return array(
 						'success'       => true,
 						'id'            => (int) $input['id'],
@@ -3572,20 +3413,6 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 						'cache'         => $cache_details,
 					);
 				}
-
-				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['element_id'], $updated );
-				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
-				$style_policy = mcp_abilities_elementor_enforce_global_style_policy( $data );
-				if ( empty( $style_policy['success'] ) ) {
-					return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
-				}
-				$data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $data;
-				$json_data = wp_json_encode( $data );
-				if ( false === $json_data ) {
-					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
-				}
-				mcp_abilities_elementor_update_guarded_elementor_data( (int) $input['id'], wp_slash( $json_data ) );
-				$cache_details = mcp_abilities_elementor_invalidate_after_write( (int) $input['id'], $requested_cache_scope );
 
 				return array(
 					'success'       => true,
@@ -3730,9 +3557,15 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 					);
 				}
 
+				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['element_id'], $updated );
+				$save = mcp_abilities_elementor_save_document_data( (int) $input['id'], $data, $requested_cache_scope, false, true, $dry_run );
+				if ( empty( $save['success'] ) ) {
+					return $save;
+				}
+				$data = $save['data'];
+				$cache_details = $save['cache'];
+
 				if ( $dry_run ) {
-					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
-					$cache_details['post_id'] = (int) $input['id'];
 					return array(
 						'success'       => true,
 						'id'            => (int) $input['id'],
@@ -3745,20 +3578,6 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 						'cache'         => $cache_details,
 					);
 				}
-
-				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['element_id'], $updated );
-				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
-				$style_policy = mcp_abilities_elementor_enforce_global_style_policy( $data );
-				if ( empty( $style_policy['success'] ) ) {
-					return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
-				}
-				$data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $data;
-				$json_data = wp_json_encode( $data );
-				if ( false === $json_data ) {
-					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
-				}
-				mcp_abilities_elementor_update_guarded_elementor_data( (int) $input['id'], wp_slash( $json_data ) );
-				$cache_details = mcp_abilities_elementor_invalidate_after_write( (int) $input['id'], $requested_cache_scope );
 
 				return array(
 					'success'       => true,
@@ -3902,9 +3721,15 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 					);
 				}
 
+				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['element_id'], $updated );
+				$save = mcp_abilities_elementor_save_document_data( (int) $input['id'], $data, $requested_cache_scope, false, true, $dry_run );
+				if ( empty( $save['success'] ) ) {
+					return $save;
+				}
+				$data = $save['data'];
+				$cache_details = $save['cache'];
+
 				if ( $dry_run ) {
-					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
-					$cache_details['post_id'] = (int) $input['id'];
 					return array(
 						'success'       => true,
 						'id'            => (int) $input['id'],
@@ -3917,20 +3742,6 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 						'cache'         => $cache_details,
 					);
 				}
-
-				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['element_id'], $updated );
-				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
-				$style_policy = mcp_abilities_elementor_enforce_global_style_policy( $data );
-				if ( empty( $style_policy['success'] ) ) {
-					return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
-				}
-				$data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $data;
-				$json_data = wp_json_encode( $data );
-				if ( false === $json_data ) {
-					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
-				}
-				mcp_abilities_elementor_update_guarded_elementor_data( (int) $input['id'], wp_slash( $json_data ) );
-				$cache_details = mcp_abilities_elementor_invalidate_after_write( (int) $input['id'], $requested_cache_scope );
 
 				return array(
 					'success'       => true,
@@ -4066,9 +3877,15 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 					);
 				}
 
+				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['target_element_id'], $updated );
+				$save = mcp_abilities_elementor_save_document_data( (int) $input['id'], $data, $requested_cache_scope, false, true, $dry_run );
+				if ( empty( $save['success'] ) ) {
+					return $save;
+				}
+				$data = $save['data'];
+				$cache_details = $save['cache'];
+
 				if ( $dry_run ) {
-					$cache_details = mcp_abilities_elementor_build_noop_cache_details( $requested_cache_scope );
-					$cache_details['post_id'] = (int) $input['id'];
 					return array(
 						'success'           => true,
 						'id'                => (int) $input['id'],
@@ -4082,20 +3899,6 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 						'cache'             => $cache_details,
 					);
 				}
-
-				mcp_abilities_elementor_replace_element_in_tree( $data, (string) $input['target_element_id'], $updated );
-				$data      = mcp_abilities_elementor_normalize_background_container_subtrees( $data );
-				$style_policy = mcp_abilities_elementor_enforce_global_style_policy( $data );
-				if ( empty( $style_policy['success'] ) ) {
-					return mcp_abilities_elementor_global_style_policy_error_response( $style_policy );
-				}
-				$data = is_array( $style_policy['data'] ?? null ) ? $style_policy['data'] : $data;
-				$json_data = wp_json_encode( $data );
-				if ( false === $json_data ) {
-					return array( 'success' => false, 'message' => 'Failed to encode updated data to JSON' );
-				}
-				mcp_abilities_elementor_update_guarded_elementor_data( (int) $input['id'], wp_slash( $json_data ) );
-				$cache_details = mcp_abilities_elementor_invalidate_after_write( (int) $input['id'], $requested_cache_scope );
 
 				return array(
 					'success'           => true,

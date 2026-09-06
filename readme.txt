@@ -3,7 +3,7 @@ Contributors: basicus
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 7.1
-Stable tag: 2.3.41
+Stable tag: 2.3.42
 Requires PHP: 8.0
 Requires Plugins: elementor
 License: GPLv2 or later
@@ -15,7 +15,7 @@ Elementor page builder integration for WordPress via MCP.
 
 This add-on plugin exposes Elementor functionality through MCP (Model Context Protocol). Your AI assistant can read Elementor page structures, locate and update elements, manage templates and conditions, and run Elementor tools like maintenance mode, experiments, and URL replacement.
 
-Version 2.3.41 makes boxed boundary normalization select Elementor's native boxed content mode, while full-width normalization selects native full-width mode.
+Version 2.3.42 applies the same document checks to saving and dry runs, validates global style references against the active Kit, and verifies linked template reuse.
 
 = Requirements =
 
@@ -60,6 +60,15 @@ Version 2.3.41 makes boxed boundary normalization select Elementor's native boxe
 * [Stable Download](https://downloads.devenia.com/mcp-abilities-elementor.zip)
 
 == Changelog ==
+
+= 2.3.42 =
+
+* Apply one validation and save path to document, element, and template writes, including dry runs.
+* Validate system and custom global color and typography references against the active Kit.
+* Compare all existing style violations when preserving legacy styles.
+* Require a real native template link for matched_template_used; add-container accepts native child elements.
+* Expose custom Kit tokens in the compact style guide and guide authoring toward shared styles and linked templates.
+* Remove unused helpers and the retired Workflow notification hook.
 
 = 2.3.41 =
 * Fixed: `elementor/enforce-boundary-coherence` now sets native `content_width=boxed` for boxed mode and `content_width=full` for full-width mode.
