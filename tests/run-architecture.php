@@ -13,7 +13,6 @@ declare( strict_types=1 );
 define( 'ABSPATH', __DIR__ );
 
 $registered_abilities = array();
-$workflow_authorizations = array();
 
 function current_user_can( string $capability ): bool {
 	return 'edit_posts' === $capability;
@@ -26,14 +25,6 @@ function absint( $value ): int {
 function wp_register_ability( string $name, array $args ): void {
 	global $registered_abilities;
 	$registered_abilities[ $name ] = $args;
-}
-
-function apply_filters( string $hook, $value, ...$args ) {
-	global $workflow_authorizations;
-	if ( 'mcp_abilities_elementor_source_write_authorized' === $hook ) {
-		$workflow_authorizations[] = array( $args[0] ?? 0, $args[1] ?? '' );
-	}
-	return $value;
 }
 
 require_once __DIR__ . '/../includes/ability-schema.php';
@@ -58,39 +49,42 @@ $cache_schema = mcp_abilities_elementor_cache_scope_schema();
 assert_true( array( 'none', 'post', 'site' ) === $cache_schema['enum'], 'cache scope enum' );
 assert_true( 'post' === $cache_schema['default'], 'cache scope default' );
 
-mcp_abilities_elementor_register_read_ability(
+mcp_abilities_elementor_register_ability(
 	'elementor/test-read',
 	array(
-		'label'         => 'Test Read',
-		'description'   => 'Test read ability.',
-		'input_schema'  => array( 'type' => 'object' ),
-		'output_schema' => array( 'type' => 'object' ),
-	),
-	static function (): array {
-		return array( 'success' => true );
-	}
+		'label'            => 'Test Read',
+		'description'      => 'Test read ability.',
+		'input_schema'     => array( 'type' => 'object' ),
+		'output_schema'    => array( 'type' => 'object' ),
+		'execute_callback' => static function (): array {
+			return array( 'success' => true );
+		},
+	)
 );
 
 assert_true( isset( $registered_abilities['elementor/test-read'] ), 'ability registered through seam' );
 assert_true( is_callable( $registered_abilities['elementor/test-read']['permission_callback'] ), 'default permission callback' );
 assert_true( true === $registered_abilities['elementor/test-read']['meta']['annotations']['readonly'], 'read registrar annotation' );
 
-mcp_abilities_elementor_register_write_ability(
+mcp_abilities_elementor_register_ability(
 	'elementor/test-write',
 	array(
-		'label'         => 'Test Write',
-		'description'   => 'Test write ability.',
-		'input_schema'  => array( 'type' => 'object' ),
-		'output_schema' => array( 'type' => 'object' ),
-	),
-	static function ( array $input ): array {
-		return array( 'success' => true, 'id' => $input['id'] ?? 0 );
-	}
+		'label'            => 'Test Write',
+		'description'      => 'Test write ability.',
+		'input_schema'     => array( 'type' => 'object' ),
+		'output_schema'    => array( 'type' => 'object' ),
+		'meta'             => mcp_abilities_elementor_ability_meta( false, true, false ),
+		'execute_callback' => static function ( array $input ): array {
+			return array( 'success' => true, 'id' => $input['id'] ?? 0 );
+		},
+	)
 );
 
 $write_result = $registered_abilities['elementor/test-write']['execute_callback']( array( 'id' => 123 ) );
-assert_true( true === $write_result['success'], 'write wrapper invokes callback' );
-assert_true( array( 123, 'elementor/test-write' ) === $workflow_authorizations[0], 'write wrapper issues source authority request' );
+assert_true( true === $write_result['success'], 'write registrar invokes callback' );
+assert_true( 123 === $write_result['id'], 'write callback receives original input' );
+assert_true( false === $registered_abilities['elementor/test-write']['meta']['annotations']['readonly'], 'write annotation preserved' );
+assert_true( true === $registered_abilities['elementor/test-write']['meta']['annotations']['destructive'], 'destructive annotation preserved' );
 
 $patterns = mcp_abilities_elementor_get_template_pattern_names();
 assert_true( in_array( 'custom', $patterns, true ), 'custom template pattern exists' );

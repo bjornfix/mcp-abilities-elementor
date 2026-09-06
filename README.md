@@ -18,8 +18,6 @@ Version 2.3.41 makes boxed boundary normalization select Elementor's native boxe
 
 Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
 
-Version 2.3.38 adds a generic source-write authorization hook around registered mutating abilities so native source saves can keep the owning Workflow authority.
-
 This plugin is part of the Devenia MCP abilities ecosystem. It gives an MCP-capable agent a focused, authenticated way to work with Elementor work inside WordPress through MCP.
 
 **Example:** "Handle this WordPress maintenance task directly." - The agent can inspect the site, call the relevant ability, and return the result without making the human click through wp-admin for every step.

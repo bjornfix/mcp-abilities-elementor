@@ -87,20 +87,3 @@ function mcp_abilities_elementor_load_document( int $post_id, bool $require_data
 function mcp_abilities_elementor_load_document_from_input( array $input, bool $require_data = true ): array {
 	return mcp_abilities_elementor_load_document( isset( $input['id'] ) ? (int) $input['id'] : 0, $require_data );
 }
-
-/**
- * Save document data with normalized cache scope from ability input.
- *
- * @param int   $post_id Post ID.
- * @param array $data Elementor data.
- * @param array $input Ability input.
- * @return array
- */
-function mcp_abilities_elementor_save_document_from_input( int $post_id, array $data, array $input ): array {
-	return mcp_abilities_elementor_save_document_data(
-		$post_id,
-		$data,
-		mcp_abilities_elementor_normalize_cache_scope( $input['cache_scope'] ?? 'post', 'post' )
-	);
-}
-

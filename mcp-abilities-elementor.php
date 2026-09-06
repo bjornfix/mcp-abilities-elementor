@@ -1479,31 +1479,6 @@ function mcp_abilities_elementor_extract_widget_image_media( array $widget ): ?a
 }
 
 /**
- * Merge settings into a specific element inside an Elementor data tree.
- *
- * @param array  $data Elementor data tree.
- * @param string $element_id Element ID.
- * @param array  $settings Settings to deep-merge.
- * @return array
- */
-function mcp_abilities_elementor_merge_settings_into_tree( array $data, string $element_id, array $settings ): array {
-	$element_meta = mcp_abilities_elementor_find_element_meta( $data, $element_id );
-	if ( ! is_array( $element_meta ) || ! is_array( $element_meta['element'] ?? null ) ) {
-		return $data;
-	}
-
-	$original_element           = $element_meta['element'];
-	$updated_element            = $original_element;
-	$existing_settings          = is_array( $original_element['settings'] ?? null ) ? $original_element['settings'] : array();
-	$updated_element['settings'] = mcp_abilities_elementor_merge_settings( $existing_settings, $settings );
-	$updated_element            = mcp_abilities_elementor_normalize_background_container_element( $updated_element, $original_element );
-
-	mcp_abilities_elementor_replace_element_in_tree( $data, $element_id, $updated_element );
-
-	return $data;
-}
-
-/**
  * Force the top value of a spacing box to zero.
  *
  * @param mixed $spacing Existing spacing structure.
