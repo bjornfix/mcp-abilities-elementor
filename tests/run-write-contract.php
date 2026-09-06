@@ -55,7 +55,11 @@ namespace {
 	) ) );
 	$fail_write = false;
 	\Elementor\Plugin::$instance = (object) array( 'widgets_manager' => new class {
-		public function get_widget_types( string $name ) { return 'template' === $name ? (object) array() : null; }
+		public function get_widget_types( string $name ) {
+			return 'template' === $name ? new class {
+				public function get_controls(): array { return ! empty( $GLOBALS['template_placeholder'] ) ? array() : array( 'template_id' => array( 'type' => 'select' ) ); }
+			} : null;
+		}
 	} );
 	\Elementor\Plugin::$instance->documents = new class {
 		public function get( int $id ) {
@@ -143,6 +147,9 @@ namespace {
 	$claim = array( 'template_lookup_status' => 'matched_template_used', 'template_id' => 77 );
 	$link = array( 'id' => 'linked', 'elType' => 'widget', 'widgetType' => 'template', 'settings' => array( 'template_id' => 77 ), 'elements' => array() );
 	expect( null === mcp_abilities_elementor_template_lookup_guard_response( $claim, 'test', array( $link ) ), 'existing native linked template accepted' );
+	$template_placeholder = true;
+	expect( null !== mcp_abilities_elementor_template_lookup_guard_response( $claim, 'test', array( $link ) ), 'Elementor Free promotion placeholder must not count as a linked template' );
+	$template_placeholder = false;
 	foreach ( array( array(), array( element( 'copy' ) ), array( element( 'arbitrary', array( 'template_id' => 77 ) ) ) ) as $data ) {
 		expect( null !== mcp_abilities_elementor_template_lookup_guard_response( $claim, 'test', $data ), 'claim without actual linked template rejected' );
 	}

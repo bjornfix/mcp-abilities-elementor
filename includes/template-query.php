@@ -194,8 +194,12 @@ function mcp_abilities_elementor_has_linked_template( array $data, int $template
 		$settings = is_array( $element['settings'] ?? null ) ? $element['settings'] : array();
 		if ( 'widget' === ( $element['elType'] ?? '' ) ) {
 			$type = $element['widgetType'] ?? '';
-			if ( 'template' === $type && $template_id === (int) ( $settings['template_id'] ?? 0 ) && class_exists( '\Elementor\Plugin' ) && \Elementor\Plugin::$instance->widgets_manager->get_widget_types( 'template' ) ) {
-				return true;
+			if ( 'template' === $type && $template_id === (int) ( $settings['template_id'] ?? 0 ) && class_exists( '\Elementor\Plugin' ) ) {
+				$widget = \Elementor\Plugin::$instance->widgets_manager->get_widget_types( 'template' );
+				// Elementor Free also registers a promotion placeholder named template.
+				if ( $widget && isset( $widget->get_controls()['template_id'] ) ) {
+					return true;
+				}
 			}
 			if ( 'shortcode' === $type && is_string( $settings['shortcode'] ?? null ) && shortcode_exists( 'elementor-template' ) ) {
 				preg_match_all( '/' . get_shortcode_regex( array( 'elementor-template' ) ) . '/s', $settings['shortcode'], $matches, PREG_SET_ORDER );
