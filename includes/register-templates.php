@@ -408,7 +408,7 @@ function mcp_abilities_elementor_register_template_abilities(): void {
 		'elementor/create-template',
 		array(
 			'label'               => 'Create Elementor Template',
-			'description'         => 'Creates a new Elementor template (page, section, popup, header, footer, etc.). For popups, can set display conditions and triggers.',
+			'description'         => 'Creates a new Elementor template (page, section, popup, header, footer, etc.). For popups, can set display conditions and triggers.' . ' ' . mcp_abilities_elementor_authoring_guidance(),
 			'category'            => 'site',
 			'input_schema'        => array(
 				'type'                 => 'object',
@@ -609,7 +609,7 @@ function mcp_abilities_elementor_register_template_abilities(): void {
 		'elementor/update-template',
 		array(
 			'label'               => 'Update Elementor Template',
-			'description'         => 'Updates an existing Elementor template (title, status, data, conditions, popup settings).',
+			'description'         => 'Updates an existing Elementor template (title, status, data, conditions, popup settings).' . ' ' . mcp_abilities_elementor_authoring_guidance(),
 			'category'            => 'site',
 			'input_schema'        => array(
 				'type'                 => 'object',
@@ -1567,7 +1567,7 @@ function mcp_abilities_elementor_register_template_abilities(): void {
 		'elementor/import-template',
 		array(
 			'label'               => 'Import Elementor Template',
-			'description'         => 'Imports an Elementor template from JSON export data.',
+			'description'         => 'Imports an Elementor template from JSON export data.' . ' ' . mcp_abilities_elementor_authoring_guidance(),
 			'category'            => 'site',
 			'input_schema'        => array(
 				'type'                 => 'object',

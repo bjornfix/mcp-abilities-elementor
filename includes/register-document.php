@@ -176,7 +176,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 		'elementor/update-data',
 		array(
 			'label'               => 'Update Elementor Data',
-			'description'         => 'Updates the Elementor JSON data for a page or post and invalidates caches. Supports cache_scope (`post` default, `site` for stronger invalidation, `none` for debugging). Use with caution - invalid JSON will break the page.',
+			'description'         => 'Updates the Elementor JSON data for a page or post and invalidates caches. Supports cache_scope (`post` default, `site` for stronger invalidation, `none` for debugging). Use with caution - invalid JSON will break the page.' . ' ' . mcp_abilities_elementor_authoring_guidance(),
 			'category'            => 'site',
 			'input_schema'        => array(
 				'type'                 => 'object',
@@ -353,7 +353,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 		'elementor/create-page',
 		array(
 			'label'               => 'Create Elementor Page',
-			'description'         => 'Creates a new WordPress page or post with Elementor builder mode enabled and optional initial Elementor data.',
+			'description'         => 'Creates a new WordPress page or post with Elementor builder mode enabled and optional initial Elementor data.' . ' ' . mcp_abilities_elementor_authoring_guidance(),
 			'category'            => 'site',
 			'input_schema'        => array(
 				'type'                 => 'object',
@@ -475,7 +475,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 		'elementor/add-container',
 		array(
 			'label'               => 'Add Elementor Container',
-			'description'         => 'Adds a new Elementor container at the top level or inside an existing container.',
+			'description'         => 'Adds a new Elementor container at the top level or inside an existing container.' . ' ' . mcp_abilities_elementor_authoring_guidance(),
 			'category'            => 'site',
 			'input_schema'        => array(
 				'type'                 => 'object',
@@ -572,7 +572,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 			$ability_name,
 			array(
 				'label'               => $label,
-				'description'         => 'Adds an Elementor widget into an existing container or top-level document.',
+				'description'         => 'Adds an Elementor widget into an existing container or top-level document.' . ' ' . mcp_abilities_elementor_authoring_guidance(),
 				'category'            => 'site',
 				'input_schema'        => array(
 					'type'                 => 'object',
@@ -1287,7 +1287,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 		'elementor/patch-data',
 		array(
 			'label'               => 'Patch Elementor Data',
-			'description'         => 'Performs find-and-replace operations within Elementor JSON data. Works on the raw JSON string, so you can replace text, URLs, settings values, etc. Supports cache_scope (`post` default, `site` for stronger invalidation, `none` for debugging).',
+			'description'         => 'Performs find-and-replace operations within Elementor JSON data. Works on the raw JSON string, so you can replace text, URLs, settings values, etc. Supports cache_scope (`post` default, `site` for stronger invalidation, `none` for debugging).' . ' ' . mcp_abilities_elementor_authoring_guidance(),
 			'category'            => 'site',
 			'input_schema'        => array(
 				'type'                 => 'object',
@@ -1467,7 +1467,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 		'elementor/update-element',
 		array(
 			'label'               => 'Update Elementor Element',
-			'description'         => 'Replaces a specific element (container or widget) by ID within the Elementor page structure. Useful for targeted updates without re-uploading the entire page. Supports cache_scope (`post` default, `site` for stronger invalidation, `none` for debugging).',
+			'description'         => 'Replaces a specific element (container or widget) by ID within the Elementor page structure. Useful for targeted updates without re-uploading the entire page. Supports cache_scope (`post` default, `site` for stronger invalidation, `none` for debugging).' . ' ' . mcp_abilities_elementor_authoring_guidance(),
 			'category'            => 'site',
 			'input_schema'        => array(
 				'type'                 => 'object',
@@ -1736,7 +1736,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 		'elementor/merge-element-settings',
 		array(
 			'label'               => 'Merge Elementor Element Settings',
-			'description'         => 'Deep-merges one or more settings into an existing Elementor element without requiring a full element replacement payload. Supports cache_scope (`post` default, `site` for stronger invalidation, `none` for debugging) and `dry_run`.',
+			'description'         => 'Deep-merges one or more settings into an existing Elementor element without requiring a full element replacement payload. Supports cache_scope (`post` default, `site` for stronger invalidation, `none` for debugging) and `dry_run`.' . ' ' . mcp_abilities_elementor_authoring_guidance(),
 			'category'            => 'site',
 			'input_schema'        => array(
 				'type'                 => 'object',

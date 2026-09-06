@@ -4235,7 +4235,7 @@ function mcp_abilities_elementor_write_guard_error_response( array $guard_result
 function mcp_abilities_elementor_global_style_policy_error_response( array $policy_result ): array {
 	return array(
 		'success'    => false,
-		'message'    => 'Global Elementor style policy rejected local style settings. Use Elementor Kit global colors/typography and remove inline style attributes before writing.',
+		'message'    => 'Global Elementor style policy rejected local style settings. Remove inline style attributes. ' . mcp_abilities_elementor_authoring_guidance(),
 		'violations' => $policy_result['violations'] ?? array(),
 	);
 }
@@ -4348,8 +4348,9 @@ function mcp_abilities_elementor_get_style_guide_summary(): array {
 			'viewport_lg'              => get_option( 'elementor_viewport_lg', '' ),
 			'viewport_md'              => get_option( 'elementor_viewport_md', '' ),
 		),
-		'global_colors'  => array_values( (array) ( $kit_settings['system_colors'] ?? array() ) ),
-		'global_typography' => array_values( (array) ( $kit_settings['system_typography'] ?? array() ) ),
+		'global_colors'  => array_values( array_merge( (array) ( $kit_settings['system_colors'] ?? array() ), (array) ( $kit_settings['custom_colors'] ?? array() ) ) ),
+		'global_typography' => array_values( array_merge( (array) ( $kit_settings['system_typography'] ?? array() ), (array) ( $kit_settings['custom_typography'] ?? array() ) ) ),
+		'authoring_guidance' => mcp_abilities_elementor_authoring_guidance(),
 		'raw_settings'   => $kit_settings,
 	);
 }

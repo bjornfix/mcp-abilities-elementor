@@ -1605,7 +1605,7 @@ function mcp_abilities_elementor_register_design_abilities(): void {
 		'elementor/get-style-guide',
 		array(
 			'label'               => 'Get Elementor Style Guide',
-			'description'         => 'Builds a style-guide summary from the active Elementor kit, including design tokens, layout settings, global colors, and global typography.',
+			'description'         => 'Read this before creating or changing Elementor content. Returns the active Kit system and custom global colors and typography, layout settings, and guidance for keeping shared styles and templates linked.',
 			'category'            => 'site',
 			'input_schema'        => array(
 				'type'                 => 'object',
