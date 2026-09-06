@@ -147,6 +147,11 @@ namespace {
 	$claim = array( 'template_lookup_status' => 'matched_template_used', 'template_id' => 77 );
 	$link = array( 'id' => 'linked', 'elType' => 'widget', 'widgetType' => 'template', 'settings' => array( 'template_id' => 77 ), 'elements' => array() );
 	expect( null === mcp_abilities_elementor_template_lookup_guard_response( $claim, 'test', array( $link ) ), 'existing native linked template accepted' );
+	foreach ( array( 'draft', 'private', 'trash' ) as $status ) {
+		$posts[77]->post_status = $status;
+		expect( null !== mcp_abilities_elementor_template_lookup_guard_response( $claim, 'test', array( $link ) ), 'unpublished template cannot render through native Pro template widget' );
+	}
+	$posts[77]->post_status = 'publish';
 	$template_placeholder = true;
 	expect( null !== mcp_abilities_elementor_template_lookup_guard_response( $claim, 'test', array( $link ) ), 'Elementor Free promotion placeholder must not count as a linked template' );
 	$template_placeholder = false;

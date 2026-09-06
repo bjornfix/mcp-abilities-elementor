@@ -66,7 +66,7 @@ Version 2.3.42 applies the same document checks to saving and dry runs, validate
 * Apply one validation and save path to document, element, and template writes, including dry runs.
 * Validate system and custom global color and typography references against the active Kit.
 * Compare all existing style violations when preserving legacy styles.
-* Require a real native template link for matched_template_used; add-container accepts native child elements.
+* Require a real native link to a published template for matched_template_used; add-container accepts native child elements.
 * Expose custom Kit tokens in the compact style guide and guide authoring toward shared styles and linked templates.
 * Remove unused helpers and the retired Workflow notification hook.
 

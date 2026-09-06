@@ -109,7 +109,7 @@ function mcp_abilities_elementor_get_template_lookup_schema_properties(): array 
 		),
 		'template_id' => array(
 			'type'        => 'integer',
-			'description' => 'Existing readable Elementor template ID linked in the submitted data (or add-container elements). Copied template content does not count as a linked use.',
+			'description' => 'Existing published, readable Elementor template ID linked in the submitted data (or add-container elements). Copied template content does not count as a linked use.',
 		),
 	);
 }
@@ -153,8 +153,8 @@ function mcp_abilities_elementor_template_lookup_guard_response( array $input, s
 	if ( 'matched_template_used' === $status ) {
 		$template_id = (int) ( $input['template_id'] ?? 0 );
 		$template = $template_id > 0 ? get_post( $template_id ) : null;
-		if ( ! $template || 'elementor_library' !== $template->post_type || in_array( $template->post_status, array( 'trash', 'auto-draft' ), true ) || ! current_user_can( 'read_post', $template_id ) ) {
-			return array( 'success' => false, 'message' => 'template_id must identify an existing, readable Elementor template.', 'ability' => $ability_name, 'template_first_required' => true );
+		if ( ! $template || 'elementor_library' !== $template->post_type || 'publish' !== $template->post_status || ! current_user_can( 'read_post', $template_id ) ) {
+			return array( 'success' => false, 'message' => 'template_id must identify an existing, published, readable Elementor template. Publish the saved template before linking it.', 'ability' => $ability_name, 'template_first_required' => true );
 		}
 		if ( ! mcp_abilities_elementor_has_linked_template( $data, $template_id ) ) {
 			return array(
