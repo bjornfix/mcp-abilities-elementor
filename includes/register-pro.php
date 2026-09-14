@@ -272,12 +272,12 @@ function mcp_abilities_elementor_register_pro_abilities(): void {
 					return array( 'success' => false, 'message' => 'Elementor custom code post type is not available' );
 				}
 
-				$post_id = wp_insert_post( array(
+				$post_id = wp_insert_post( wp_slash( array(
 					'post_title'   => sanitize_text_field( $input['title'] ),
 					'post_type'    => 'elementor_snippet',
 					'post_status'  => $input['status'] ?? 'publish',
 					'post_content' => (string) $input['code'],
-				), true );
+				) ), true );
 
 				if ( is_wp_error( $post_id ) ) {
 					return array( 'success' => false, 'message' => 'Failed to create snippet: ' . $post_id->get_error_message() );
@@ -394,7 +394,7 @@ function mcp_abilities_elementor_register_pro_abilities(): void {
 				}
 
 				if ( $has_update ) {
-					$result = wp_update_post( $update, true );
+					$result = wp_update_post( wp_slash( $update ), true );
 					if ( is_wp_error( $result ) ) {
 						return array( 'success' => false, 'message' => 'Failed to update snippet: ' . $result->get_error_message() );
 					}

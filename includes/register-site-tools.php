@@ -343,13 +343,20 @@ function mcp_abilities_elementor_register_site_tool_abilities(): void {
 				}
 
 				$kit = get_post( $kit_id );
-				if ( ! $kit || 'elementor_library' !== $kit->post_type ) {
+				if ( ! $kit || 'elementor_library' !== $kit->post_type || 'kit' !== get_post_meta( $kit_id, '_elementor_template_type', true ) || 'trash' === $kit->post_status ) {
 					return array( 'success' => false, 'message' => 'Kit not found.' );
 				}
 
-				update_option( 'elementor_active_kit', $kit_id );
+				if ( ! current_user_can( 'edit_post', $kit_id ) ) {
+					return array( 'success' => false, 'message' => 'You do not have permission to select this kit.' );
+				}
 
-					mcp_abilities_elementor_clear_site_cache();
+				update_option( 'elementor_active_kit', $kit_id );
+				if ( $kit_id !== (int) get_option( 'elementor_active_kit', 0 ) ) {
+					return array( 'success' => false, 'message' => 'Active kit could not be saved.' );
+				}
+
+				mcp_abilities_elementor_clear_site_cache();
 
 				return array(
 					'success' => true,
@@ -358,7 +365,7 @@ function mcp_abilities_elementor_register_site_tool_abilities(): void {
 				);
 			},
 			'permission_callback' => function (): bool {
-				return current_user_can( 'edit_posts' );
+				return current_user_can( 'manage_options' );
 			},
 			'meta'                => array(
 				'annotations' => array(

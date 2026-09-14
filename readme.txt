@@ -3,7 +3,7 @@ Contributors: basicus
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 7.1
-Stable tag: 2.3.42
+Stable tag: 2.3.43
 Requires PHP: 8.0
 Requires Plugins: elementor
 License: GPLv2 or later
@@ -15,7 +15,9 @@ Elementor page builder integration for WordPress via MCP.
 
 This add-on plugin exposes Elementor functionality through MCP (Model Context Protocol). Your AI assistant can read Elementor page structures, locate and update elements, manage templates and conditions, and run Elementor tools like maintenance mode, experiments, and URL replacement.
 
-Version 2.3.42 applies the same document checks to saving and dry runs, validates global style references against the active Kit, and verifies linked template reuse.
+Version 2.3.43 validates active Kit selection and permissions, checks the saved selection, and preserves escaped code when creating or updating Pro snippets. Document checks and supported dry runs use shared validation; design observations still require a rendered page review.
+
+Validated with WordPress 7.1-RC3.
 
 = Requirements =
 
@@ -60,6 +62,13 @@ Version 2.3.42 applies the same document checks to saving and dry runs, validate
 * [Stable Download](https://downloads.devenia.com/mcp-abilities-elementor.zip)
 
 == Changelog ==
+
+= 2.3.43 =
+
+* Require site-settings authority and document edit permission to switch the active Kit.
+* Reject ordinary templates and trashed Kits, and verify the saved active Kit.
+* Preserve backslashes and escaped quotes in created and updated Pro custom code.
+* Exclude project documentation from the installable package.
 
 = 2.3.42 =
 
