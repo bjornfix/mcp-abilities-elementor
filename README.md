@@ -2,14 +2,14 @@
 
 Inspect an Elementor page, find the widget or shared setting behind a problem, and make a targeted change through an authenticated MCP client. Keep the page editable in Elementor and check the rendered result after saving.
 
-[![Release 2.3.43](https://img.shields.io/badge/release-2.3.43-blue.svg)](https://downloads.devenia.com/mcp-abilities-elementor.zip)
+[![Release 2.3.44](https://img.shields.io/badge/release-2.3.44-blue.svg)](https://downloads.devenia.com/mcp-abilities-elementor.zip)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0.html)
 [![WordPress](https://img.shields.io/badge/WordPress-6.9%2B-blue.svg)](https://wordpress.org)
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://www.php.net/)
 
 **Tested up to:** 7.1 (validated with WordPress 7.1-RC3)
 
-**Stable tag:** 2.3.43
+**Stable tag:** 2.3.44
 
 **License:** GPLv2 or later
 
@@ -233,6 +233,9 @@ For a saved page, regenerate its Elementor CSS when needed:
 
 ## Installation
 
+
+For update notifications in WordPress, install [Devenia MCP Updater](https://downloads.devenia.com/devenia-mcp-updater.zip). The updater is optional. You choose which plugins update automatically through WordPress.
+
 1. Confirm the WordPress, PHP, Elementor and MCP requirements above.
 2. Download the [stable ZIP](https://downloads.devenia.com/mcp-abilities-elementor.zip).
 3. In WordPress, open Plugins → Add New → Upload Plugin, select the ZIP and activate it.
@@ -240,6 +243,11 @@ For a saved page, regenerate its Elementor CSS when needed:
 5. Read one existing Elementor page before making changes.
 
 ## Recent Changes
+
+
+### 2.3.44
+
+Add one dismissible Plugins-screen reminder when Devenia MCP Updater is missing or inactive, with persistent install or activate links. Automatic updates remain your choice in WordPress.
 
 ### 2.3.43
 

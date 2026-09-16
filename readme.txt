@@ -3,7 +3,7 @@ Contributors: basicus
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 7.1
-Stable tag: 2.3.43
+Stable tag: 2.3.44
 Requires PHP: 8.0
 Requires Plugins: elementor
 License: GPLv2 or later
@@ -49,6 +49,8 @@ Validated with WordPress 7.1-RC3.
 
 == Installation ==
 
+For update notifications in WordPress, install [Devenia MCP Updater](https://downloads.devenia.com/devenia-mcp-updater.zip). The updater is optional. You choose which plugins update automatically through WordPress.
+
 1. Confirm WordPress 6.9 or newer and PHP 8.0 or newer
 2. Install and activate WordPress MCP Adapter and Elementor
 3. Download the latest release
@@ -62,6 +64,9 @@ Validated with WordPress 7.1-RC3.
 * [Stable Download](https://downloads.devenia.com/mcp-abilities-elementor.zip)
 
 == Changelog ==
+
+= 2.3.44 =
+* Add one dismissible Plugins-screen reminder when Devenia MCP Updater is missing or inactive, with persistent install or activate links. Automatic updates remain your choice in WordPress.
 
 = 2.3.43 =
 
