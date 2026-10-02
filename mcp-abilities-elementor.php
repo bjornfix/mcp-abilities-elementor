@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://devenia.com/plugins/mcp-abilities-elementor/
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.3.46
+ * Version: 2.3.47
  * Author: basicus
  * Author URI: https://profiles.wordpress.org/basicus/
  * License: GPL-2.0+
@@ -281,8 +281,7 @@ function mcp_abilities_elementor_prepare_sibling_meta_restore_value( string $met
 	}
 
 	if ( is_array( $value ) ) {
-		$json = wp_json_encode( $value );
-		return is_string( $json ) ? wp_slash( $json ) : $value;
+		return wp_slash( $value );
 	}
 
 	return $value;

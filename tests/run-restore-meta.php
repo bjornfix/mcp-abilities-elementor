@@ -48,8 +48,12 @@ function get_post_meta( int $post_id, string $meta_key, bool $single = true ) {
 	return $GLOBALS['translation_meta'][ $post_id ][ $meta_key ] ?? '';
 }
 
+function wp_unslash( $value ) {
+	return is_array( $value ) ? array_map( 'wp_unslash', $value ) : stripslashes( (string) $value );
+}
+
 function update_post_meta( int $post_id, string $meta_key, $value ) {
-	$GLOBALS['translation_meta'][ $post_id ][ $meta_key ] = is_string( $value ) ? stripslashes( $value ) : $value;
+	$GLOBALS['translation_meta'][ $post_id ][ $meta_key ] = wp_unslash( $value );
 	return true;
 }
 
@@ -101,6 +105,13 @@ assert_same(
 	wp_slash( $settings ),
 	mcp_abilities_elementor_prepare_sibling_meta_restore_value( '_elementor_page_settings', $settings ),
 	'Elementor page settings JSON string is slashed before restore'
+);
+
+$structured_settings = array( 'hide_title' => 'yes', 'nested' => array( 'text' => '<a href="/en/">"English"</a> C:\\files' ) );
+assert_same(
+	wp_slash( $structured_settings ),
+	mcp_abilities_elementor_prepare_sibling_meta_restore_value( '_elementor_page_settings', $structured_settings ),
+	'Structured page settings preserve their native array shape and escaped values'
 );
 
 $plain = 'plain text';
@@ -182,13 +193,13 @@ $settings_english = '{"title":"English settings"}';
 $settings_one = '{"title":"Source settings"}';
 $settings_two = '{"title":"Source settings","hide_title":"yes"}';
 $settings_edit = '{"title":"Updated English settings"}';
-$GLOBALS['translation_meta'][12]['_elementor_page_settings'] = $settings_english;
+$GLOBALS['translation_meta'][12]['_elementor_page_settings'] = $structured_settings;
 foreach ( array( $settings_one, $settings_two ) as $value ) {
 	mcp_abilities_elementor_update_guarded_page_settings( 11, wp_slash( $value ) );
 	update_post_meta( 12, '_elementor_page_settings', wp_slash( $value ) );
 }
 $expected[11]['_elementor_page_settings'] = $settings_two;
-$expected[12]['_elementor_page_settings'] = $settings_english;
+$expected[12]['_elementor_page_settings'] = $structured_settings;
 $GLOBALS['translation_meta'][22]['_elementor_page_settings'] = $settings_english;
 foreach ( array( $settings_one, $settings_two ) as $value ) {
 	mcp_abilities_elementor_update_guarded_page_settings( 21, wp_slash( $value ) );
