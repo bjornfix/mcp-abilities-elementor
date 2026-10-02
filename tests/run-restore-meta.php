@@ -33,6 +33,32 @@ function get_option( string $name, $default = false ) {
 	return $default;
 }
 
+function get_post( int $post_id ) {
+	return (object) array( 'ID' => $post_id );
+}
+
+function apply_filters( string $name, $value, ...$args ) {
+	if ( 'mcp_abilities_elementor_translation_sibling_post_ids' === $name ) {
+		return $GLOBALS['translation_siblings'][ $args[0] ] ?? array();
+	}
+	return $value;
+}
+
+function get_post_meta( int $post_id, string $meta_key, bool $single = true ) {
+	return $GLOBALS['translation_meta'][ $post_id ][ $meta_key ] ?? '';
+}
+
+function update_post_meta( int $post_id, string $meta_key, $value ) {
+	$GLOBALS['translation_meta'][ $post_id ][ $meta_key ] = is_string( $value ) ? stripslashes( $value ) : $value;
+	return true;
+}
+
+function clean_post_cache( int $post_id ): void {}
+
+function wp_json_encode( $value ) {
+	return json_encode( $value );
+}
+
 require_once __DIR__ . '/../mcp-abilities-elementor.php';
 
 function assert_same( $expected, $actual, string $message ): void {
@@ -94,3 +120,104 @@ assert_same(
 );
 
 echo "Restore meta tests passed.\n";
+
+// Exercise the real shutdown callbacks, including copies after a guarded save.
+$english = '[{"title":"FIND A DEALER","editor":"<a href=\\"/en/find-a-dealer/\\">English</a>"}]';
+$norwegian_one = '[{"title":"Finn forhandler"}]';
+$norwegian_two = '[{"title":"Finn forhandler","lead":"Din lokale glassmester"}]';
+$english_edit = '[{"title":"FIND YOUR LOCAL DEALER"}]';
+$expected = array();
+
+foreach ( array( 1, 11, 21, 31, 41, 51, 61 ) as $source_id ) {
+	$sibling_id = $source_id + 1;
+	$GLOBALS['translation_siblings'][ $source_id ] = array( $sibling_id );
+	$GLOBALS['translation_siblings'][ $sibling_id ] = array( $source_id );
+	$GLOBALS['translation_meta'][ $sibling_id ]['_elementor_data'] = $english;
+	$expected[ $sibling_id ]['_elementor_data'] = $english;
+}
+
+// A single source write still restores a copy made by a late save hook.
+mcp_abilities_elementor_update_guarded_elementor_data( 1, wp_slash( $norwegian_one ) );
+update_post_meta( 2, '_elementor_data', wp_slash( $norwegian_one ) );
+$expected[1]['_elementor_data'] = $norwegian_one;
+
+// A second source write must not replace the first English baseline.
+foreach ( array( $norwegian_one, $norwegian_two ) as $value ) {
+	mcp_abilities_elementor_update_guarded_elementor_data( 11, wp_slash( $value ) );
+	update_post_meta( 12, '_elementor_data', wp_slash( $value ) );
+}
+$expected[11]['_elementor_data'] = $norwegian_two;
+
+// The page-settings guard shares the same request-level restoration.
+$settings_english = '{"title":"English settings"}';
+$settings_one = '{"title":"Source settings"}';
+$settings_two = '{"title":"Source settings","hide_title":"yes"}';
+$settings_edit = '{"title":"Updated English settings"}';
+$GLOBALS['translation_meta'][12]['_elementor_page_settings'] = $settings_english;
+foreach ( array( $settings_one, $settings_two ) as $value ) {
+	mcp_abilities_elementor_update_guarded_page_settings( 11, wp_slash( $value ) );
+	update_post_meta( 12, '_elementor_page_settings', wp_slash( $value ) );
+}
+$expected[11]['_elementor_page_settings'] = $settings_two;
+$expected[12]['_elementor_page_settings'] = $settings_english;
+$GLOBALS['translation_meta'][22]['_elementor_page_settings'] = $settings_english;
+foreach ( array( $settings_one, $settings_two ) as $value ) {
+	mcp_abilities_elementor_update_guarded_page_settings( 21, wp_slash( $value ) );
+	update_post_meta( 22, '_elementor_page_settings', wp_slash( $value ) );
+}
+mcp_abilities_elementor_update_guarded_page_settings( 22, wp_slash( $settings_edit ) );
+mcp_abilities_elementor_update_guarded_page_settings( 21, wp_slash( $settings_two ) );
+update_post_meta( 22, '_elementor_page_settings', wp_slash( $settings_two ) );
+$expected[21]['_elementor_page_settings'] = $settings_two;
+$expected[22]['_elementor_page_settings'] = $settings_edit;
+
+// Multiple siblings retain their own first values.
+$GLOBALS['translation_siblings'][31][] = 33;
+$GLOBALS['translation_meta'][33]['_elementor_data'] = '[{"title":"HITTA EN BUTIK"}]';
+$expected[33]['_elementor_data'] = $GLOBALS['translation_meta'][33]['_elementor_data'];
+foreach ( array( $norwegian_one, $norwegian_two ) as $value ) {
+	mcp_abilities_elementor_update_guarded_elementor_data( 31, wp_slash( $value ) );
+	foreach ( array( 32, 33 ) as $sibling_id ) {
+		update_post_meta( $sibling_id, '_elementor_data', wp_slash( $value ) );
+	}
+}
+$expected[31]['_elementor_data'] = $norwegian_two;
+
+// An explicit sibling-target edit is authoritative within the same request.
+mcp_abilities_elementor_update_guarded_elementor_data( 41, wp_slash( $norwegian_one ) );
+update_post_meta( 42, '_elementor_data', wp_slash( $norwegian_one ) );
+mcp_abilities_elementor_update_guarded_elementor_data( 42, wp_slash( $english_edit ) );
+mcp_abilities_elementor_update_guarded_elementor_data( 41, wp_slash( $norwegian_two ) );
+update_post_meta( 42, '_elementor_data', wp_slash( $norwegian_two ) );
+$expected[41]['_elementor_data'] = $norwegian_two;
+$expected[42]['_elementor_data'] = $english_edit;
+
+// Empty captured meta is a valid baseline, not an uncaptured value.
+$GLOBALS['translation_meta'][52]['_elementor_data'] = '';
+foreach ( array( $norwegian_one, $norwegian_two ) as $value ) {
+	mcp_abilities_elementor_update_guarded_elementor_data( 51, wp_slash( $value ) );
+	update_post_meta( 52, '_elementor_data', wp_slash( $value ) );
+}
+$expected[51]['_elementor_data'] = $norwegian_two;
+$expected[52]['_elementor_data'] = '';
+
+// JSON quotes and backslashes survive repeated restoration byte-for-byte.
+$quoted = wp_json_encode( array( array( 'editor' => '<a href="/en/">"English"</a> C:\\files' ) ) );
+$GLOBALS['translation_meta'][62]['_elementor_data'] = $quoted;
+foreach ( array( $norwegian_one, $norwegian_two ) as $value ) {
+	mcp_abilities_elementor_update_guarded_elementor_data( 61, wp_slash( $value ) );
+	update_post_meta( 62, '_elementor_data', wp_slash( $value ) );
+}
+$expected[61]['_elementor_data'] = $norwegian_two;
+$expected[62]['_elementor_data'] = $quoted;
+
+register_shutdown_function(
+	static function () use ( $expected ): void {
+		foreach ( $expected as $post_id => $values ) {
+			foreach ( $values as $meta_key => $value ) {
+				assert_same( $value, get_post_meta( $post_id, $meta_key, true ), "Request preserves {$post_id} {$meta_key}" );
+			}
+		}
+		echo "Request sibling restore tests passed (7 scenarios).\n";
+	}
+);

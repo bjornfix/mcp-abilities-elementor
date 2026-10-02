@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://devenia.com/plugins/mcp-abilities-elementor/
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.3.44
+ * Version: 2.3.45
  * Author: basicus
  * Author URI: https://profiles.wordpress.org/basicus/
  * License: GPL-2.0+
@@ -298,20 +298,42 @@ function mcp_abilities_elementor_restore_sibling_meta_values( array $snapshot, s
 /**
  * Schedule a final sibling meta restore after late multilingual sync hooks.
  *
+ * Keep the first sibling value for the request; later snapshots may already
+ * contain a source-language copy. Explicit target writes refresh a previously
+ * protected value so shutdown does not undo an intentional sibling edit.
+ *
  * @param array<int,mixed> $snapshot Captured sibling values.
  * @param string           $meta_key Meta key.
+ * @param int              $target_post_id Explicitly written target, if any.
  * @return bool
  */
-function mcp_abilities_elementor_schedule_shutdown_sibling_meta_restore( array $snapshot, string $meta_key ): bool {
+function mcp_abilities_elementor_schedule_shutdown_sibling_meta_restore( array $snapshot, string $meta_key, int $target_post_id = 0 ): bool {
+	static $pending_snapshots = array();
+	static $registered = false;
+
+	if ( isset( $pending_snapshots[ $meta_key ] ) && array_key_exists( $target_post_id, $pending_snapshots[ $meta_key ] ) ) {
+		$pending_snapshots[ $meta_key ][ $target_post_id ] = get_post_meta( $target_post_id, $meta_key, true );
+	}
 	if ( empty( $snapshot ) ) {
 		return false;
 	}
 
-	register_shutdown_function(
-		static function () use ( $snapshot, $meta_key ): void {
-			mcp_abilities_elementor_restore_sibling_meta_values( $snapshot, $meta_key );
+	$pending_snapshots[ $meta_key ] = $pending_snapshots[ $meta_key ] ?? array();
+	foreach ( $snapshot as $post_id => $value ) {
+		if ( ! array_key_exists( $post_id, $pending_snapshots[ $meta_key ] ) ) {
+			$pending_snapshots[ $meta_key ][ $post_id ] = $value;
 		}
-	);
+	}
+	if ( ! $registered ) {
+		$registered = true;
+		register_shutdown_function(
+			static function () use ( &$pending_snapshots ): void {
+				foreach ( $pending_snapshots as $key => $values ) {
+					mcp_abilities_elementor_restore_sibling_meta_values( $values, $key );
+				}
+			}
+		);
+	}
 
 	return true;
 }
@@ -328,7 +350,7 @@ function mcp_abilities_elementor_update_guarded_elementor_data( int $post_id, $m
 	$snapshot    = mcp_abilities_elementor_capture_sibling_meta_values( $sibling_ids, '_elementor_data' );
 	$result      = update_post_meta( $post_id, '_elementor_data', $meta_value );
 	$restore     = mcp_abilities_elementor_restore_sibling_meta_values( $snapshot, '_elementor_data' );
-	$scheduled   = mcp_abilities_elementor_schedule_shutdown_sibling_meta_restore( $snapshot, '_elementor_data' );
+	$scheduled   = mcp_abilities_elementor_schedule_shutdown_sibling_meta_restore( $snapshot, '_elementor_data', $post_id );
 
 	return array(
 		'updated'                    => false !== $result,
@@ -352,7 +374,7 @@ function mcp_abilities_elementor_update_guarded_page_settings( int $post_id, $me
 	$snapshot    = mcp_abilities_elementor_capture_sibling_meta_values( $sibling_ids, '_elementor_page_settings' );
 	$result      = update_post_meta( $post_id, '_elementor_page_settings', $meta_value );
 	$restore     = mcp_abilities_elementor_restore_sibling_meta_values( $snapshot, '_elementor_page_settings' );
-	$scheduled   = mcp_abilities_elementor_schedule_shutdown_sibling_meta_restore( $snapshot, '_elementor_page_settings' );
+	$scheduled   = mcp_abilities_elementor_schedule_shutdown_sibling_meta_restore( $snapshot, '_elementor_page_settings', $post_id );
 
 	return array(
 		'updated'                    => false !== $result,
