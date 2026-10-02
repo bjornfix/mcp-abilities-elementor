@@ -2,14 +2,14 @@
 
 Inspect an Elementor page, find the widget or shared setting behind a problem, and make a targeted change through an authenticated MCP client. Keep the page editable in Elementor and check the rendered result after saving.
 
-[![Release 2.3.45](https://img.shields.io/badge/release-2.3.45-blue.svg)](https://downloads.devenia.com/mcp-abilities-elementor.zip)
+[![Release 2.3.46](https://img.shields.io/badge/release-2.3.46-blue.svg)](https://downloads.devenia.com/mcp-abilities-elementor.zip)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0.html)
 [![WordPress](https://img.shields.io/badge/WordPress-6.9%2B-blue.svg)](https://wordpress.org)
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://www.php.net/)
 
 **Tested up to:** 7.1 (validated with WordPress 7.1-RC3)
 
-**Stable tag:** 2.3.45
+**Stable tag:** 2.3.46
 
 **License:** GPLv2 or later
 
@@ -244,6 +244,10 @@ For update notifications in WordPress, install [Devenia MCP Updater](https://dow
 
 ## Recent Changes
 
+
+### 2.3.46
+
+Preserve translated post content when multilingual page builders regenerate it during Elementor saves.
 
 ### 2.3.45
 

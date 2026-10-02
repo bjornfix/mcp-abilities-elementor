@@ -34,7 +34,7 @@ function get_option( string $name, $default = false ) {
 }
 
 function get_post( int $post_id ) {
-	return (object) array( 'ID' => $post_id );
+	return (object) array( 'ID' => $post_id, 'post_content' => $GLOBALS['translation_content'][ $post_id ] ?? '' );
 }
 
 function apply_filters( string $name, $value, ...$args ) {
@@ -51,6 +51,13 @@ function get_post_meta( int $post_id, string $meta_key, bool $single = true ) {
 function update_post_meta( int $post_id, string $meta_key, $value ) {
 	$GLOBALS['translation_meta'][ $post_id ][ $meta_key ] = is_string( $value ) ? stripslashes( $value ) : $value;
 	return true;
+}
+
+function wp_update_post( array $data, bool $wp_error = false ) {
+	if ( isset( $data['post_content'] ) ) {
+		$GLOBALS['translation_content'][ $data['ID'] ] = stripslashes( $data['post_content'] );
+	}
+	return $data['ID'];
 }
 
 function clean_post_cache( int $post_id ): void {}
@@ -127,6 +134,8 @@ $norwegian_one = '[{"title":"Finn forhandler"}]';
 $norwegian_two = '[{"title":"Finn forhandler","lead":"Din lokale glassmester"}]';
 $english_edit = '[{"title":"FIND YOUR LOCAL DEALER"}]';
 $expected = array();
+$expected_content = array();
+$english_content = '<h1>FIND A DEALER</h1> [wpsl]';
 
 foreach ( array( 1, 11, 21, 31, 41, 51, 61 ) as $source_id ) {
 	$sibling_id = $source_id + 1;
@@ -134,7 +143,27 @@ foreach ( array( 1, 11, 21, 31, 41, 51, 61 ) as $source_id ) {
 	$GLOBALS['translation_siblings'][ $sibling_id ] = array( $source_id );
 	$GLOBALS['translation_meta'][ $sibling_id ]['_elementor_data'] = $english;
 	$expected[ $sibling_id ]['_elementor_data'] = $english;
+	$GLOBALS['translation_content'][ $source_id ] = '<h1>Finn forhandler</h1>';
+	$GLOBALS['translation_content'][ $sibling_id ] = $english_content;
+	$expected_content[ $source_id ] = $GLOBALS['translation_content'][ $source_id ];
+	$expected_content[ $sibling_id ] = $english_content;
 }
+
+// Model the observed WPML event before the owner's final PHP restore:
+// translated metadata is copied, then Elementor derives post_content from it.
+register_shutdown_function(
+	static function (): void {
+		foreach ( array( 1, 11, 21, 31, 41, 51, 61 ) as $source_id ) {
+			foreach ( $GLOBALS['translation_siblings'][ $source_id ] as $sibling_id ) {
+				$data = get_post_meta( $source_id, '_elementor_data', true );
+				if ( '' !== $data ) {
+					update_post_meta( $sibling_id, '_elementor_data', wp_slash( $data ) );
+				}
+				wp_update_post( array( 'ID' => $sibling_id, 'post_content' => wp_slash( '<h1>Finn forhandler</h1>' ) ) );
+			}
+		}
+	}
+);
 
 // A single source write still restores a copy made by a late save hook.
 mcp_abilities_elementor_update_guarded_elementor_data( 1, wp_slash( $norwegian_one ) );
@@ -175,6 +204,8 @@ $expected[22]['_elementor_page_settings'] = $settings_edit;
 $GLOBALS['translation_siblings'][31][] = 33;
 $GLOBALS['translation_meta'][33]['_elementor_data'] = '[{"title":"HITTA EN BUTIK"}]';
 $expected[33]['_elementor_data'] = $GLOBALS['translation_meta'][33]['_elementor_data'];
+$GLOBALS['translation_content'][33] = '<h1>HITTA EN BUTIK</h1>';
+$expected_content[33] = $GLOBALS['translation_content'][33];
 foreach ( array( $norwegian_one, $norwegian_two ) as $value ) {
 	mcp_abilities_elementor_update_guarded_elementor_data( 31, wp_slash( $value ) );
 	foreach ( array( 32, 33 ) as $sibling_id ) {
@@ -186,6 +217,8 @@ $expected[31]['_elementor_data'] = $norwegian_two;
 // An explicit sibling-target edit is authoritative within the same request.
 mcp_abilities_elementor_update_guarded_elementor_data( 41, wp_slash( $norwegian_one ) );
 update_post_meta( 42, '_elementor_data', wp_slash( $norwegian_one ) );
+wp_update_post( array( 'ID' => 42, 'post_content' => wp_slash( '<h1>FIND YOUR LOCAL DEALER</h1>' ) ) );
+$expected_content[42] = '<h1>FIND YOUR LOCAL DEALER</h1>';
 mcp_abilities_elementor_update_guarded_elementor_data( 42, wp_slash( $english_edit ) );
 mcp_abilities_elementor_update_guarded_elementor_data( 41, wp_slash( $norwegian_two ) );
 update_post_meta( 42, '_elementor_data', wp_slash( $norwegian_two ) );
@@ -194,6 +227,8 @@ $expected[42]['_elementor_data'] = $english_edit;
 
 // Empty captured meta is a valid baseline, not an uncaptured value.
 $GLOBALS['translation_meta'][52]['_elementor_data'] = '';
+$GLOBALS['translation_content'][52] = '';
+$expected_content[52] = '';
 foreach ( array( $norwegian_one, $norwegian_two ) as $value ) {
 	mcp_abilities_elementor_update_guarded_elementor_data( 51, wp_slash( $value ) );
 	update_post_meta( 52, '_elementor_data', wp_slash( $value ) );
@@ -204,6 +239,8 @@ $expected[52]['_elementor_data'] = '';
 // JSON quotes and backslashes survive repeated restoration byte-for-byte.
 $quoted = wp_json_encode( array( array( 'editor' => '<a href="/en/">"English"</a> C:\\files' ) ) );
 $GLOBALS['translation_meta'][62]['_elementor_data'] = $quoted;
+$GLOBALS['translation_content'][62] = '<p>\"English\" C:\\files</p>';
+$expected_content[62] = $GLOBALS['translation_content'][62];
 foreach ( array( $norwegian_one, $norwegian_two ) as $value ) {
 	mcp_abilities_elementor_update_guarded_elementor_data( 61, wp_slash( $value ) );
 	update_post_meta( 62, '_elementor_data', wp_slash( $value ) );
@@ -212,12 +249,16 @@ $expected[61]['_elementor_data'] = $norwegian_two;
 $expected[62]['_elementor_data'] = $quoted;
 
 register_shutdown_function(
-	static function () use ( $expected ): void {
+	static function () use ( $expected, $expected_content ): void {
 		foreach ( $expected as $post_id => $values ) {
 			foreach ( $values as $meta_key => $value ) {
 				assert_same( $value, get_post_meta( $post_id, $meta_key, true ), "Request preserves {$post_id} {$meta_key}" );
 			}
 		}
 		echo "Request sibling restore tests passed (7 scenarios).\n";
+		foreach ( $expected_content as $post_id => $content ) {
+			assert_same( $content, get_post( $post_id )->post_content, "Request preserves {$post_id} post_content after translated plain-text save" );
+		}
+		echo "Translated post_content restore tests passed (7 scenarios).\n";
 	}
 );
