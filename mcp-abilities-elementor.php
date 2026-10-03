@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://devenia.com/plugins/mcp-abilities-elementor/
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.3.47
+ * Version: 2.3.48
  * Author: basicus
  * Author URI: https://profiles.wordpress.org/basicus/
  * License: GPL-2.0+
@@ -399,9 +399,14 @@ function mcp_abilities_elementor_update_guarded_elementor_data( int $post_id, $m
 	$sibling_ids           = mcp_abilities_elementor_get_translation_sibling_post_ids( $post_id );
 	$snapshot              = mcp_abilities_elementor_capture_sibling_meta_values( $sibling_ids, '_elementor_data' );
 	$post_content_snapshot = mcp_abilities_elementor_capture_sibling_post_content( $sibling_ids );
+	$shared_guard          = function_exists( 'mcp_expose_capture_translation_sibling_state' ) && function_exists( 'mcp_expose_schedule_translation_sibling_state_restore' ) && ( new ReflectionFunction( 'mcp_expose_schedule_translation_sibling_state_restore' ) )->getNumberOfParameters() >= 4;
+	$shared_snapshot       = $shared_guard ? mcp_expose_capture_translation_sibling_state( $post_id ) : array();
 	$result                = update_post_meta( $post_id, '_elementor_data', $meta_value );
 	$restore               = mcp_abilities_elementor_restore_sibling_meta_values( $snapshot, '_elementor_data' );
-	$scheduled             = mcp_abilities_elementor_schedule_shutdown_sibling_meta_restore( $snapshot, '_elementor_data', $post_id, $post_content_snapshot );
+	$written               = get_post_meta( $post_id, '_elementor_data', true ) === wp_unslash( $meta_value );
+	$scheduled             = $shared_guard
+		? mcp_expose_schedule_translation_sibling_state_restore( $shared_snapshot, $written ? $post_id : 0, array(), $written ? array( '_elementor_data' ) : array() )
+		: mcp_abilities_elementor_schedule_shutdown_sibling_meta_restore( $snapshot, '_elementor_data', $written ? $post_id : 0, $post_content_snapshot );
 
 	return array(
 		'updated'                    => false !== $result,
@@ -424,9 +429,14 @@ function mcp_abilities_elementor_update_guarded_page_settings( int $post_id, $me
 	$sibling_ids           = mcp_abilities_elementor_get_translation_sibling_post_ids( $post_id );
 	$snapshot              = mcp_abilities_elementor_capture_sibling_meta_values( $sibling_ids, '_elementor_page_settings' );
 	$post_content_snapshot = mcp_abilities_elementor_capture_sibling_post_content( $sibling_ids );
+	$shared_guard          = function_exists( 'mcp_expose_capture_translation_sibling_state' ) && function_exists( 'mcp_expose_schedule_translation_sibling_state_restore' ) && ( new ReflectionFunction( 'mcp_expose_schedule_translation_sibling_state_restore' ) )->getNumberOfParameters() >= 4;
+	$shared_snapshot       = $shared_guard ? mcp_expose_capture_translation_sibling_state( $post_id ) : array();
 	$result                = update_post_meta( $post_id, '_elementor_page_settings', $meta_value );
 	$restore               = mcp_abilities_elementor_restore_sibling_meta_values( $snapshot, '_elementor_page_settings' );
-	$scheduled             = mcp_abilities_elementor_schedule_shutdown_sibling_meta_restore( $snapshot, '_elementor_page_settings', $post_id, $post_content_snapshot );
+	$written               = get_post_meta( $post_id, '_elementor_page_settings', true ) === wp_unslash( $meta_value );
+	$scheduled             = $shared_guard
+		? mcp_expose_schedule_translation_sibling_state_restore( $shared_snapshot, $written ? $post_id : 0, array(), $written ? array( '_elementor_page_settings' ) : array() )
+		: mcp_abilities_elementor_schedule_shutdown_sibling_meta_restore( $snapshot, '_elementor_page_settings', $written ? $post_id : 0, $post_content_snapshot );
 
 	return array(
 		'updated'                    => false !== $result,

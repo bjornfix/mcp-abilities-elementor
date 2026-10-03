@@ -16,6 +16,7 @@ namespace {
 	function __( string $text, ...$args ): string { return $text; }
 	function wp_json_encode( $value, int $flags = 0 ) { return json_encode( $value, $flags ); }
 	function wp_slash( $value ) { return addslashes( (string) $value ); }
+	function wp_unslash( $value ) { return is_array( $value ) ? array_map( 'wp_unslash', $value ) : ( is_string( $value ) ? stripslashes( $value ) : $value ); }
 	function get_option( string $key, $default = false ) { return 'elementor_active_kit' === $key ? 259 : $default; }
 	function get_post_meta( int $id, string $key, bool $single = true ) { return $GLOBALS['meta'][ $id ][ $key ] ?? ''; }
 	function update_post_meta( int $id, string $key, $value ) {
