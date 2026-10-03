@@ -23,7 +23,7 @@ class WP_Post {
 }
 class WP_Error { public function get_error_message():string { return 'Fixture write failure'; } }
 function add_action(...$args):void {}
-function add_filter(...$args):void {}
+function add_filter($name,$callback,$priority=10,$argc=1):void {$GLOBALS['filters'][$name][$priority][]=[$callback,$argc];}
 function __(string $s,...$args):string{return $s;}
 function esc_html__(string $s,...$args):string{return $s;}
 function esc_html(string $s):string{return $s;}
@@ -39,6 +39,7 @@ function wp_register_ability(string $name,array $definition):void{$GLOBALS['abil
 function get_post(int $id){if(!empty($GLOBALS['use_cache'])){$GLOBALS['post_cache'][$id]=$GLOBALS['post_cache'][$id]??(isset($GLOBALS['posts'][$id])?clone $GLOBALS['posts'][$id]:null);return $GLOBALS['post_cache'][$id]?clone $GLOBALS['post_cache'][$id]:null;}return isset($GLOBALS['posts'][$id])?clone $GLOBALS['posts'][$id]:null;}
 function apply_filters(string $name,$value,...$args){
  if(in_array($name,['mcp_expose_translation_sibling_post_ids','mcp_abilities_elementor_translation_sibling_post_ids'],true))return $GLOBALS['siblings'][$args[0]]??[];
+ $groups=$GLOBALS['filters'][$name]??[];ksort($groups);foreach($groups as $callbacks)foreach($callbacks as [$callback,$argc])$value=$callback(...array_slice([$value,...$args],0,$argc));
  return $value;
 }
 function wp_slash($v){return is_array($v)?array_map('wp_slash',$v):(is_string($v)?addslashes($v):$v);}
@@ -102,6 +103,35 @@ if(($argv[2]??'')==='foreign-cache-intent'){
   check(25,$GLOBALS['posts'][2]->post_author,'explicit author remains authoritative');
   echo 'Stale-cache restoration preserves explicit target author.'.PHP_EOL;
  });exit(0);
+}
+if(($argv[2]??'')==='async-auto-translation'){
+ $GLOBALS['siblings'][1]=[2];$GLOBALS['siblings'][2]=[1];
+ foreach([1=>'Norwegian original',2=>'English original',3=>'Unrelated original'] as $id=>$body)$GLOBALS['posts'][$id]=new WP_Post($id,$body);
+ $GLOBALS['meta'][1]['_elementor_data']=['NO'];$GLOBALS['meta'][2]['_elementor_data']=['EN'];
+ // WPML checks its existing per-post filter at WordPress shutdown, then a
+ // different request applies the resulting job after the writer has exited.
+ register_shutdown_function(static function():void{
+  $queued=[];foreach([1,3] as $id)if(!apply_filters('wpml_exclude_post_from_auto_translate',false,$id))$queued[]=$id;
+  register_shutdown_function(static function()use($queued):void{
+   if(in_array(1,$queued,true)){$GLOBALS['posts'][2]->post_content='WRONG ASYNC SOURCE';$GLOBALS['posts'][2]->post_author='5';$GLOBALS['meta'][2]['_elementor_data']=['WRONG ASYNC SOURCE'];}
+   check('English explicit',$GLOBALS['posts'][2]->post_content,'later job must not replace explicit English body');
+   check(['EN'],$GLOBALS['meta'][2]['_elementor_data'],'later job must not replace untouched English builder');
+   check('20',$GLOBALS['posts'][2]->post_author,'later job must not replace English author');
+   check([3],$queued,'unrelated native automatic translation still queues');
+   check(true,apply_filters('wpml_exclude_post_from_auto_translate',true,3),'existing exclusion remains authoritative');
+   echo 'Asynchronous automatic translation preserves explicit targets and unrelated jobs.'.PHP_EOL;
+  });
+ });
+ mcp_abilities_elementor_update_guarded_elementor_data(1,wp_slash('NO EDIT'));
+ content(2,'English explicit');
+ $GLOBALS['siblings'][11]=[12];$GLOBALS['posts'][11]=new WP_Post(11,'Failed source');$GLOBALS['posts'][12]=new WP_Post(12,'Failed English');
+ $GLOBALS['meta'][11]['_elementor_data']=['NO'];$GLOBALS['meta'][12]['_elementor_data']=['EN'];
+ $GLOBALS['fail_meta']=true;mcp_abilities_elementor_update_guarded_elementor_data(11,wp_slash('FAILED'));$GLOBALS['fail_meta']=false;
+ check(false,apply_filters('wpml_exclude_post_from_auto_translate',false,11),'failed writes do not exclude automatic translation');
+ $GLOBALS['posts'][4]=new WP_Post(4,'Source without existing translation');
+ mcp_abilities_elementor_update_guarded_elementor_data(4,wp_slash('NEW SOURCE'));
+ check(false,apply_filters('wpml_exclude_post_from_auto_translate',false,4),'new source without siblings keeps automatic translation');
+ exit(0);
 }
 $expected=[];
 foreach([1,11,21,31,41,51,61,71] as $source){
