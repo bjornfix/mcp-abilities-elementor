@@ -18,7 +18,7 @@ function get_object_taxonomies(...$args):array{return [];}
 class WP_Post {
  public int $ID; public string $post_type='page'; public string $post_title='Title';
  public string $post_content=''; public string $post_excerpt=''; public string $post_name='page';
- public string $post_status='publish'; public int $post_parent=0; public int $menu_order=0;
+ public string $post_status='publish'; public int $post_parent=0; public int $menu_order=0; public $post_author='20';
  public function __construct(int $id, string $body) { $this->ID=$id; $this->post_content=$body; }
 }
 class WP_Error { public function get_error_message():string { return 'Fixture write failure'; } }
@@ -31,11 +31,12 @@ function sanitize_key(string $s):string{return strtolower($s);}
 function sanitize_text_field(string $s):string{return $s;}
 function sanitize_title(string $s):string{return $s;}
 function current_user_can(...$args):bool{return true;}
+function get_current_user_id():int{return 1;}
 function get_option(string $key,$default=false){return $default;}
 function get_permalink(int $id):string{return 'https://example.com/'.$id;}
 function is_wp_error($value):bool{return $value instanceof WP_Error;}
 function wp_register_ability(string $name,array $definition):void{$GLOBALS['abilities'][$name]=$definition;}
-function get_post(int $id){return isset($GLOBALS['posts'][$id])?clone $GLOBALS['posts'][$id]:null;}
+function get_post(int $id){if(!empty($GLOBALS['use_cache'])){$GLOBALS['post_cache'][$id]=$GLOBALS['post_cache'][$id]??(isset($GLOBALS['posts'][$id])?clone $GLOBALS['posts'][$id]:null);return $GLOBALS['post_cache'][$id]?clone $GLOBALS['post_cache'][$id]:null;}return isset($GLOBALS['posts'][$id])?clone $GLOBALS['posts'][$id]:null;}
 function apply_filters(string $name,$value,...$args){
  if(in_array($name,['mcp_expose_translation_sibling_post_ids','mcp_abilities_elementor_translation_sibling_post_ids'],true))return $GLOBALS['siblings'][$args[0]]??[];
  return $value;
@@ -44,18 +45,19 @@ function wp_slash($v){return is_array($v)?array_map('wp_slash',$v):(is_string($v
 function wp_unslash($v){return is_array($v)?array_map('wp_unslash',$v):(is_string($v)?stripslashes($v):$v);}
 function wp_json_encode($v){return json_encode($v);}
 function maybe_serialize($v){return is_array($v)||is_object($v)?serialize($v):$v;}
-function get_post_meta(int $id,string $key,bool $single=true){$rows=$GLOBALS['meta'][$id][$key]??[];return $single?($rows[0]??''):$rows;}
+function get_post_meta(int $id,string $key,bool $single=true){if(!empty($GLOBALS['use_cache'])){$GLOBALS['meta_cache'][$id]=$GLOBALS['meta_cache'][$id]??($GLOBALS['meta'][$id]??[]);$rows=$GLOBALS['meta_cache'][$id][$key]??[];}else{$rows=$GLOBALS['meta'][$id][$key]??[];}return $single?($rows[0]??''):$rows;}
 function update_post_meta(int $id,string $key,$value){
  if(!empty($GLOBALS['fail_meta']))return false;
  $GLOBALS['meta'][$id][$key]=[wp_unslash($value)];return true;
 }
-function clean_post_cache(int $id):void{}
-function wp_cache_delete(...$args):void{}
+function clean_post_cache(int $id):void{unset($GLOBALS['post_cache'][$id],$GLOBALS['meta_cache'][$id]);}
+function wp_cache_delete(...$args):void{if(($args[1]??'')==='post_meta')unset($GLOBALS['meta_cache'][$args[0]]);if(($args[1]??'')==='posts')unset($GLOBALS['post_cache'][$args[0]]);}
 function wp_update_post(array $data,bool $wp_error=false){
  if(!empty($GLOBALS['fail_post']))return new WP_Error();
  $id=(int)$data['ID']; foreach(wp_unslash($data) as $key=>$value)if($key!=='ID')$GLOBALS['posts'][$id]->$key=$value;
  // A body save can incidentally copy builder data; this must not become intent.
  if(!empty($GLOBALS['incidental_meta']))$GLOBALS['meta'][$id]['_elementor_data']=['WRONG INCIDENTAL COPY'];
+ if(!empty($GLOBALS['use_cache']))clean_post_cache($id);
  return $id;
 }
 class FixtureDb {
@@ -73,6 +75,32 @@ mcp_register_content_abilities();
 function check($expected,$actual,string $message):void{if($expected!==$actual){fwrite(STDERR,'FAIL: '.$message.'\n');exit(1);}}
 function content(int $id,string $body,string $ability='content/update-page'):void{
  $result=($GLOBALS['abilities'][$ability]['execute_callback'])(['id'=>$id,'content'=>$body]);check(true,$result['success']??false,'native Content callback');
+}
+if(in_array($argv[2]??'', ['foreign-cache','foreign-cache-meta','foreign-cache-author'],true)){
+ $GLOBALS['use_cache']=true;$GLOBALS['siblings'][1]=[2];$GLOBALS['siblings'][2]=[1];
+ $GLOBALS['posts'][1]=new WP_Post(1,'Norwegian original');$GLOBALS['posts'][2]=new WP_Post(2,'English original');
+ $GLOBALS['meta'][1]['_elementor_data']=['NO'];$GLOBALS['meta'][2]['_elementor_data']=['EN'];
+ $snapshot=mcp_expose_capture_translation_sibling_state(1);
+ // A frontend HTTP request changes the database while the writer retains its local object cache.
+ $GLOBALS['posts'][2]->post_content='WRONG SOURCE BODY';$GLOBALS['posts'][2]->post_author='5';$GLOBALS['meta'][2]['_elementor_data']=['WRONG SOURCE DATA'];
+ mcp_expose_restore_translation_sibling_state($snapshot);
+ if(($argv[2]??'')==='foreign-cache')check('English original',$GLOBALS['posts'][2]->post_content,'foreign-request body must be restored in database');
+ if(($argv[2]??'')!=='foreign-cache-author')check(['EN'],$GLOBALS['meta'][2]['_elementor_data'],'foreign-request metadata must be restored in database');else check('20',$GLOBALS['posts'][2]->post_author,'untouched sibling author must be restored');
+ echo 'Foreign-request stale-cache preservation passed.'.PHP_EOL;exit(0);
+}
+if(($argv[2]??'')==='foreign-cache-intent'){
+ $GLOBALS['use_cache']=true;$GLOBALS['siblings'][1]=[2];$GLOBALS['siblings'][2]=[1];
+ $GLOBALS['posts'][1]=new WP_Post(1,'Norwegian original');$GLOBALS['posts'][2]=new WP_Post(2,'English original');
+ $GLOBALS['meta'][1]['_elementor_data']=['NO'];$GLOBALS['meta'][2]['_elementor_data']=['EN'];
+ $snapshot=mcp_expose_capture_translation_sibling_state(1);mcp_expose_schedule_translation_sibling_state_restore($snapshot);
+ $GLOBALS['posts'][2]->post_content='WRONG SOURCE BODY';$GLOBALS['posts'][2]->post_author='5';$GLOBALS['meta'][2]['_elementor_data']=['WRONG SOURCE DATA'];
+ $r=($GLOBALS['abilities']['content/update-post']['execute_callback'])(['id'=>2,'author_id'=>25]);check(true,$r['success'],'explicit target author callback');
+ register_shutdown_function(static function():void{
+  check('English original',$GLOBALS['posts'][2]->post_content,'author-only edit preserves protected body');
+  check(['EN'],$GLOBALS['meta'][2]['_elementor_data'],'author-only edit preserves protected builder rows');
+  check(25,$GLOBALS['posts'][2]->post_author,'explicit author remains authoritative');
+  echo 'Stale-cache restoration preserves explicit target author.'.PHP_EOL;
+ });exit(0);
 }
 $expected=[];
 foreach([1,11,21,31,41,51,61,71] as $source){
