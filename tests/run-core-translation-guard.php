@@ -76,16 +76,17 @@ function check($expected,$actual,string $message):void{if($expected!==$actual){f
 function content(int $id,string $body,string $ability='content/update-page'):void{
  $result=($GLOBALS['abilities'][$ability]['execute_callback'])(['id'=>$id,'content'=>$body]);check(true,$result['success']??false,'native Content callback');
 }
-if(in_array($argv[2]??'', ['foreign-cache','foreign-cache-meta','foreign-cache-author'],true)){
+if(in_array($argv[2]??'', ['foreign-cache','foreign-cache-meta','foreign-cache-author','foreign-cache-text-fields'],true)){
  $GLOBALS['use_cache']=true;$GLOBALS['siblings'][1]=[2];$GLOBALS['siblings'][2]=[1];
  $GLOBALS['posts'][1]=new WP_Post(1,'Norwegian original');$GLOBALS['posts'][2]=new WP_Post(2,'English original');
  $GLOBALS['meta'][1]['_elementor_data']=['NO'];$GLOBALS['meta'][2]['_elementor_data']=['EN'];
+ $english_rows=['EN'];if(($argv[2]??'')==='foreign-cache-text-fields'){$nodes=[];for($i=0;$i<12;$i++)$nodes[]=['id'=>'english'.$i,'elType'=>'widget','widgetType'=>'text-editor','settings'=>['editor'=>'<p>English field '.$i.' "quoted" <a href="/en/contact/">Contact</a></p>']];$english_rows=[wp_json_encode($nodes)];$GLOBALS['meta'][2]['_elementor_data']=$english_rows;}
  $snapshot=mcp_expose_capture_translation_sibling_state(1);
  // A frontend HTTP request changes the database while the writer retains its local object cache.
  $GLOBALS['posts'][2]->post_content='WRONG SOURCE BODY';$GLOBALS['posts'][2]->post_author='5';$GLOBALS['meta'][2]['_elementor_data']=['WRONG SOURCE DATA'];
  mcp_expose_restore_translation_sibling_state($snapshot);
  if(($argv[2]??'')==='foreign-cache')check('English original',$GLOBALS['posts'][2]->post_content,'foreign-request body must be restored in database');
- if(($argv[2]??'')!=='foreign-cache-author')check(['EN'],$GLOBALS['meta'][2]['_elementor_data'],'foreign-request metadata must be restored in database');else check('20',$GLOBALS['posts'][2]->post_author,'untouched sibling author must be restored');
+ if(($argv[2]??'')!=='foreign-cache-author')check($english_rows,$GLOBALS['meta'][2]['_elementor_data'],'foreign-request metadata must be restored in database');else check('20',$GLOBALS['posts'][2]->post_author,'untouched sibling author must be restored');
  echo 'Foreign-request stale-cache preservation passed.'.PHP_EOL;exit(0);
 }
 if(($argv[2]??'')==='foreign-cache-intent'){
