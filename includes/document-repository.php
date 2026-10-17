@@ -87,3 +87,47 @@ function mcp_abilities_elementor_load_document( int $post_id, bool $require_data
 function mcp_abilities_elementor_load_document_from_input( array $input, bool $require_data = true ): array {
 	return mcp_abilities_elementor_load_document( isset( $input['id'] ) ? (int) $input['id'] : 0, $require_data );
 }
+
+/**
+ * Include editable Elementor metadata in WordPress revision change detection.
+ *
+ * Native Elementor copies its metadata when WordPress creates a revision. Its
+ * public preview snapshots use the same revision API, including metadata-only
+ * edits that leave the ordinary post fields unchanged. Derived render caches
+ * are deliberately excluded from change detection.
+ *
+ * @param bool    $post_has_changed Existing WordPress or plugin result.
+ * @param WP_Post $latest_revision Latest non-autosave revision.
+ * @param WP_Post $post Current document.
+ * @return bool
+ */
+function mcp_abilities_elementor_revision_has_changed( bool $post_has_changed, WP_Post $latest_revision, WP_Post $post ): bool {
+	if ( $post_has_changed || 'revision' !== $latest_revision->post_type || (int) $latest_revision->post_parent !== (int) $post->ID || 'revision' === $post->post_type ) {
+		return $post_has_changed;
+	}
+
+	if ( '' === get_post_meta( $post->ID, '_elementor_data', true ) && '' === get_post_meta( $latest_revision->ID, '_elementor_data', true ) && ! get_post_meta( $post->ID, '_elementor_edit_mode', true ) && ! get_post_meta( $latest_revision->ID, '_elementor_edit_mode', true ) ) {
+		return false;
+	}
+
+	$meta_keys = array( '_elementor_data', '_elementor_page_settings', '_elementor_edit_mode', '_elementor_template_type', '_elementor_version', '_elementor_pro_version', '_wp_page_template', '_thumbnail_id' );
+	foreach ( $meta_keys as $meta_key ) {
+		if ( get_post_meta( $post->ID, $meta_key, false ) !== get_post_meta( $latest_revision->ID, $meta_key, false ) ) {
+			return true;
+		}
+	}
+
+	// Native preview falls back to the highest revision ID, including autosaves.
+	// WordPress compares a non-autosave above; both candidates must be current.
+	$latest = wp_get_post_revisions( $post->ID, array( 'posts_per_page' => 1, 'orderby' => 'ID', 'order' => 'DESC' ) );
+	$preview_revision = $latest ? reset( $latest ) : null;
+	if ( $preview_revision instanceof WP_Post && (int) $preview_revision->ID !== (int) $latest_revision->ID && (int) $preview_revision->post_parent === (int) $post->ID ) {
+		foreach ( $meta_keys as $meta_key ) {
+			if ( get_post_meta( $post->ID, $meta_key, false ) !== get_post_meta( $preview_revision->ID, $meta_key, false ) ) {
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
