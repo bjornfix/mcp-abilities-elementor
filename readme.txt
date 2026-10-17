@@ -3,7 +3,7 @@ Contributors: basicus
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 7.1
-Stable tag: 2.3.49
+Stable tag: 2.3.50
 Requires PHP: 8.0
 Requires Plugins: elementor
 License: GPLv2 or later
@@ -65,7 +65,7 @@ For update notifications in WordPress, install [Devenia MCP Updater](https://dow
 
 == Changelog ==
 
-= 2.3.49 =
+= 2.3.50 =
 * Preserve both language versions during synchronous metadata synchronization and report successful Elementor saves correctly.
 * Refresh native atomic styles for the saved document without clearing unrelated page styles.
 

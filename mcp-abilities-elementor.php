@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://devenia.com/plugins/mcp-abilities-elementor/
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.3.49
+ * Version: 2.3.50
  * Author: basicus
  * Author URI: https://profiles.wordpress.org/basicus/
  * License: GPL-2.0+
@@ -5973,8 +5973,11 @@ function mcp_abilities_elementor_invalidate_after_write( int $post_id, string $c
 		}
 	}
 
-	// Atomic local styles use a separate native cache tree from legacy post CSS.
-	do_action( 'elementor/atomic-widgets/styles/clear', array( 'local', $post_id ) );
+	// Native atomic styles regenerate on the next render when this document's cache is invalid.
+	if ( class_exists( '\\Elementor\\Modules\\AtomicWidgets\\Styles\\CacheValidity\\Cache_Validity' ) ) {
+		$atomic_cache = new \Elementor\Modules\AtomicWidgets\Styles\CacheValidity\Cache_Validity();
+		$atomic_cache->invalidate( array( 'local', $post_id ) );
+	}
 
 	$css_deleted = delete_post_meta( $post_id, '_elementor_css' );
 	$assets_deleted = delete_post_meta( $post_id, '_elementor_page_assets' );

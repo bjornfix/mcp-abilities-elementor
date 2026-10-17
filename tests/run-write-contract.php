@@ -10,15 +10,17 @@ namespace Elementor {
 		public static $instance;
 	}
 }
+namespace Elementor\Modules\AtomicWidgets\Styles\CacheValidity {
+	class Cache_Validity {
+		public function invalidate( array $path ): void {
+			$GLOBALS['atomic_invalidations'][] = $path;
+			if ( 2 === count( $path ) && 'local' === $path[0] ) { unset( $GLOBALS['atomic_css'][ $path[1] ] ); }
+		}
+	}
+}
 namespace {
 	define( 'ABSPATH', __DIR__ );
 	function add_action( ...$args ): void {}
-	function do_action( string $name, ...$args ): void {
-		if ( 'elementor/atomic-widgets/styles/clear' === $name ) {
-			$GLOBALS['atomic_invalidations'][] = $args[0];
-			if ( 2 === count( $args[0] ) && 'local' === $args[0][0] ) { unset( $GLOBALS['atomic_css'][ $args[0][1] ] ); }
-		}
-	}
 	function delete_post_meta( int $id, string $key ): bool { unset( $GLOBALS['meta'][ $id ][ $key ] ); return true; }
 	function clean_post_cache( int $id ): void {}
 	function current_time( ...$args ): string { return '2026-10-17 00:00:00'; }
