@@ -2,14 +2,14 @@
 
 Inspect an Elementor page, find the widget or shared setting behind a problem, and make a targeted change through an authenticated MCP client. Keep the page editable in Elementor and check the rendered result after saving.
 
-[![Release 2.3.50](https://img.shields.io/badge/release-2.3.50-blue.svg)](https://downloads.devenia.com/mcp-abilities-elementor.zip)
+[![Release 2.3.51](https://img.shields.io/badge/release-2.3.51-blue.svg)](https://downloads.devenia.com/mcp-abilities-elementor.zip)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0.html)
 [![WordPress](https://img.shields.io/badge/WordPress-6.9%2B-blue.svg)](https://wordpress.org)
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://www.php.net/)
 
 **Tested up to:** 7.1 (validated with WordPress 7.1-RC3)
 
-**Stable tag:** 2.3.50
+**Stable tag:** 2.3.51
 
 **License:** GPLv2 or later
 
@@ -243,6 +243,11 @@ For update notifications in WordPress, install [Devenia MCP Updater](https://dow
 5. Read one existing Elementor page before making changes.
 
 ## Recent Changes
+
+### 2.3.51
+
+- Keep Theme Builder display conditions aligned with each template's native location, including Single Post templates, while preserving other templates' assignments.
+- Read conditions for one template or complete location maps. Empty conditions leave a template unassigned.
 
 ### 2.3.50
 

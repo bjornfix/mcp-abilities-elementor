@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://devenia.com/plugins/mcp-abilities-elementor/
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.3.50
+ * Version: 2.3.51
  * Author: basicus
  * Author URI: https://profiles.wordpress.org/basicus/
  * License: GPL-2.0+
@@ -6850,28 +6850,61 @@ function mcp_abilities_elementor_normalize_conditions( array $conditions ): arra
 }
 
 /**
- * Persist theme builder conditions to post meta and Elementor Pro options.
+ * Resolve the native document that owns Theme Builder condition assignment.
+ *
+ * @param int $post_id Template ID.
+ * @return object|false Native Theme Document, or false without Theme Builder.
+ */
+function mcp_abilities_elementor_condition_document( int $post_id ) {
+	if ( ! class_exists( '\ElementorPro\Modules\ThemeBuilder\Module' ) ) {
+		return false;
+	}
+
+	$document = \ElementorPro\Modules\ThemeBuilder\Module::instance()->get_document( $post_id );
+	return $document && method_exists( $document, 'get_location' ) ? $document : false;
+}
+
+/**
+ * Resolve a template ID to its native runtime location, not its document type.
+ *
+ * @param int    $post_id       Template ID.
+ * @param string $template_type Legacy type hint when Theme Builder is unavailable.
+ * @return string Runtime location, or the legacy hint without a native document.
+ */
+function mcp_abilities_elementor_condition_location( int $post_id, string $template_type = '' ): string {
+	$document = mcp_abilities_elementor_condition_document( $post_id );
+	return $document ? (string) $document->get_location() : $template_type;
+}
+
+/**
+ * Persist conditions and refresh only this document's native runtime assignment.
  *
  * @param int    $post_id Post ID.
- * @param string $template_type Template type.
+ * @param string $template_type Legacy caller hint; the native document owns its location.
  * @param array  $conditions_to_save Normalized conditions.
  */
 function mcp_abilities_elementor_save_conditions( int $post_id, string $template_type, array $conditions_to_save ): void {
-	update_post_meta( $post_id, '_elementor_conditions', $conditions_to_save );
+	if ( empty( $conditions_to_save ) ) {
+		delete_post_meta( $post_id, '_elementor_conditions' );
+	} else {
+		update_post_meta( $post_id, '_elementor_conditions', $conditions_to_save );
+	}
 
-	if ( '' === $template_type ) {
+	$document = mcp_abilities_elementor_condition_document( $post_id );
+	if ( ! $document || '' === $document->get_location() ) {
 		return;
 	}
 
-	$theme_builder_conditions = get_option( 'elementor_pro_theme_builder_conditions', array() );
-	if ( ! is_array( $theme_builder_conditions ) ) {
-		$theme_builder_conditions = array();
+	$manager = \ElementorPro\Modules\ThemeBuilder\Module::instance()->get_conditions_manager();
+	$cache   = $manager->get_cache()->refresh();
+	if ( empty( $conditions_to_save ) ) {
+		$cache->remove( $document->get_main_id() );
+	} else {
+		// Native update removes this ID from stale locations before adding its real one.
+		$cache->update( $document, $conditions_to_save );
 	}
-	if ( empty( $theme_builder_conditions[ $template_type ] ) || ! is_array( $theme_builder_conditions[ $template_type ] ) ) {
-		$theme_builder_conditions[ $template_type ] = array();
-	}
-	$theme_builder_conditions[ $template_type ][ $post_id ] = $conditions_to_save;
-	update_option( 'elementor_pro_theme_builder_conditions', $theme_builder_conditions );
+	$cache->save();
+	$manager->clear_location_cache();
 }
 
 /**

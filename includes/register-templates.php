@@ -986,7 +986,7 @@ function mcp_abilities_elementor_register_template_abilities(): void {
 		'elementor/get-theme-builder-conditions',
 		array(
 			'label'               => 'Get Theme Builder Conditions',
-			'description'         => 'Retrieves Elementor theme builder display conditions. Filter by template type or template ID.',
+			'description'         => 'Retrieves Elementor theme builder display conditions. Filter by native runtime location or template ID.',
 			'category'            => 'site',
 			'input_schema'        => array(
 				'type'                 => 'object',
@@ -1008,7 +1008,7 @@ function mcp_abilities_elementor_register_template_abilities(): void {
 					'success'    => array( 'type' => 'boolean' ),
 					'type'       => array( 'type' => 'string' ),
 					'id'         => array( 'type' => 'integer' ),
-					'conditions' => array( 'type' => 'array' ),
+					'conditions' => array( 'type' => array( 'array', 'object' ) ),
 					'message'    => array( 'type' => 'string' ),
 				),
 			),
@@ -1030,7 +1030,10 @@ function mcp_abilities_elementor_register_template_abilities(): void {
 						return array( 'success' => false, 'message' => 'You do not have permission to access this template' );
 					}
 
-					$template_type = $input['type'] ?? get_post_meta( $post->ID, '_elementor_template_type', true );
+					$template_type = mcp_abilities_elementor_condition_location(
+						(int) $post->ID,
+						(string) ( $input['type'] ?? get_post_meta( $post->ID, '_elementor_template_type', true ) )
+					);
 					if ( empty( $template_type ) ) {
 						return array( 'success' => false, 'message' => 'Template type is required to fetch conditions' );
 					}
@@ -1133,7 +1136,10 @@ function mcp_abilities_elementor_register_template_abilities(): void {
 					return array( 'success' => false, 'message' => 'You do not have permission to update this template' );
 				}
 
-				$template_type = $input['type'] ?? get_post_meta( $post->ID, '_elementor_template_type', true );
+				$template_type = mcp_abilities_elementor_condition_location(
+					(int) $post->ID,
+					(string) ( $input['type'] ?? get_post_meta( $post->ID, '_elementor_template_type', true ) )
+				);
 				if ( empty( $template_type ) ) {
 					return array( 'success' => false, 'message' => 'Template type is required to update conditions' );
 				}
