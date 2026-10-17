@@ -67,6 +67,7 @@ For update notifications in WordPress, install [Devenia MCP Updater](https://dow
 
 = 2.3.49 =
 * Preserve both language versions during synchronous metadata synchronization and report successful Elementor saves correctly.
+* Refresh native atomic styles for the saved document without clearing unrelated page styles.
 
 = 2.3.48 =
 * Coordinate translated document protection with compatible Core Content writes. Preserve later explicit body, data and native settings edits without accepting incidental language copies.

@@ -13,6 +13,16 @@ namespace Elementor {
 namespace {
 	define( 'ABSPATH', __DIR__ );
 	function add_action( ...$args ): void {}
+	function do_action( string $name, ...$args ): void {
+		if ( 'elementor/atomic-widgets/styles/clear' === $name ) {
+			$GLOBALS['atomic_invalidations'][] = $args[0];
+			if ( 2 === count( $args[0] ) && 'local' === $args[0][0] ) { unset( $GLOBALS['atomic_css'][ $args[0][1] ] ); }
+		}
+	}
+	function delete_post_meta( int $id, string $key ): bool { unset( $GLOBALS['meta'][ $id ][ $key ] ); return true; }
+	function clean_post_cache( int $id ): void {}
+	function current_time( ...$args ): string { return '2026-10-17 00:00:00'; }
+	function wp_update_post( array $data, bool $error = false ) { return (int) $data['ID']; }
 	function __( string $text, ...$args ): string { return $text; }
 	function wp_json_encode( $value, int $flags = 0 ) { return json_encode( $value, $flags ); }
 	function wp_slash( $value ) { return addslashes( (string) $value ); }
@@ -164,5 +174,16 @@ namespace {
 	seed( array() );
 	$result = call_write( 'add-container', $claim + array( 'id' => 1, 'element_id' => 'container', 'elements' => array( $link ), 'cache_scope' => 'none' ) );
 	expect( $result['success'] && 77 === json_decode( $meta[1]['_elementor_data'], true )[0]['elements'][0]['settings']['template_id'], 'add-container persists actual template child' );
+	// A saved atomic style must stop serving its previous CSS without another editor save.
+	foreach ( array( 'post', 'none' ) as $scope ) {
+		seed( array( element( 'a' ) ) );
+		$GLOBALS['atomic_css'] = array( 1 => 'old target CSS', 77 => 'unrelated template CSS' );
+		$GLOBALS['atomic_invalidations'] = array();
+		$result = call_write( 'update-data', array( 'id' => 1, 'data' => array( element( 'b' ) ), 'cache_scope' => $scope, 'confirm_dangerous_action' => 'elementor/update-data' ) );
+		expect( $result['success'], 'registered write must succeed with each supported post cache choice' );
+		expect( 'unrelated template CSS' === $GLOBALS['atomic_css'][77], 'post invalidation preserves unrelated native style caches' );
+		expect( ( 'none' === $scope ) === isset( $GLOBALS['atomic_css'][1] ), 'native atomic styles expire only when requested by the save' );
+		expect( ( 'post' === $scope ? array( array( 'local', 1 ) ) : array() ) === $GLOBALS['atomic_invalidations'], 'post save clears both native frontend and preview styles within the exact document' );
+	}
 	echo "Write contract tests passed.\n";
 }

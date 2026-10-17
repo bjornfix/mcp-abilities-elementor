@@ -5973,6 +5973,9 @@ function mcp_abilities_elementor_invalidate_after_write( int $post_id, string $c
 		}
 	}
 
+	// Atomic local styles use a separate native cache tree from legacy post CSS.
+	do_action( 'elementor/atomic-widgets/styles/clear', array( 'local', $post_id ) );
+
 	$css_deleted = delete_post_meta( $post_id, '_elementor_css' );
 	$assets_deleted = delete_post_meta( $post_id, '_elementor_page_assets' );
 	$details['post_meta_css_deleted'] = (bool) $css_deleted;
