@@ -19,6 +19,7 @@ class WP_Post {
  public int $ID; public string $post_type='page'; public string $post_title='Title';
  public string $post_content=''; public string $post_excerpt=''; public string $post_name='page';
  public string $post_status='publish'; public int $post_parent=0; public int $menu_order=0; public $post_author='20';
+ public string $post_date='2026-01-01 00:00:00'; public string $post_date_gmt='2026-01-01 00:00:00';
  public function __construct(int $id, string $body) { $this->ID=$id; $this->post_content=$body; }
 }
 class WP_Error { public function get_error_message():string { return 'Fixture write failure'; } }
@@ -49,7 +50,12 @@ function maybe_serialize($v){return is_array($v)||is_object($v)?serialize($v):$v
 function get_post_meta(int $id,string $key,bool $single=true){if(!empty($GLOBALS['use_cache'])){$GLOBALS['meta_cache'][$id]=$GLOBALS['meta_cache'][$id]??($GLOBALS['meta'][$id]??[]);$rows=$GLOBALS['meta_cache'][$id][$key]??[];}else{$rows=$GLOBALS['meta'][$id][$key]??[];}return $single?($rows[0]??''):$rows;}
 function update_post_meta(int $id,string $key,$value){
  if(!empty($GLOBALS['fail_meta']))return false;
- $GLOBALS['meta'][$id][$key]=[wp_unslash($value)];return true;
+ $GLOBALS['meta'][$id][$key]=[wp_unslash($value)];
+ // WPML-style synchronous metadata copying also runs during a native restore.
+ if(!empty($GLOBALS['synchronous_meta_sync'])&&in_array($key,['_elementor_data','_elementor_page_settings'],true)){
+  foreach($GLOBALS['siblings'][$id]??[] as $sibling)$GLOBALS['meta'][$sibling][$key]=$GLOBALS['meta'][$id][$key];
+ }
+ return true;
 }
 function clean_post_cache(int $id):void{unset($GLOBALS['post_cache'][$id],$GLOBALS['meta_cache'][$id]);}
 function wp_cache_delete(...$args):void{if(($args[1]??'')==='post_meta')unset($GLOBALS['meta_cache'][$args[0]]);if(($args[1]??'')==='posts')unset($GLOBALS['post_cache'][$args[0]]);}
@@ -76,6 +82,35 @@ mcp_register_content_abilities();
 function check($expected,$actual,string $message):void{if($expected!==$actual){fwrite(STDERR,'FAIL: '.$message.'\n');exit(1);}}
 function content(int $id,string $body,string $ability='content/update-page'):void{
  $result=($GLOBALS['abilities'][$ability]['execute_callback'])(['id'=>$id,'content'=>$body]);check(true,$result['success']??false,'native Content callback');
+}
+if(($argv[2]??'')==='synchronous-meta-sync'){
+ $GLOBALS['synchronous_meta_sync']=true;
+ foreach([1,11] as $source){
+  $target=$source+1;$GLOBALS['siblings'][$source]=[$target];$GLOBALS['siblings'][$target]=[$source];
+  $GLOBALS['posts'][$source]=new WP_Post($source,'Norwegian original');$GLOBALS['posts'][$target]=new WP_Post($target,'English original');
+  $GLOBALS['meta'][$source]['_elementor_data']=[wp_json_encode([['id'=>'source','elType'=>'widget','widgetType'=>'heading','settings'=>['title'=>'Source-language original'],'elements'=>[]]])];
+  $GLOBALS['meta'][$target]['_elementor_data']=[wp_json_encode([['id'=>'target','elType'=>'widget','widgetType'=>'heading','settings'=>['title'=>'English original'],'elements'=>[]]])];
+  $GLOBALS['meta'][$source]['_elementor_page_settings']=[['hide_title'=>'yes','label'=>'Source-language original']];
+  $GLOBALS['meta'][$target]['_elementor_page_settings']=[['hide_title'=>'yes','label'=>'English original']];
+ }
+ $source_rows=$GLOBALS['meta'][1]['_elementor_data'];
+ $english=[['id'=>'target','elType'=>'widget','widgetType'=>'heading','settings'=>['title'=>'English "quoted" <a href="/en/contact/">Contact</a> C:\\files'],'elements'=>[]]];
+ mcp_abilities_elementor_register_document_abilities();
+ $saved=($GLOBALS['abilities']['elementor/update-data']['execute_callback'])(['id'=>2,'data'=>$english,'cache_scope'=>'none','confirm_dangerous_action'=>'elementor/update-data']);
+ check(true,$saved['success']??false,'registered save must succeed after synchronous sibling metadata sync');
+ check($source_rows,$GLOBALS['meta'][1]['_elementor_data'],'Norwegian source rows preserved before callback returns');
+ check($english,json_decode(get_post_meta(2,'_elementor_data',true),true),'English target preserved before callback returns');
+ $source_settings=$GLOBALS['meta'][11]['_elementor_page_settings'];$settings=['hide_title'=>'no','label'=>'English "quoted" C:\\files'];
+ mcp_abilities_elementor_update_guarded_page_settings(12,wp_slash($settings));
+ check($source_settings,$GLOBALS['meta'][11]['_elementor_page_settings'],'source native settings preserved before callback returns');
+ check([$settings],$GLOBALS['meta'][12]['_elementor_page_settings'],'target native settings preserved before callback returns');
+ register_shutdown_function(static function()use($source_rows,$english,$source_settings,$settings):void{
+  check($source_rows,$GLOBALS['meta'][1]['_elementor_data'],'Norwegian rows also preserved after shutdown');
+  check($english,json_decode(get_post_meta(2,'_elementor_data',true),true),'English target also preserved after shutdown');
+  check($source_settings,$GLOBALS['meta'][11]['_elementor_page_settings'],'source settings also preserved after shutdown');
+  check([$settings],$GLOBALS['meta'][12]['_elementor_page_settings'],'English settings also preserved after shutdown');
+  echo 'Registered Elementor save and native page settings preserve both languages during synchronous metadata sync.'.PHP_EOL;
+ });exit(0);
 }
 if(in_array($argv[2]??'', ['foreign-cache','foreign-cache-meta','foreign-cache-author','foreign-cache-text-fields'],true)){
  $GLOBALS['use_cache']=true;$GLOBALS['siblings'][1]=[2];$GLOBALS['siblings'][2]=[1];
