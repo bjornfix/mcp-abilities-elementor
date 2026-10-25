@@ -3,7 +3,7 @@ Contributors: basicus
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 7.1
-Stable tag: 2.3.52
+Stable tag: 2.3.53
 Requires PHP: 8.0
 Requires Plugins: elementor
 License: GPLv2 or later
@@ -64,6 +64,9 @@ For update notifications in WordPress, install [Devenia MCP Updater](https://dow
 * [Stable Download](https://downloads.devenia.com/mcp-abilities-elementor.zip)
 
 == Changelog ==
+
+= 2.3.53 =
+* Keep lightbox arrow labels aligned with native translations when their JavaScript messages are missing; retain existing translations and English defaults.
 
 = 2.3.52 =
 * Include Elementor data and document settings in native revision change detection so previews capture metadata-only edits while retaining older snapshots.

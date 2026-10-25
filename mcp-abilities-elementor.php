@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://devenia.com/plugins/mcp-abilities-elementor/
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.3.52
+ * Version: 2.3.53
  * Author: basicus
  * Author URI: https://profiles.wordpress.org/basicus/
  * License: GPL-2.0+
@@ -34,6 +34,7 @@ require_once __DIR__ . '/includes/document-repository.php';
 require_once __DIR__ . '/includes/guidance.php';
 require_once __DIR__ . '/includes/template-query.php';
 require_once __DIR__ . '/includes/design-audit-runner.php';
+require_once __DIR__ . '/includes/frontend-i18n.php';
 require_once __DIR__ . '/includes/register-document.php';
 require_once __DIR__ . '/includes/register-design.php';
 require_once __DIR__ . '/includes/register-elements.php';
@@ -7003,6 +7004,7 @@ function mcp_abilities_elementor_register_abilities(): void {
 }
 add_action( 'wp_enqueue_scripts', 'mcp_abilities_elementor_enqueue_frontend_runtime_when_needed', 5 );
 add_action( 'elementor/frontend/after_register_scripts', 'mcp_abilities_elementor_enqueue_frontend_runtime_when_needed', 5 );
+add_action( 'elementor/frontend/after_enqueue_scripts', 'mcp_abilities_elementor_enqueue_frontend_i18n' );
 add_action( 'wp_head', 'mcp_abilities_elementor_print_frontend_config_when_needed', 1 );
 add_action( 'wp_head', 'mcp_abilities_elementor_print_footer_scripts_early_when_needed', 999 );
 add_action( 'wp_abilities_api_init', 'mcp_abilities_elementor_register_abilities' );

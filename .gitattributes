@@ -2,3 +2,4 @@
 tests/ export-ignore
 /README.md export-ignore
 /DEPENDENCIES.md export-ignore
+/tools/ export-ignore
