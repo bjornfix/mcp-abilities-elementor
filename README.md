@@ -2,14 +2,14 @@
 
 Inspect an Elementor page, find the widget or shared setting behind a problem, and make a targeted change through an authenticated MCP client. Keep the page editable in Elementor and check the rendered result after saving.
 
-[![Release 2.3.53](https://img.shields.io/badge/release-2.3.53-blue.svg)](https://downloads.devenia.com/mcp-abilities-elementor.zip)
+[![Release 2.3.54](https://img.shields.io/badge/release-2.3.54-blue.svg)](https://downloads.devenia.com/mcp-abilities-elementor.zip)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0.html)
 [![WordPress](https://img.shields.io/badge/WordPress-6.9%2B-blue.svg)](https://wordpress.org)
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://www.php.net/)
 
 **Tested up to:** 7.1 (validated with WordPress 7.1-RC3)
 
-**Stable tag:** 2.3.53
+**Stable tag:** 2.3.54
 
 **License:** GPLv2 or later
 
@@ -19,7 +19,7 @@ Inspect an Elementor page, find the widget or shared setting behind a problem, a
 
 The add-on registers 89 Elementor abilities. They cover document inspection and editing, individual widgets and containers, shared templates and Kit settings, design observations, cache control and selected site tools. Elementor Pro supplies the optional Theme Builder, custom-code and form-submission features.
 
-The frontend integration keeps lightbox arrow labels aligned with native site translations when the JavaScript catalog lacks those messages. Existing JavaScript translations remain authoritative.
+The frontend integration supplies missing JavaScript messages and Swiper arrow labels from native site translations. Existing translations, customized defaults and individual carousel settings remain authoritative.
 
 For example, a course page may have the wrong booking link and cramped mobile text. Inspect the button for the link problem and its container for the spacing problem. Changing a shared Kit or linked template can affect other pages, so choose that scope deliberately.
 
@@ -246,9 +246,13 @@ For update notifications in WordPress, install [Devenia MCP Updater](https://dow
 
 ## Recent Changes
 
+### 2.3.54
+
+- Supply missing Swiper arrow accessibility labels from native translations without replacing custom defaults or individual carousel settings.
+
 ### 2.3.53
 
-- Use native frontend translations for missing lightbox arrow messages while preserving existing JavaScript translations and English defaults.
+- Supply missing JavaScript catalog messages from native frontend translations while preserving existing catalog entries and English defaults.
 
 ### 2.3.52
 

@@ -95,6 +95,31 @@ namespace {
 	$fixtures['special_value'] = $special;
 	$fixtures['special_script'] = mcp_abilities_elementor_frontend_i18n_script( array( 'a11yCarouselNextSlideMessage' => $special ), 'el' );
 	check( false === strpos( $fixtures['special_script'], '</script>' ), 'script terminators JSON escaped' );
+	$fixtures['swiper_no'] = mcp_abilities_elementor_swiper_i18n_script( $no );
+	$fixtures['swiper_en'] = mcp_abilities_elementor_swiper_i18n_script( $en );
+	$fixtures['swiper_special'] = mcp_abilities_elementor_swiper_i18n_script( array( 'a11yCarouselNextSlideMessage' => $special ) );
+	check( '' === $fixtures['swiper_en'], 'source-language Swiper site is unchanged' );
+	check( '' === mcp_abilities_elementor_swiper_i18n_script( array() ), 'no Swiper text invented without native messages' );
+	check( '' === mcp_abilities_elementor_swiper_i18n_script( array( 'a11yCarouselNextSlideMessage' => 42 ) ), 'malformed native Swiper message ignored' );
+	check( false === strpos( $fixtures['swiper_special'], '</script>' ), 'Swiper message terminators escaped' );
+	reset_case( $no );
+	$GLOBALS['test_script_states']['swiper'] = array( 'registered' => true, 'done' => false );
+	wp_scripts()->registered['swiper'] = (object) array( 'deps' => array( 'existing-swiper-dependency' ) );
+	wp_scripts()->extra['swiper']['after'] = array( 'existingAfter();' );
+	mcp_abilities_elementor_enqueue_frontend_i18n();
+	check( array( 'existing-swiper-dependency' ) === wp_scripts()->registered['swiper']->deps, 'Swiper dependencies are preserved' );
+	check( 2 === count( wp_scripts()->get_data( 'swiper', 'after' ) ), 'native Swiper handle receives one after script' );
+	check( 'existingAfter();' === wp_scripts()->get_data( 'swiper', 'after' )[0], 'existing after script remains first' );
+	check( $no === $GLOBALS['test_elementor']->frontend->messages, 'Swiper configuration source remains unchanged' );
+	mcp_abilities_elementor_enqueue_frontend_i18n();
+	check( 2 === count( wp_scripts()->get_data( 'swiper', 'after' ) ), 'repeated hook adds no duplicate Swiper script' );
+	foreach ( array( 'english', 'done', 'missing', 'admin' ) as $case ) {
+		reset_case( 'english' === $case ? $en : $no );
+		$GLOBALS['test_script_states']['swiper'] = array( 'registered' => 'missing' !== $case, 'done' => 'done' === $case );
+		if ( 'admin' === $case ) { $GLOBALS['test_admin'] = true; }
+		mcp_abilities_elementor_enqueue_frontend_i18n();
+		check( false === wp_scripts()->get_data( 'swiper', 'after' ), "$case leaves Swiper scripts unchanged" );
+	}
 	if ( isset( $argv[2] ) ) { file_put_contents( $argv[2], json_encode( $fixtures, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE ) . "\n" ); }
 	echo "Frontend i18n PHP boundary checks passed: {$checks}.\n";
 }

@@ -52,6 +52,43 @@ function mcp_abilities_elementor_frontend_i18n_script( array $messages, string $
 }
 
 /**
+ * Build missing Swiper accessibility defaults from native Elementor messages.
+ *
+ * Per-instance settings and existing extended defaults remain authoritative.
+ * No node, class, style, content or source-language setting is changed.
+ *
+ * @param array $messages Native frontend i18n settings.
+ * @return string Script for the native Swiper handle, or an empty string.
+ */
+function mcp_abilities_elementor_swiper_i18n_script( array $messages ): string {
+	$keys = array(
+		'prevSlideMessage' => array( 'a11yCarouselPrevSlideMessage', 'Previous slide' ),
+		'nextSlideMessage' => array( 'a11yCarouselNextSlideMessage', 'Next slide' ),
+	);
+	$translated = array();
+	foreach ( $keys as $key => $mapping ) {
+		$value = $messages[ $mapping[0] ] ?? null;
+		if ( is_string( $value ) && '' !== trim( $value ) && $mapping[1] !== $value ) {
+			$translated[ $key ] = $value;
+		}
+	}
+	if ( empty( $translated ) ) {
+		return '';
+	}
+	$json = wp_json_encode( $translated, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT );
+	if ( false === $json ) {
+		return '';
+	}
+	return '(function(w){var S=w.Swiper;'
+		. 'if(!S||typeof S.extendDefaults!=="function"){return;}'
+		. 'var extended=S.extendedDefaults||{};var current=extended.a11y;'
+		. 'if(current!==undefined&&(!current||typeof current!=="object"||Array.isArray(current))){return;}'
+		. 'current=current||{};var messages=' . $json . ';var merged=Object.assign({},current);var changed=false;'
+		. 'Object.keys(messages).forEach(function(key){if(!Object.prototype.hasOwnProperty.call(current,key)){merged[key]=messages[key];changed=true;}});'
+		. 'if(changed){S.extendDefaults({a11y:merged});}})(window);';
+}
+
+/**
  * Fill missing lightbox messages through the standard WordPress i18n runtime.
  *
  * This runs after Elementor has assembled its native frontend settings. It
@@ -72,6 +109,13 @@ function mcp_abilities_elementor_enqueue_frontend_i18n(): void {
 	$messages = $frontend->get_settings( 'i18n' );
 	if ( ! is_array( $messages ) ) {
 		return;
+	}
+	$swiper_script = mcp_abilities_elementor_swiper_i18n_script( $messages );
+	if ( '' !== $swiper_script && wp_script_is( 'swiper', 'registered' ) && ! wp_script_is( 'swiper', 'done' ) ) {
+		$before_swiper = (array) wp_scripts()->get_data( 'swiper', 'after' );
+		if ( ! in_array( $swiper_script, $before_swiper, true ) ) {
+			wp_add_inline_script( 'swiper', $swiper_script, 'after' );
+		}
 	}
 	$script = mcp_abilities_elementor_frontend_i18n_script( $messages, get_locale() );
 	if ( '' === $script ) {
