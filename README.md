@@ -2,14 +2,14 @@
 
 Inspect an Elementor page, find the widget or shared setting behind a problem, and make a targeted change through an authenticated MCP client. Keep the page editable in Elementor and check the rendered result after saving.
 
-[![Release 2.3.54](https://img.shields.io/badge/release-2.3.54-blue.svg)](https://downloads.devenia.com/mcp-abilities-elementor.zip)
+[![Release 2.3.55](https://img.shields.io/badge/release-2.3.55-blue.svg)](https://downloads.devenia.com/mcp-abilities-elementor.zip)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0.html)
 [![WordPress](https://img.shields.io/badge/WordPress-6.9%2B-blue.svg)](https://wordpress.org)
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://www.php.net/)
 
 **Tested up to:** 7.1 (validated with WordPress 7.1-RC3)
 
-**Stable tag:** 2.3.54
+**Stable tag:** 2.3.55
 
 **License:** GPLv2 or later
 
@@ -168,6 +168,25 @@ Activate the required stack and this add-on. Confirm that `elementor/get-data` a
 | `elementor/update-custom-code` | Update a custom code snippet |
 | `elementor/delete-custom-code` | Delete a custom code snippet |
 
+Create a native Elementor Pro snippet with `elementor/create-custom-code`:
+
+```json
+{
+  "title": "Example script",
+  "code": "<script>document.documentElement.dataset.example = 'ready';</script>",
+  "status": "draft",
+  "location": "elementor_body_end",
+  "priority": 1,
+  "conditions": ["include/general"]
+}
+```
+
+Read it back with `elementor/get-custom-code`, then use `elementor/update-custom-code` with its `id` and `status: "publish"` to enable it. Use `status: "draft"` to disable it. An update preserves omitted fields; `code: ""` clears its code. List results include placement, priority and conditions; request `include_code: true` for the code.
+
+Locations are `elementor_head`, `elementor_body_start` and `elementor_body_end`. Priority ranges from 1 to 10 and orders snippets within the same insertion location. Conditions use Elementor strings such as `include/singular/page/123` and `exclude/singular/page/456`. An empty conditions list removes restrictions: published Custom Code then applies site-wide, as in native Elementor.
+
+Code uses Elementor's native `_elementor_code` metadata. Existing native keys in `meta` remain supported and receive the same validation. Conflicting explicit fields and metadata are rejected; the older `code: ""` plus `meta._elementor_code` form is retained. Creating or updating code respects native `unfiltered_html` restrictions. Custom Code supports HTML, CSS and JavaScript; it does not execute PHP.
+
 ### Form Submissions (Pro)
 | Ability | Description |
 |---------|-------------|
@@ -245,6 +264,10 @@ For update notifications in WordPress, install [Devenia MCP Updater](https://dow
 5. Read one existing Elementor page before making changes.
 
 ## Recent Changes
+
+### 2.3.55
+
+Read and write the code rendered by native Elementor Pro snippets. Expose insertion location, priority and display conditions through the existing abilities, refresh native assignments, preserve code escaping and report metadata save failures.
 
 ### 2.3.54
 

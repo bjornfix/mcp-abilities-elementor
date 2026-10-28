@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://devenia.com/plugins/mcp-abilities-elementor/
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.3.54
+ * Version: 2.3.55
  * Author: basicus
  * Author URI: https://profiles.wordpress.org/basicus/
  * License: GPL-2.0+
@@ -6893,6 +6893,12 @@ function mcp_abilities_elementor_save_conditions( int $post_id, string $template
 		delete_post_meta( $post_id, '_elementor_conditions' );
 	} else {
 		update_post_meta( $post_id, '_elementor_conditions', $conditions_to_save );
+	}
+
+	$stored_conditions = get_post_meta( $post_id, '_elementor_conditions', true );
+	if ( ( empty( $conditions_to_save ) && ! empty( $stored_conditions ) ) || ( ! empty( $conditions_to_save ) && $conditions_to_save !== $stored_conditions ) ) {
+		// Never activate a runtime assignment whose metadata write failed.
+		return;
 	}
 
 	$document = mcp_abilities_elementor_condition_document( $post_id );

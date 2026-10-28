@@ -3,7 +3,7 @@ Contributors: basicus
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 7.1
-Stable tag: 2.3.54
+Stable tag: 2.3.55
 Requires PHP: 8.0
 Requires Plugins: elementor
 License: GPLv2 or later
@@ -15,7 +15,7 @@ Elementor page builder integration for WordPress via MCP.
 
 This add-on plugin exposes Elementor functionality through MCP (Model Context Protocol). Your AI assistant can read Elementor page structures, locate and update elements, manage templates and conditions, and run Elementor tools like maintenance mode, experiments, and URL replacement.
 
-Version 2.3.43 validates active Kit selection and permissions, checks the saved selection, and preserves escaped code when creating or updating Pro snippets. Document checks and supported dry runs use shared validation; design observations still require a rendered page review.
+Version 2.3.55 reads and writes native Elementor Pro snippet code, placement, priority and display conditions. It preserves escaped code and existing native permission checks. Document checks and supported dry runs use shared validation; design observations still require a rendered page review.
 
 Validated with WordPress 7.1-RC3.
 
@@ -37,7 +37,7 @@ Validated with WordPress 7.1-RC3.
 
 **Theme Builder** - Read and update Elementor theme-builder display conditions.
 
-**Custom code and forms** - Manage Elementor Pro custom code and form submissions when Pro is active.
+**Custom code and forms** - Read and manage native Elementor Pro custom code, including insertion location, priority, status and display conditions. Code is stored in Elementor metadata and supports HTML, CSS and JavaScript. Empty conditions remove restrictions and apply published code site-wide. Manage form submissions when Pro is active.
 
 = Use Cases =
 
@@ -64,6 +64,11 @@ For update notifications in WordPress, install [Devenia MCP Updater](https://dow
 * [Stable Download](https://downloads.devenia.com/mcp-abilities-elementor.zip)
 
 == Changelog ==
+
+= 2.3.55 =
+* Read and write snippet code through native Elementor Pro metadata so saved code is the code Elementor renders.
+* Add insertion location, priority and display conditions to the existing Custom Code abilities; refresh native assignments when they change.
+* Preserve code escaping, legacy native meta callers and native permission checks; validate settings before writing and report metadata save failures.
 
 = 2.3.54 =
 * Supply missing Swiper arrow accessibility labels from native translations without replacing custom defaults or individual carousel settings.

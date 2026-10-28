@@ -12,6 +12,142 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
+ * Native Custom Code settings shared by the existing create/update Interface.
+ *
+ * @param bool $for_write Whether input constraints should be included.
+ * @return array
+ */
+function mcp_abilities_elementor_custom_code_settings_schema( bool $for_write = true ): array {
+	$schema = array(
+		'location' => array(
+			'type' => 'string',
+			'enum' => array( 'elementor_head', 'elementor_body_start', 'elementor_body_end' ),
+			'description' => 'Native insertion location. New snippets default to elementor_head.',
+		),
+		'priority' => array(
+			'type' => 'integer',
+			'minimum' => 1,
+			'maximum' => 10,
+			'description' => 'Native ordering within the same insertion location, from 1 (first) to 10. New snippets default to 1.',
+		),
+		'conditions' => array(
+			'type' => 'array',
+			'items' => array( 'type' => 'string' ),
+			'description' => 'Native display conditions, e.g. include/general or include/singular/page/123. An empty list removes restrictions: published Custom Code then applies site-wide.',
+		),
+	);
+	if ( ! $for_write ) {
+		// Readers must also describe older snippets with absent placement metadata.
+		unset( $schema['location']['enum'], $schema['priority']['minimum'], $schema['priority']['maximum'] );
+	}
+	return $schema;
+}
+
+/**
+ * Read the fields Elementor's Custom Code document actually renders.
+ *
+ * @param int $post_id Snippet ID.
+ * @return array
+ */
+function mcp_abilities_elementor_custom_code_settings( int $post_id ): array {
+	$location = get_post_meta( $post_id, '_elementor_location', true );
+	$priority = get_post_meta( $post_id, '_elementor_priority', true );
+	$conditions = get_post_meta( $post_id, '_elementor_conditions', true );
+	return array(
+		'location' => (string) $location,
+		'priority' => (int) $priority,
+		'conditions' => is_array( $conditions ) ? array_values( $conditions ) : array(),
+	);
+}
+
+/**
+ * Validate native metadata before making any write. Keep legacy meta callers.
+ *
+ * @param array $input Ability input.
+ * @param bool  $creating Whether native defaults are needed.
+ * @return array
+ */
+function mcp_abilities_elementor_prepare_custom_code_meta( array $input, bool $creating ): array {
+	$meta = isset( $input['meta'] ) && is_array( $input['meta'] ) ? $input['meta'] : array();
+	foreach ( array( 'code', 'location', 'priority', 'conditions' ) as $field ) {
+		$key = '_elementor_' . $field;
+		if ( array_key_exists( $field, $input ) ) {
+			if ( array_key_exists( $key, $meta ) && $meta[ $key ] !== $input[ $field ] ) {
+				// Older clients supplied code:"" and the real code in meta.
+				if ( 'code' !== $field || '' !== $input[ $field ] ) {
+					return array( 'success' => false, 'message' => 'Conflicting snippet field and meta: ' . $field );
+				}
+			} else {
+				$meta[ $key ] = $input[ $field ];
+			}
+		}
+	}
+	if ( $creating ) {
+		$meta += array( '_elementor_location' => 'elementor_head', '_elementor_priority' => 1 );
+	}
+	if ( isset( $input['status'] ) && ! in_array( $input['status'], array( 'publish', 'draft', 'private' ), true ) ) {
+		return array( 'success' => false, 'message' => 'Invalid snippet status' );
+	}
+	if ( array_key_exists( '_elementor_code', $meta ) ) {
+		if ( ! is_string( $meta['_elementor_code'] ) ) {
+			return array( 'success' => false, 'message' => 'Snippet code must be a string' );
+		}
+		// Match the native metabox, including on Pro versions without REST meta registration.
+		if ( ! current_user_can( 'unfiltered_html' ) ) {
+			$meta['_elementor_code'] = wp_kses_post( $meta['_elementor_code'] );
+		}
+	}
+	if ( array_key_exists( '_elementor_location', $meta ) && ! in_array( $meta['_elementor_location'], array( 'elementor_head', 'elementor_body_start', 'elementor_body_end' ), true ) ) {
+		return array( 'success' => false, 'message' => 'Invalid snippet location' );
+	}
+	if ( ! array_key_exists( 'priority', $input ) && isset( $meta['_elementor_priority'] ) && is_string( $meta['_elementor_priority'] ) && ctype_digit( $meta['_elementor_priority'] ) ) {
+		$meta['_elementor_priority'] = (int) $meta['_elementor_priority'];
+	}
+	if ( array_key_exists( '_elementor_priority', $meta ) && ( ! is_int( $meta['_elementor_priority'] ) || $meta['_elementor_priority'] < 1 || $meta['_elementor_priority'] > 10 ) ) {
+		return array( 'success' => false, 'message' => 'Snippet priority must be an integer from 1 to 10' );
+	}
+	if ( array_key_exists( '_elementor_conditions', $meta ) ) {
+		if ( ! is_array( $meta['_elementor_conditions'] ) ) {
+			return array( 'success' => false, 'message' => 'Snippet conditions must be an array of native condition strings' );
+		}
+		foreach ( $meta['_elementor_conditions'] as $condition ) {
+			if ( ! is_string( $condition ) || ! preg_match( '~^(include|exclude)/[^/\s]+(?:/[^/\s]+){0,2}$~D', $condition ) ) {
+				return array( 'success' => false, 'message' => 'Invalid native snippet condition' );
+			}
+		}
+		$meta['_elementor_conditions'] = array_values( $meta['_elementor_conditions'] );
+	}
+	return array( 'success' => true, 'meta' => $meta );
+}
+
+/**
+ * Save native fields and refresh assignment through the existing condition seam.
+ *
+ * @param int   $post_id Snippet ID.
+ * @param array $meta Prepared metadata.
+ * @return array
+ */
+function mcp_abilities_elementor_save_custom_code_meta( int $post_id, array $meta ): array {
+	$conditions = $meta['_elementor_conditions'] ?? get_post_meta( $post_id, '_elementor_conditions', true );
+	unset( $meta['_elementor_conditions'] );
+	foreach ( $meta as $key => $value ) {
+		update_post_meta( $post_id, (string) $key, wp_slash( $value ) );
+		if ( in_array( $key, array( '_elementor_code', '_elementor_location', '_elementor_priority' ), true ) ) {
+			$stored = get_post_meta( $post_id, (string) $key, true );
+			if ( $stored !== (string) $value ) {
+				return array( 'success' => false, 'id' => $post_id, 'message' => 'Snippet metadata was not saved: ' . $key );
+			}
+		}
+	}
+	mcp_abilities_elementor_save_conditions( $post_id, (string) get_post_meta( $post_id, '_elementor_location', true ), is_array( $conditions ) ? $conditions : array() );
+	$stored_conditions = get_post_meta( $post_id, '_elementor_conditions', true );
+	if ( ( empty( $conditions ) && ! empty( $stored_conditions ) ) || ( ! empty( $conditions ) && $conditions !== $stored_conditions ) ) {
+		return array( 'success' => false, 'id' => $post_id, 'message' => 'Snippet conditions were not saved' );
+	}
+	return array( 'success' => true );
+}
+
+/**
  * Register elementor pro data abilities.
  */
 function mcp_abilities_elementor_register_pro_abilities(): void {
@@ -60,7 +196,18 @@ function mcp_abilities_elementor_register_pro_abilities(): void {
 				'type'       => 'object',
 				'properties' => array(
 					'success'  => array( 'type' => 'boolean' ),
-					'snippets' => array( 'type' => 'array' ),
+					'snippets' => array(
+						'type' => 'array',
+						'items' => array(
+							'type' => 'object',
+							'properties' => array(
+								'id' => array( 'type' => 'integer' ),
+								'title' => array( 'type' => 'string' ),
+								'status' => array( 'type' => 'string' ),
+								'code' => array( 'type' => 'string' ),
+							) + mcp_abilities_elementor_custom_code_settings_schema( false ),
+						),
+					),
 					'total'    => array( 'type' => 'integer' ),
 					'message'  => array( 'type' => 'string' ),
 				),
@@ -90,6 +237,9 @@ function mcp_abilities_elementor_register_pro_abilities(): void {
 				$snippets = array();
 
 				foreach ( $query->posts as $snippet ) {
+					if ( ! current_user_can( 'edit_post', $snippet->ID ) ) {
+						continue;
+					}
 					$item = array(
 						'id'       => $snippet->ID,
 						'title'    => $snippet->post_title,
@@ -99,14 +249,14 @@ function mcp_abilities_elementor_register_pro_abilities(): void {
 					);
 
 					if ( ! empty( $input['include_code'] ) ) {
-						$item['code'] = $snippet->post_content;
+						$item['code'] = (string) get_post_meta( $snippet->ID, '_elementor_code', true );
 					}
 
 					if ( ! empty( $input['include_meta'] ) ) {
 						$item['meta'] = get_post_meta( $snippet->ID );
 					}
 
-					$snippets[] = $item;
+					$snippets[] = array_merge( $item, mcp_abilities_elementor_custom_code_settings( $snippet->ID ) );
 				}
 
 				return array(
@@ -164,7 +314,7 @@ function mcp_abilities_elementor_register_pro_abilities(): void {
 					'code'    => array( 'type' => 'string' ),
 					'meta'    => array( 'type' => 'object' ),
 					'message' => array( 'type' => 'string' ),
-				),
+				) + mcp_abilities_elementor_custom_code_settings_schema( false ),
 			),
 			'execute_callback'    => function ( $input = array() ): array {
 				$input = is_array( $input ) ? $input : array();
@@ -191,7 +341,7 @@ function mcp_abilities_elementor_register_pro_abilities(): void {
 					'id'      => $post->ID,
 					'title'   => $post->post_title,
 					'status'  => $post->post_status,
-					'code'    => $post->post_content,
+					'code'    => (string) get_post_meta( $post->ID, '_elementor_code', true ),
 					'message' => 'Custom code snippet retrieved successfully',
 				);
 
@@ -199,7 +349,7 @@ function mcp_abilities_elementor_register_pro_abilities(): void {
 					$response['meta'] = get_post_meta( $post->ID );
 				}
 
-				return $response;
+				return array_merge( $response, mcp_abilities_elementor_custom_code_settings( $post->ID ) );
 			},
 			'permission_callback' => function (): bool {
 				return current_user_can( 'manage_options' );
@@ -245,7 +395,7 @@ function mcp_abilities_elementor_register_pro_abilities(): void {
 						'type'        => 'object',
 						'description' => 'Optional meta fields to store on the snippet.',
 					),
-				),
+				) + mcp_abilities_elementor_custom_code_settings_schema(),
 				'additionalProperties' => false,
 			),
 			'output_schema'       => array(
@@ -256,7 +406,7 @@ function mcp_abilities_elementor_register_pro_abilities(): void {
 					'title'   => array( 'type' => 'string' ),
 					'status'  => array( 'type' => 'string' ),
 					'message' => array( 'type' => 'string' ),
-				),
+				) + mcp_abilities_elementor_custom_code_settings_schema( false ),
 			),
 			'execute_callback'    => function ( $input = array() ): array {
 				$input = is_array( $input ) ? $input : array();
@@ -272,30 +422,37 @@ function mcp_abilities_elementor_register_pro_abilities(): void {
 					return array( 'success' => false, 'message' => 'Elementor custom code post type is not available' );
 				}
 
+				$prepared = mcp_abilities_elementor_prepare_custom_code_meta( $input, true );
+				if ( ! $prepared['success'] ) {
+					return $prepared;
+				}
+
 				$post_id = wp_insert_post( wp_slash( array(
 					'post_title'   => sanitize_text_field( $input['title'] ),
 					'post_type'    => 'elementor_snippet',
 					'post_status'  => $input['status'] ?? 'publish',
-					'post_content' => (string) $input['code'],
 				) ), true );
 
 				if ( is_wp_error( $post_id ) ) {
 					return array( 'success' => false, 'message' => 'Failed to create snippet: ' . $post_id->get_error_message() );
 				}
 
-				if ( ! empty( $input['meta'] ) && is_array( $input['meta'] ) ) {
-					foreach ( $input['meta'] as $key => $value ) {
-						update_post_meta( $post_id, (string) $key, $value );
-					}
+				if ( ! $post_id ) {
+					return array( 'success' => false, 'message' => 'Failed to create snippet' );
 				}
+				$saved = mcp_abilities_elementor_save_custom_code_meta( $post_id, $prepared['meta'] );
+				if ( ! $saved['success'] ) {
+					return $saved;
+				}
+				$post = get_post( $post_id );
 
 				return array(
 					'success' => true,
 					'id'      => $post_id,
-					'title'   => $input['title'],
-					'status'  => $input['status'] ?? 'publish',
+					'title'   => $post->post_title,
+					'status'  => $post->post_status,
 					'message' => 'Custom code snippet created successfully',
-				);
+				) + mcp_abilities_elementor_custom_code_settings( $post->ID );
 			},
 			'permission_callback' => function (): bool {
 				return current_user_can( 'manage_options' );
@@ -344,7 +501,7 @@ function mcp_abilities_elementor_register_pro_abilities(): void {
 						'type'        => 'object',
 						'description' => 'Meta fields to update.',
 					),
-				),
+				) + mcp_abilities_elementor_custom_code_settings_schema(),
 				'additionalProperties' => false,
 			),
 			'output_schema'       => array(
@@ -355,7 +512,7 @@ function mcp_abilities_elementor_register_pro_abilities(): void {
 					'title'   => array( 'type' => 'string' ),
 					'status'  => array( 'type' => 'string' ),
 					'message' => array( 'type' => 'string' ),
-				),
+				) + mcp_abilities_elementor_custom_code_settings_schema( false ),
 			),
 			'execute_callback'    => function ( $input = array() ): array {
 				$input = is_array( $input ) ? $input : array();
@@ -377,15 +534,16 @@ function mcp_abilities_elementor_register_pro_abilities(): void {
 					return array( 'success' => false, 'message' => 'You do not have permission to update this snippet' );
 				}
 
+				$prepared = mcp_abilities_elementor_prepare_custom_code_meta( $input, false );
+				if ( ! $prepared['success'] ) {
+					return $prepared;
+				}
+
 				$update = array( 'ID' => $post->ID );
-				$has_update = false;
+				$has_update = ! empty( $prepared['meta'] );
 
 				if ( array_key_exists( 'title', $input ) ) {
 					$update['post_title'] = sanitize_text_field( (string) $input['title'] );
-					$has_update = true;
-				}
-				if ( array_key_exists( 'code', $input ) ) {
-					$update['post_content'] = (string) $input['code'];
 					$has_update = true;
 				}
 				if ( ! empty( $input['status'] ) ) {
@@ -400,10 +558,9 @@ function mcp_abilities_elementor_register_pro_abilities(): void {
 					}
 				}
 
-				if ( ! empty( $input['meta'] ) && is_array( $input['meta'] ) ) {
-					foreach ( $input['meta'] as $key => $value ) {
-						update_post_meta( $post->ID, (string) $key, $value );
-					}
+				$saved = mcp_abilities_elementor_save_custom_code_meta( $post->ID, $prepared['meta'] );
+				if ( ! $saved['success'] ) {
+					return $saved;
 				}
 
 				$post = get_post( $post->ID );
@@ -414,7 +571,7 @@ function mcp_abilities_elementor_register_pro_abilities(): void {
 					'title'   => $post->post_title,
 					'status'  => $post->post_status,
 					'message' => 'Custom code snippet updated successfully',
-				);
+				) + mcp_abilities_elementor_custom_code_settings( $post->ID );
 			},
 			'permission_callback' => function (): bool {
 				return current_user_can( 'manage_options' );
