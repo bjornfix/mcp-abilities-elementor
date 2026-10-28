@@ -35,6 +35,8 @@ namespace {
 	$denied_ids = array();
 	$available = true;
 	$fail_meta_key = '';
+	$post_write_error = null;
+	$schema_cases = array();
 	$checks = 0;
 	function add_action( ...$args ): void {}
 	function wp_register_ability( $name, $args ): void { $GLOBALS['abilities'][ $name ] = $args; }
@@ -45,7 +47,13 @@ namespace {
 	function wp_unslash( $v ) { return is_array( $v ) ? array_map( 'wp_unslash', $v ) : ( is_string( $v ) ? stripslashes( $v ) : $v ); }
 	function sanitize_text_field( $v ): string { return strip_tags( $v ); }
 	function wp_kses_post( $v ): string { return strip_tags( $v, '<b>' ); }
-	function is_wp_error( $v ): bool { return false; }
+	class WP_Error {
+		public function __construct( private string $code, private string $message, private $data = null ) {}
+		public function get_error_code(): string { return $this->code; }
+		public function get_error_message(): string { return $this->message; }
+		public function get_error_data() { return $this->data; }
+	}
+	function is_wp_error( $v ): bool { return $v instanceof WP_Error; }
 	function get_post( $id ) { return $GLOBALS['posts'][ $id ] ?? null; }
 	function get_post_meta( $id, $key = '', $single = false ) {
 		$values = $GLOBALS['meta'][ $id ] ?? array();
@@ -61,12 +69,14 @@ namespace {
 	function get_option( $key, $default = false ) { return $GLOBALS['options'][ $key ] ?? $default; }
 	function update_option( $key, $v ): bool { $GLOBALS['options'][ $key ] = $v; return true; }
 	function wp_insert_post( $data, $error ) {
+		if ( $GLOBALS['post_write_error'] ) { return $GLOBALS['post_write_error']; }
 		$id = count( $GLOBALS['posts'] ) + 1;
 		$data = wp_unslash( $data ) + array( 'ID' => $id, 'post_content' => '', 'post_date' => '2026-10-28', 'post_modified' => '2026-10-28' );
 		$GLOBALS['posts'][ $id ] = (object) $data;
 		return $id;
 	}
 	function wp_update_post( $data, $error ) {
+		if ( $GLOBALS['post_write_error'] ) { return $GLOBALS['post_write_error']; }
 		foreach ( wp_unslash( $data ) as $key => $v ) { $GLOBALS['posts'][ $data['ID'] ]->$key = $v; }
 		return $data['ID'];
 	}
@@ -83,7 +93,10 @@ namespace {
 	function check( bool $ok, string $message ): void { ++$GLOBALS['checks']; if ( ! $ok ) { throw new \RuntimeException( $message ); } }
 	function call_snippet( string $name, array $input = array() ): array {
 		$a = $GLOBALS['abilities'][ 'elementor/' . $name . '-custom-code' ];
-		return $a['permission_callback']() ? $a['execute_callback']( $input ) : array( 'success' => false, 'message' => 'Permission denied' );
+		$permitted = $a['permission_callback']();
+		$result = $permitted ? $a['execute_callback']( $input ) : array( 'success' => false, 'message' => 'Permission denied' );
+		$GLOBALS['schema_cases'][] = array( 'ability' => 'elementor/' . $name . '-custom-code', 'executed' => $permitted, 'result' => $result, 'schema' => $a['output_schema'] );
+		return $result;
 	}
 	$native = in_array( '--native', $argv, true );
 	if ( $native ) {
@@ -153,6 +166,17 @@ CODE;
 	}
 	$fail_meta_key = '';
 	$before = count( $posts );
+	foreach ( array( 'create', 'update' ) as $name ) {
+		foreach ( array( 'MYSQL_DETAIL_DO_NOT_EXPORT', array( 'last_error' => 'MYSQL_DETAIL_DO_NOT_EXPORT' ) ) as $error_data ) {
+			$post_write_error = new WP_Error( 'db_' . $name . '_error', 'Could not write post to the database.', $error_data );
+			$before_storage = serialize( array( $posts, $meta, $options ) );
+			$result = call_snippet( $name, array( 'id' => $id, 'title' => 'Database failure', 'code' => 'Must not save' ) );
+			check( false === $result['success'] && str_contains( $result['message'], 'Could not write post to the database.' ), 'Post write WP_Error is reported for ' . $name );
+			check( array( 'success', 'message' ) === array_keys( $result ) && ! str_contains( json_encode( $result ), 'MYSQL_DETAIL_DO_NOT_EXPORT' ), 'Database error_data stays out of the snippet result for ' . $name );
+			check( $before_storage === serialize( array( $posts, $meta, $options ) ), 'Post write failure does not mutate snippets or native assignments' );
+		}
+	}
+	$post_write_error = null;
 	check( ! call_snippet( 'create', array( 'title' => 'Invalid', 'code' => $code, 'location' => 'bad' ) )['success'] && $before === count( $posts ), 'Invalid create does not leave a new post' );
 	foreach ( array( 'create', 'update' ) as $name ) {
 		$schema = $abilities[ 'elementor/' . $name . '-custom-code' ]['input_schema']['properties'];
@@ -202,5 +226,7 @@ CODE;
 	check( call_snippet( 'delete', array( 'id' => $id ) )['success'] && 'trash' === $posts[ $id ]->post_status, 'Delete moves snippet to trash by default' );
 	check( call_snippet( 'delete', array( 'id' => $id, 'force' => true ) )['success'] && ! get_post( $id ), 'Explicit force permanently deletes snippet' );
 	check( $native_before === serialize( array( $posts[501], $meta[501] ) ), 'All writes preserve the independent existing native snippet and its options' );
-	echo json_encode( array( 'status' => 'PASS', 'assertions' => $checks, 'native_pro_fixtures' => $native, 'scope' => 'Registered abilities with in-memory WordPress storage; optional unmodified installed Pro Document and Conditions_Cache' ), JSON_PRETTY_PRINT ) . "\n";
+	$report = array( 'status' => 'PASS', 'assertions' => $checks, 'native_pro_fixtures' => $native, 'scope' => 'Registered abilities with in-memory WordPress storage; optional unmodified installed Pro Document and Conditions_Cache' );
+	if ( in_array( '--schema-cases', $argv, true ) ) { $report['schema_cases'] = $schema_cases; }
+	echo json_encode( $report, JSON_PRETTY_PRINT ) . "\n";
 }
