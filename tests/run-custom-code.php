@@ -21,7 +21,14 @@ namespace ElementorPro\Modules\ThemeBuilder {
 	class Module {
 		public static $manager;
 		public static function instance() { return new self(); }
-		public function get_conditions_manager() { return self::$manager; }
+		public function get_conditions_manager() {
+			return self::$manager ??= new class() {
+				public int $clears = 0;
+				public function get_cache() { return new class() { public function refresh() { return $this; } }; }
+				public function purge_post_from_cache( $id ) { $GLOBALS['purged_ids'][] = (int) $id; }
+				public function clear_location_cache(): void { ++$this->clears; }
+			};
+		}
 		public function get_document( $id ) {
 			return class_exists( '\ElementorPro\Modules\CustomCode\Document' ) && \get_post( $id )
 				? new \ElementorPro\Modules\CustomCode\Document( \get_post( $id ) ) : false;
@@ -36,6 +43,7 @@ namespace {
 	$available = true;
 	$fail_meta_key = '';
 	$post_write_error = null;
+	$fail_delete_ids = $purged_ids = array();
 	$schema_cases = array();
 	$checks = 0;
 	function add_action( ...$args ): void {}
@@ -81,7 +89,10 @@ namespace {
 		return $data['ID'];
 	}
 	function wp_trash_post( $id ) { $GLOBALS['posts'][ $id ]->post_status = 'trash'; return $GLOBALS['posts'][ $id ]; }
-	function wp_delete_post( $id, $force ) { $post = $GLOBALS['posts'][ $id ]; unset( $GLOBALS['posts'][ $id ], $GLOBALS['meta'][ $id ] ); return $post; }
+	function wp_delete_post( $id, $force ) {
+		if ( in_array( $id, $GLOBALS['fail_delete_ids'], true ) ) { return false; }
+		$post = $GLOBALS['posts'][ $id ]; unset( $GLOBALS['posts'][ $id ], $GLOBALS['meta'][ $id ] ); return $post;
+	}
 	class WP_Query {
 		public array $posts;
 		public function __construct( $args ) {
@@ -110,6 +121,7 @@ namespace {
 			public int $clears = 0;
 			public function __construct() { $this->cache = new \ElementorPro\Modules\ThemeBuilder\Classes\Conditions_Cache(); }
 			public function get_cache() { return $this->cache; }
+			public function purge_post_from_cache( $id ) { $GLOBALS['purged_ids'][] = (int) $id; return $this->cache->remove( $id )->save(); }
 			public function clear_location_cache(): void { ++$this->clears; }
 		};
 	}
@@ -202,6 +214,7 @@ CODE;
 	$legacy = call_snippet( 'create', array( 'title' => 'Legacy client', 'code' => '', 'status' => 'draft', 'meta' => array( '_elementor_code' => $code, '_elementor_location' => 'elementor_body_end', '_elementor_priority' => '3', '_elementor_conditions' => $conditions ) ) );
 	check( $legacy['success'] && 3 === $legacy['priority'] && $code === call_snippet( 'get', array( 'id' => $legacy['id'] ) )['code'] && $conditions === $legacy['conditions'], 'Legacy native meta caller uses the same validated storage/cache Interface' );
 	$r = call_snippet( 'create', array( 'title' => 'Second caller', 'code' => '<style>body{color:red}</style>', 'location' => 'elementor_body_start', 'priority' => 10, 'conditions' => array( 'include/general' ) ) );
+	$other_id = (int) $r['id'];
 	check( $r['success'] && 'elementor_body_start' === $r['location'], 'Independent CSS caller uses the same native fields' );
 	$capabilities['unfiltered_html'] = false;
 	$r = call_snippet( 'update', array( 'id' => $id, 'code' => '<b>Allowed</b><script>alert(1)</script>' ) );
@@ -221,6 +234,28 @@ CODE;
 	$available = false;
 	check( ! call_snippet( 'create', array( 'title' => 'Unavailable', 'code' => $code ) )['success'] && ! call_snippet( 'list' )['success'], 'Unavailable Pro Custom Code reports failure' );
 	$available = true;
+	$force_id = (int) $legacy['id'];
+	$manager = \ElementorPro\Modules\ThemeBuilder\Module::instance()->get_conditions_manager();
+	$purges_before = $purged_ids;
+	$before_options = $options;
+	$denied_ids = array( $force_id );
+	check( ! call_snippet( 'delete', array( 'id' => $force_id, 'force' => true ) )['success'] && get_post( $force_id ), 'Direct force keeps document permission checks' );
+	check( $purges_before === $purged_ids && $before_options === $options, 'Denied force does not purge any native assignment' );
+	$denied_ids = array();
+	$fail_delete_ids = array( $force_id );
+	check( ! call_snippet( 'delete', array( 'id' => $force_id, 'force' => true ) )['success'] && get_post( $force_id ), 'Failed core deletion reports failure and preserves the snippet' );
+	check( $purges_before === $purged_ids && $before_options === $options, 'Failed force does not purge any native assignment' );
+	$fail_delete_ids = array();
+	if ( $native ) { $options['elementor_pro_theme_builder_conditions']['footer'][777] = array( 'include/general' ); }
+	$clears_before = $manager->clears;
+	check( call_snippet( 'delete', array( 'id' => $force_id, 'force' => true ) )['success'] && ! get_post( $force_id ), 'Direct force deletes a snippet without a preceding trash operation' );
+	if ( $native ) {
+		$cache = $options['elementor_pro_theme_builder_conditions'];
+		check( ! array_filter( $cache, static fn( array $assignments ): bool => isset( $assignments[ $force_id ] ) ), 'Direct force removes the native assignment from every location' );
+		check( array( 'include/general' ) === $cache['footer'][777] && $unrelated === $cache['header'][99] && array( 'include/general' ) === $cache['elementor_body_start'][ $other_id ], 'Force refreshes native state and preserves newer unrelated assignments' );
+	}
+	check( array_merge( $purges_before, array( $force_id ) ) === $purged_ids, 'Successful direct force uses the native conditions-manager purge for this ID only' );
+	check( $clears_before + 1 === $manager->clears, 'Successful force invalidates the native in-process location result' );
 	call_snippet( 'update', array( 'id' => $id, 'status' => 'draft' ) );
 	check( ! in_array( $id, array_column( call_snippet( 'list' )['snippets'], 'id' ), true ), 'Disabling a snippet removes it from published results' );
 	check( call_snippet( 'delete', array( 'id' => $id ) )['success'] && 'trash' === $posts[ $id ]->post_status, 'Delete moves snippet to trash by default' );

@@ -8,7 +8,7 @@ if ( ! defined( 'WP_CLI' ) || ! WP_CLI || 'https://dev.devenia.com' !== untraili
 if ( ! current_user_can( 'manage_options' ) || ! post_type_exists( 'elementor_snippet' ) || ! \ElementorPro\License\API::is_license_active() ) {
 	throw new RuntimeException( 'Native licensed Custom Code and an existing administrator are required.' );
 }
-if ( '2.3.56' !== get_file_data( WP_PLUGIN_DIR . '/mcp-abilities-elementor/mcp-abilities-elementor.php', array( 'Version' => 'Version' ) )['Version'] || '4.3.2' !== ELEMENTOR_PRO_VERSION ) {
+if ( '2.3.57' !== get_file_data( WP_PLUGIN_DIR . '/mcp-abilities-elementor/mcp-abilities-elementor.php', array( 'Version' => 'Version' ) )['Version'] || '4.3.2' !== ELEMENTOR_PRO_VERSION ) {
 	throw new RuntimeException( 'The authorized installed versions have changed.' );
 }
 
@@ -139,6 +139,13 @@ try {
 	foreach ( array( $b, $c, $d ) as $id ) { $assert( $call( 'update', array( 'id' => $id, 'status' => 'publish' ) )['success'], 'publish_' . $id ); }
 	$list = $call( 'list', array( 'include_code' => true, 'limit' => 200 ) );
 	$assert( count( array_intersect( array( $a, $b, $c, $d ), array_column( $list['snippets'], 'id' ) ) ) === 4, 'published_snippets_listed' );
+	$before_rejected_delete = get_option( $cache_key );
+	$reject_delete = static fn( $check, $post, $force ) => $d === $post->ID && $force ? false : $check;
+	add_filter( 'pre_delete_post', $reject_delete, 10, 3 );
+	try { $r = $call( 'delete', array( 'id' => $d, 'force' => true ) ); }
+	finally { remove_filter( 'pre_delete_post', $reject_delete, 10 ); }
+	$assert( false === $r['success'] && (bool) get_post( $d ), 'rejected_force_preserves_post' );
+	$assert( $before_rejected_delete === get_option( $cache_key ), 'rejected_force_preserves_all_assignments' );
 	wp_set_current_user( 0 );
 	foreach ( array( 'list', 'get', 'create', 'update', 'delete' ) as $operation ) {
 		$input = 'list' === $operation ? array() : ( 'create' === $operation ? array( 'title' => $run . '-denied', 'code' => '', 'status' => 'draft' ) : array( 'id' => $a ) );
@@ -205,6 +212,6 @@ finally {
 		$checks['existing_snippet_unchanged_' . $id] = $digest === hash( 'sha256', serialize( array( get_post( $id ), get_post_meta( $id ) ) ) );
 	}
 }
-$report = array( 'status' => ! $error && ! in_array( false, $checks, true ) ? 'PASS' : 'FAIL', 'run' => $run, 'error' => $error, 'checks_passed' => count( array_filter( $checks ) ), 'checks_total' => count( $checks ), 'checks' => $checks, 'render_requests' => $http, 'owned_object_ids' => $owned, 'remaining_object_ids' => $remaining, 'cleanup_ability_force_results' => $cleanup_delete_results, 'stale_assignments_removed_during_cleanup' => array_values( array_unique( $stale ) ), 'existing_snippet_count' => count( $before_ids ), 'php' => PHP_VERSION, 'wordpress' => get_bloginfo( 'version' ), 'elementor' => ELEMENTOR_VERSION, 'elementor_pro' => ELEMENTOR_PRO_VERSION, 'mcp' => '2.3.56' );
+$report = array( 'status' => ! $error && ! in_array( false, $checks, true ) ? 'PASS' : 'FAIL', 'run' => $run, 'error' => $error, 'checks_passed' => count( array_filter( $checks ) ), 'checks_total' => count( $checks ), 'checks' => $checks, 'render_requests' => $http, 'owned_object_ids' => $owned, 'remaining_object_ids' => $remaining, 'cleanup_ability_force_results' => $cleanup_delete_results, 'stale_assignments_removed_during_cleanup' => array_values( array_unique( $stale ) ), 'existing_snippet_count' => count( $before_ids ), 'php' => PHP_VERSION, 'wordpress' => get_bloginfo( 'version' ), 'elementor' => ELEMENTOR_VERSION, 'elementor_pro' => ELEMENTOR_PRO_VERSION, 'mcp' => '2.3.57' );
 echo 'MCP_NATIVE_REPORT=' . wp_json_encode( $report, JSON_UNESCAPED_SLASHES ) . PHP_EOL;
 if ( 'PASS' !== $report['status'] ) { WP_CLI::halt( 1 ); }

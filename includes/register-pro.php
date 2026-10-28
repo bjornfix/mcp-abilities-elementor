@@ -647,6 +647,13 @@ function mcp_abilities_elementor_register_pro_abilities(): void {
 				if ( ! $result ) {
 					return array( 'success' => false, 'message' => 'Failed to delete snippet' );
 				}
+				if ( $force && class_exists( '\\ElementorPro\\Modules\\ThemeBuilder\\Module' ) ) {
+					// Pro purges assignments on trash; direct permanent deletion skips that hook.
+					$manager = \ElementorPro\Modules\ThemeBuilder\Module::instance()->get_conditions_manager();
+					$manager->get_cache()->refresh();
+					$manager->purge_post_from_cache( $post->ID );
+					$manager->clear_location_cache();
+				}
 
 				$action = $force ? 'permanently deleted' : 'moved to trash';
 

@@ -3,7 +3,7 @@ Contributors: basicus
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 7.1
-Stable tag: 2.3.56
+Stable tag: 2.3.57
 Requires PHP: 8.0
 Requires Plugins: elementor
 License: GPLv2 or later
@@ -15,7 +15,7 @@ Elementor page builder integration for WordPress via MCP.
 
 This add-on plugin exposes Elementor functionality through MCP (Model Context Protocol). Your AI assistant can read Elementor page structures, locate and update elements, manage templates and conditions, and run Elementor tools like maintenance mode, experiments, and URL replacement.
 
-Version 2.3.56 reads and writes native Elementor Pro snippet code, placement, priority and display conditions. It preserves escaped code and existing native permission checks. Document checks and supported dry runs use shared validation; design observations still require a rendered page review.
+Version 2.3.57 reads and writes native Elementor Pro snippet code, placement, priority and display conditions. It preserves escaped code and existing native permission checks. Permanent deletion removes the snippet's display-condition assignment while preserving other assignments. Document checks and supported dry runs use shared validation; design observations still require a rendered page review.
 
 Validated with WordPress 7.1-RC3.
 
@@ -64,6 +64,10 @@ For update notifications in WordPress, install [Devenia MCP Updater](https://dow
 * [Stable Download](https://downloads.devenia.com/mcp-abilities-elementor.zip)
 
 == Changelog ==
+
+= 2.3.57 =
+* Remove native display-condition assignments and refresh location results after a successful permanent snippet deletion.
+* Preserve other snippets and templates, including recently changed assignments; leave assignments intact if deletion fails or permission is denied.
 
 = 2.3.56 =
 * Read and write snippet code through native Elementor Pro metadata so saved code is the code Elementor renders.
