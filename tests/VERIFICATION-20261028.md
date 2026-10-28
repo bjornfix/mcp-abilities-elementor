@@ -1,5 +1,7 @@
 # Native Custom Code candidate verification
 
+Current verdict: **2.3.57 passes** the local registered-ability (**77**), native Pro fixture (**84**) and adapter (**125**) assertions, the licensed dev runtime suite (**51/51**), and official Plugin Check (**0 errors / 0 warnings**). Source commit: `19859163510c5b7ae321e6584a40b9d98ab41fc1`. The earlier 2.3.56 results below remain historical evidence; the final section records the correction.
+
 ## Source and version coordination
 
 The existing Elementor Custom Code abilities are corrected at their native storage Interface. No separate snippet model, plugin or transport was added.
@@ -7,10 +9,10 @@ The existing Elementor Custom Code abilities are corrected at their native stora
 - Source base: `b902b3ccb96d8affe4f67336e8a627f223b86565` (Elementor add-on 2.3.54).
 - Implementation commit: `68b0f425735c38c24a5cf6ab1bacde8b4705a017`.
 - Branch: `fix/native-custom-code-snippets-20261028`.
-- Current source candidate: **2.3.56**, superseding this branch's unbuilt and unpublished 2.3.55 metadata.
+- Current source candidate: **2.3.57**, following the tested 2.3.56 candidate and this branch's earlier unbuilt/unpublished 2.3.55 metadata.
 - The existing finding 168 proposal also proposed Elementor 2.3.55. Its files remain untouched. Its `mcp-abilities-elementor.patch` passed `git apply --check` against this branch without applying or merging it.
 - Finding 297 belongs to the separate Store Locator add-on, whose existing proposal suggests 0.1.34. It does not share Elementor's version sequence.
-- The inspected private Elementor candidate identities contain versions through 2.3.54 and no 2.3.55/2.3.56 package. No package, tag, promotion, update offer or installation was created here.
+- At the initial local inspection, private Elementor candidate identities contained versions through 2.3.54 and no 2.3.55/2.3.56 package. Later authorized candidate builds and dev installations are recorded below.
 
 This branch does not include finding 168's frontend change. Before any eventual rollout, reconcile the approved source changes and actual current version, then validate the exact combined candidate through the normal release process. Publishing this older-base branch after a different source candidate without that reconciliation could discard that candidate's changes. The version reservation alone is not an integration or release approval.
 
@@ -126,3 +128,29 @@ Cleanup is verified. The final run removed all **six** own objects. Its three or
 Earlier evidence remains scoped: local **70/75** assertions pass but did not cover real force-delete hooks; the **119** adapter assertions concern response assembly, not native cache deletion. The earlier **9/9** dev checks verified unavailable-feature and denied/error paths before licensing. Official Plugin Check remains **0 errors / 0 warnings** for the unchanged exact candidate; that result does not prove this behavioral path. Public HTTP, TypeScript SDK and browser-client checks remain unverified. The existing Pods bootstrap notice is unchanged.
 
 No production rollout, public promotion, merge, adapter update, other-module source change or license write occurred. The same approved internal time session was resumed with a fresh key and current time; no new session, second minimum or backfill was created.
+
+## Corrected candidate 2.3.57: final verification
+
+The force-delete defect is fixed at the existing snippet deletion callback in `includes/register-pro.php`. After `wp_delete_post(..., true)` succeeds, the callback refreshes Pro's existing cache object, calls the native conditions manager's `purge_post_from_cache()` for that one ID, and clears native in-process location results. These seven added lines use the existing Elementor Interface; no parallel cache, hook infrastructure or upstream modification was added. Permission checks and the early failure return precede the purge. The default trash path and legacy metadata callers are unchanged.
+
+The new local regression failed against unchanged 2.3.56 at “Direct force removes the native assignment from every location”. It now passes against 2.3.57. It also verifies that a newer unrelated assignment survives a stale in-memory cache, that another snippet/template remains assigned, and that denied or failed deletion neither removes the post nor purges its assignment. The real dev suite adds two checks with WordPress's request-local `pre_delete_post` filter: a rejected force deletion preserves the post and every native assignment.
+
+Final source/package identity:
+
+- Source commit: **`19859163510c5b7ae321e6584a40b9d98ab41fc1`**.
+- Version / Stable tag / public README metadata: **2.3.57**; all **89** abilities remain documented.
+- Private candidate SHA-256: **`b17c60a6eb7de8483d30e900ac5f0624a2b01c9721913f2d1b5e15fa4edd8d22`**.
+- Candidate path: `/mnt/storagebox/internal-plugin-packages/candidates/mcp-abilities-elementor/b17c60a6eb7de8483d30e900ac5f0624a2b01c9721913f2d1b5e15fa4edd8d22/mcp-abilities-elementor.zip`.
+- The package has **16** verified members, no hidden files or test/project Markdown, and passed the shared public-copy/package checks. Installed dev bytes were checked against every member digest both after installation and after runtime testing. Ownership is `www-data:www-data`.
+
+All relevant local checks passed: **77** registered-ability assertions, **84** with unmodified native Pro fixtures, **125** adapter assertions, **55** registered output-schema cases and **50** adapter-assembled output-schema cases. Architecture, write-contract, Theme Builder conditions, revision filter (**27** assertions), restore/sibling/translated restoration, Kit selection, combined Content/Elementor guards (**8** scenarios), style-guide and boundary-coherence regressions pass. PHP syntax, whitespace, metadata, ability inventory, Markdown link targets and public-copy checks pass; the changed README badge returns HTTP 200. Checks used the existing isolated local toolchain and fixtures; no dependency or local WordPress installation was added.
+
+The exact candidate was installed and activated on `dev.devenia.com` through the approved native SSH/WP-CLI route, without a backup. Pro remains **4.3.2**, Elementor **4.3.5**, WordPress **7.1-RC3-63305**, PHP **8.3.6**. The license remains active.
+
+The full native suite is now **PASS: 51/51**, exit **0**. This is the same 49-check suite that previously exposed the force-delete defect, plus the two rejected-deletion preservation checks. It exercises native CRUD, placement, priority, conditions, escaping, permissions, storage/error paths and actual theme rendering in fresh WordPress processes through existing administrator WP-CLI access. The formerly failing native assignment-deletion check is true; no assertion was waived. All **six** own test objects were deleted. **Zero** own native assignments remained, and the test's extra stale-assignment cleanup was **not needed**. Readback across all **30** own object IDs from this task's dev runs found zero remaining objects or assignments; the original native snippet inventory remains **0** and unrelated assignments are preserved.
+
+Official Plugin Check was rerun against the same installed 2.3.57 bytes with the unchanged strict policy, including low-severity warnings. It completed at **2026-10-28T15:51:31.987763+00:00**, exit **0**, empty stderr, with `Success: Checks complete. No errors found.` The shared gate interpreter confirms **0 errors / 0 warnings**, without exceptions. The raw job is `/tmp/devenia-plugin-check-jobs/dev/mcp-abilities-elementor/b17c60a6eb7de8483d30e900ac5f0624a2b01c9721913f2d1b5e15fa4edd8d22/`; the runtime job is `/tmp/elementor-native-snippet-runtime-01a182c5/fixed-2.3.57/`.
+
+[DEV-RUNTIME-20261028.json](DEV-RUNTIME-20261028.json) preserves the 2.3.56 baseline and appends the terminal 2.3.57 result, package identity, gate output and final readback. The previous **48/49** is retained as a failed baseline, not relabeled as a pass. Current **51/51** is a new completed run on the corrected source.
+
+No production rollout, common manifest publication, public artifact promotion, merge, other-module source change, adapter update, license write or access change was performed. Finding 168 and Store Locator finding 297 remain separate. Anonymous dev HTTP still requires login; authenticated HTTP/MCP/TypeScript SDK/browser-client checks were not run. These limits do not change the recorded native runtime and theme-rendering result. The unrelated pre-existing Pods bootstrap notice remains.
