@@ -1,0 +1,424 @@
+{
+  "status": "PASS",
+  "recorded_at_utc": "2026-10-28T16:57:14.075861+00:00",
+  "site": "https://g1.devenia.com",
+  "proxy_site_id": "g1",
+  "plugin": "mcp-abilities-elementor/mcp-abilities-elementor.php",
+  "version": "2.3.57",
+  "package_source_commit": "19859163510c5b7ae321e6584a40b9d98ab41fc1",
+  "git_release_tag": "v2.3.57",
+  "source_replication": "canonical Storagebox origin master and v2.3.57; documentation descendants are separate from the immutable package source",
+  "candidate_sha256": "b17c60a6eb7de8483d30e900ac5f0624a2b01c9721913f2d1b5e15fa4edd8d22",
+  "public_package": "https://downloads.devenia.com/artifacts/mcp-abilities-elementor/b17c60a6eb7de8483d30e900ac5f0624a2b01c9721913f2d1b5e15fa4edd8d22/mcp-abilities-elementor.zip",
+  "signed_manifest": {
+    "url": "https://downloads.devenia.com/devenia-mcp-manifest.json",
+    "generated_at": "2026-10-28T16:46:28.723Z",
+    "sha256": "760eead050fcd52f3cf26f0e49c098315f095552a84a1b13727c0e8f51f5ea1a",
+    "signature": "Ed25519 verified with the established public key",
+    "changed_plugin_entries": [
+      "mcp-abilities-elementor"
+    ],
+    "preserved_plugin_entries": 37,
+    "total_plugin_entries": 38
+  },
+  "version_coordination": {
+    "previous_channel_version": "2.3.54",
+    "canonical_base_commit": "b902b3ccb96d8affe4f67336e8a627f223b86565",
+    "remote_master_before_publish": "b902b3ccb96d8affe4f67336e8a627f223b86565",
+    "v2_3_57_collision": false,
+    "unrelated_changes_included": false
+  },
+  "official_plugin_check": {
+    "status": "passed",
+    "error_count": 0,
+    "warning_count": 0,
+    "checked_at": "2026-10-28T15:51:31.987Z",
+    "receipt_sha256": "ce6ffb8cf9b7edfdcb77b58df6ebebf8714fc0a620b0c39744f0af208958b8a5",
+    "gate_evidence": "wp-plugin-check-exit-zero-strict-json-or-native-empty-v1",
+    "verification_fingerprint": {
+      "packageSha256": "b17c60a6eb7de8483d30e900ac5f0624a2b01c9721913f2d1b5e15fa4edd8d22",
+      "phpVersion": "8.3.6",
+      "pluginCheckVersion": "2.1.0",
+      "pluginVersion": "2.3.57",
+      "policy": {
+        "format": "strict-json",
+        "includeLowSeverityWarnings": true,
+        "mode": "update",
+        "nativeZeroFindingOutput": "Success: Checks complete. No errors found.",
+        "pluginLoading": "all-active-except-plugin-check-skipped",
+        "skipThemes": true,
+        "targetSite": "dev",
+        "warningSeverity": "low"
+      },
+      "schemaVersion": 1,
+      "wordpressVersion": "7.1-RC3-63305",
+      "digest": "397f33bbd577e0d48a85a5b989d94373952f120eee27df6c189a385151c5b39d"
+    },
+    "completed_job_evidence_recorded_without_retest": true,
+    "source_evidence_commit": "06db6b748e54edc91a93f8536fcf538f03fa93cf"
+  },
+  "publication_verification": {
+    "private_to_signed_public_authority": "PASS",
+    "content_addressed_zip_http_status": 200,
+    "stable_zip_http_status": 200,
+    "checksum_http_status": 200,
+    "manifest_http_status": 200
+  },
+  "mcp_transport": {
+    "endpoint": "http://127.0.0.1:8787/mcp",
+    "sdk_version": "1.29.0",
+    "existing_client_and_authorization": true,
+    "new_credentials_or_security_changes": false
+  },
+  "offered_update": {
+    "plugin": "mcp-abilities-elementor/mcp-abilities-elementor.php",
+    "slug": "mcp-abilities-elementor",
+    "name": "MCP Abilities - Elementor",
+    "current_version": "2.3.54",
+    "new_version": "2.3.57",
+    "package": "https://downloads.devenia.com/artifacts/mcp-abilities-elementor/b17c60a6eb7de8483d30e900ac5f0624a2b01c9721913f2d1b5e15fa4edd8d22/mcp-abilities-elementor.zip",
+    "url": "https://devenia.com",
+    "active": true
+  },
+  "update_result": {
+    "success": true,
+    "message": "Plugin updated successfully",
+    "plugin": "mcp-abilities-elementor/mcp-abilities-elementor.php",
+    "previous_version": "2.3.54",
+    "current_version": "2.3.57",
+    "updated": true,
+    "active_before": true,
+    "active_after": true,
+    "reactivated": true
+  },
+  "terminal_updater_receipt": {
+    "schemaVersion": 1,
+    "rolloutId": "db012c92-70e1-4c31-95de-b7dbb73ca3d5",
+    "site": "https://g1.devenia.com/",
+    "plugin": "mcp-abilities-elementor/mcp-abilities-elementor.php",
+    "priorVersion": "2.3.54",
+    "newVersion": "2.3.57",
+    "actualVersion": "2.3.57",
+    "packageSha256": "b17c60a6eb7de8483d30e900ac5f0624a2b01c9721913f2d1b5e15fa4edd8d22",
+    "active": true,
+    "priorActive": true,
+    "activationPreserved": true,
+    "priorStateCaptured": true,
+    "health": "plugin_identity_activation_and_live_site_health_passed",
+    "healthHttpStatus": 200,
+    "rollback": {
+      "available": true,
+      "version": "2.3.54",
+      "sha256": "20b2c98762346c3bad24cc15ac0fab220368fce0bd7cc735f1342e66f81a213b",
+      "package": "https://downloads.devenia.com/artifacts/mcp-abilities-elementor/20b2c98762346c3bad24cc15ac0fab220368fce0bd7cc735f1342e66f81a213b/mcp-abilities-elementor.zip",
+      "releaseIdentity": {
+        "schemaVersion": 3,
+        "slug": "mcp-abilities-elementor",
+        "version": "2.3.54",
+        "sha256": "20b2c98762346c3bad24cc15ac0fab220368fce0bd7cc735f1342e66f81a213b",
+        "mainFile": "mcp-abilities-elementor/mcp-abilities-elementor.php",
+        "source": {
+          "adapter": "git",
+          "commit": "b902b3ccb96d8affe4f67336e8a627f223b86565",
+          "tree": "47faf5aba92e94c3b0315724d8341d55c2cc1761",
+          "path": "."
+        },
+        "members": [
+          {
+            "path": "mcp-abilities-elementor/includes/ability-registry.php",
+            "size": 913,
+            "sha256": "ecee8933b0e4e0dcac967b75dd0619d5bef6fcfb6c3eac266eda7ef53bdd8990"
+          },
+          {
+            "path": "mcp-abilities-elementor/includes/ability-schema.php",
+            "size": 2348,
+            "sha256": "1610885fbd0ddffd3712fd5f64dc421871adb5b16f31c99c3b2fdfd6275c2ddd"
+          },
+          {
+            "path": "mcp-abilities-elementor/includes/design-audit-runner.php",
+            "size": 1291,
+            "sha256": "1dbad086cdb7a1b123a97471fe445a0a10de1fceeb2480dba72aba5cdc18b876"
+          },
+          {
+            "path": "mcp-abilities-elementor/includes/devenia-updater-notice.php",
+            "size": 5768,
+            "sha256": "b6dda9d86fa5f4ed8e3bd1ffab837057be9089a74b6ffc61031bbc37efef3a7b"
+          },
+          {
+            "path": "mcp-abilities-elementor/includes/document-repository.php",
+            "size": 4879,
+            "sha256": "9f358ecb9dcfeb0bf33a2081c2a5bdf3f5d9bf12d9cde0f9f4c72f0c09bcad11"
+          },
+          {
+            "path": "mcp-abilities-elementor/includes/frontend-i18n.php",
+            "size": 5652,
+            "sha256": "453aafae5d1251eace6e264ec0a8b225432f993acbdf77b8332303f5cc3875d6"
+          },
+          {
+            "path": "mcp-abilities-elementor/includes/guidance.php",
+            "size": 22996,
+            "sha256": "f0a9beefe0cb9a1e1e4902f33f3cd60558d6671e06073ee826a6fa4cbf853549"
+          },
+          {
+            "path": "mcp-abilities-elementor/includes/register-design.php",
+            "size": 72470,
+            "sha256": "10e8748f83f2fa359d319a5371b0c4c012af004968654a6982e79ed1c009c02d"
+          },
+          {
+            "path": "mcp-abilities-elementor/includes/register-document.php",
+            "size": 175638,
+            "sha256": "b02b57609418b54a9e90aa91a339d5a8bbce88a0fa8ea77a50ab812c8f8dd319"
+          },
+          {
+            "path": "mcp-abilities-elementor/includes/register-elements.php",
+            "size": 20278,
+            "sha256": "190e7f3a5f780173bdca596b76fc557f4bba5992ed3cad37a1abdffb48ea0161"
+          },
+          {
+            "path": "mcp-abilities-elementor/includes/register-pro.php",
+            "size": 33565,
+            "sha256": "089d8fa40c672abdf75e8ecb6fb6969dc8ed00aa6e954a79f500efe44831f254"
+          },
+          {
+            "path": "mcp-abilities-elementor/includes/register-site-tools.php",
+            "size": 31504,
+            "sha256": "3648694319d14dbad7f4a7d668b2bb231368acd9b0f176c03ee602f7ef22b490"
+          },
+          {
+            "path": "mcp-abilities-elementor/includes/register-templates.php",
+            "size": 62740,
+            "sha256": "13ebf5d078aa7ce391b1776d9953cad93f90bfda05eeb8c768802389b63bfe89"
+          },
+          {
+            "path": "mcp-abilities-elementor/includes/template-query.php",
+            "size": 11236,
+            "sha256": "78e65a9de7b8c5a554f4355b82846acc32e02d028046e9fe473d06f158420dfc"
+          },
+          {
+            "path": "mcp-abilities-elementor/mcp-abilities-elementor.php",
+            "size": 240275,
+            "sha256": "8e250549534bf30c9af2877e09d79b39f9ec26ba8077d30f2be416e5ed8c73d1"
+          },
+          {
+            "path": "mcp-abilities-elementor/readme.txt",
+            "size": 30431,
+            "sha256": "9422989ff5a651d34322f8a44e107db78f4f070c1662f3742a20fac1183791fe"
+          }
+        ],
+        "membersSha256": "8d094c0a0f7ae10319df7ee9962b2b44ade5c00ec2eb11c5778c05c3714b7ea4"
+      }
+    },
+    "status": "passed",
+    "completedAt": "2026-10-28T16:49:40+00:00"
+  },
+  "installation_integrity": {
+    "success": true,
+    "plugin": "mcp-abilities-elementor/mcp-abilities-elementor.php",
+    "installed_version": "2.3.57",
+    "manifest_version": "2.3.57",
+    "package_sha256": "b17c60a6eb7de8483d30e900ac5f0624a2b01c9721913f2d1b5e15fa4edd8d22",
+    "source_commit": "19859163510c5b7ae321e6584a40b9d98ab41fc1",
+    "checked_files": 16,
+    "matched_files": 16,
+    "files": [
+      {
+        "member": "mcp-abilities-elementor/includes/ability-registry.php",
+        "status": "matched",
+        "expected_sha256": "ecee8933b0e4e0dcac967b75dd0619d5bef6fcfb6c3eac266eda7ef53bdd8990",
+        "actual_sha256": "ecee8933b0e4e0dcac967b75dd0619d5bef6fcfb6c3eac266eda7ef53bdd8990"
+      },
+      {
+        "member": "mcp-abilities-elementor/includes/ability-schema.php",
+        "status": "matched",
+        "expected_sha256": "1610885fbd0ddffd3712fd5f64dc421871adb5b16f31c99c3b2fdfd6275c2ddd",
+        "actual_sha256": "1610885fbd0ddffd3712fd5f64dc421871adb5b16f31c99c3b2fdfd6275c2ddd"
+      },
+      {
+        "member": "mcp-abilities-elementor/includes/design-audit-runner.php",
+        "status": "matched",
+        "expected_sha256": "1dbad086cdb7a1b123a97471fe445a0a10de1fceeb2480dba72aba5cdc18b876",
+        "actual_sha256": "1dbad086cdb7a1b123a97471fe445a0a10de1fceeb2480dba72aba5cdc18b876"
+      },
+      {
+        "member": "mcp-abilities-elementor/includes/devenia-updater-notice.php",
+        "status": "matched",
+        "expected_sha256": "b6dda9d86fa5f4ed8e3bd1ffab837057be9089a74b6ffc61031bbc37efef3a7b",
+        "actual_sha256": "b6dda9d86fa5f4ed8e3bd1ffab837057be9089a74b6ffc61031bbc37efef3a7b"
+      },
+      {
+        "member": "mcp-abilities-elementor/includes/document-repository.php",
+        "status": "matched",
+        "expected_sha256": "9f358ecb9dcfeb0bf33a2081c2a5bdf3f5d9bf12d9cde0f9f4c72f0c09bcad11",
+        "actual_sha256": "9f358ecb9dcfeb0bf33a2081c2a5bdf3f5d9bf12d9cde0f9f4c72f0c09bcad11"
+      },
+      {
+        "member": "mcp-abilities-elementor/includes/frontend-i18n.php",
+        "status": "matched",
+        "expected_sha256": "453aafae5d1251eace6e264ec0a8b225432f993acbdf77b8332303f5cc3875d6",
+        "actual_sha256": "453aafae5d1251eace6e264ec0a8b225432f993acbdf77b8332303f5cc3875d6"
+      },
+      {
+        "member": "mcp-abilities-elementor/includes/guidance.php",
+        "status": "matched",
+        "expected_sha256": "f0a9beefe0cb9a1e1e4902f33f3cd60558d6671e06073ee826a6fa4cbf853549",
+        "actual_sha256": "f0a9beefe0cb9a1e1e4902f33f3cd60558d6671e06073ee826a6fa4cbf853549"
+      },
+      {
+        "member": "mcp-abilities-elementor/includes/register-design.php",
+        "status": "matched",
+        "expected_sha256": "10e8748f83f2fa359d319a5371b0c4c012af004968654a6982e79ed1c009c02d",
+        "actual_sha256": "10e8748f83f2fa359d319a5371b0c4c012af004968654a6982e79ed1c009c02d"
+      },
+      {
+        "member": "mcp-abilities-elementor/includes/register-document.php",
+        "status": "matched",
+        "expected_sha256": "b02b57609418b54a9e90aa91a339d5a8bbce88a0fa8ea77a50ab812c8f8dd319",
+        "actual_sha256": "b02b57609418b54a9e90aa91a339d5a8bbce88a0fa8ea77a50ab812c8f8dd319"
+      },
+      {
+        "member": "mcp-abilities-elementor/includes/register-elements.php",
+        "status": "matched",
+        "expected_sha256": "190e7f3a5f780173bdca596b76fc557f4bba5992ed3cad37a1abdffb48ea0161",
+        "actual_sha256": "190e7f3a5f780173bdca596b76fc557f4bba5992ed3cad37a1abdffb48ea0161"
+      },
+      {
+        "member": "mcp-abilities-elementor/includes/register-pro.php",
+        "status": "matched",
+        "expected_sha256": "59a16c46a60b62669319f7189b46c144618f78735debb2d46c0b86a3fe74138e",
+        "actual_sha256": "59a16c46a60b62669319f7189b46c144618f78735debb2d46c0b86a3fe74138e"
+      },
+      {
+        "member": "mcp-abilities-elementor/includes/register-site-tools.php",
+        "status": "matched",
+        "expected_sha256": "3648694319d14dbad7f4a7d668b2bb231368acd9b0f176c03ee602f7ef22b490",
+        "actual_sha256": "3648694319d14dbad7f4a7d668b2bb231368acd9b0f176c03ee602f7ef22b490"
+      },
+      {
+        "member": "mcp-abilities-elementor/includes/register-templates.php",
+        "status": "matched",
+        "expected_sha256": "13ebf5d078aa7ce391b1776d9953cad93f90bfda05eeb8c768802389b63bfe89",
+        "actual_sha256": "13ebf5d078aa7ce391b1776d9953cad93f90bfda05eeb8c768802389b63bfe89"
+      },
+      {
+        "member": "mcp-abilities-elementor/includes/template-query.php",
+        "status": "matched",
+        "expected_sha256": "78e65a9de7b8c5a554f4355b82846acc32e02d028046e9fe473d06f158420dfc",
+        "actual_sha256": "78e65a9de7b8c5a554f4355b82846acc32e02d028046e9fe473d06f158420dfc"
+      },
+      {
+        "member": "mcp-abilities-elementor/mcp-abilities-elementor.php",
+        "status": "matched",
+        "expected_sha256": "81875a70e6a6190bf6deb6d3c57929d636fc3ab6a61a6180257372f17e83a29b",
+        "actual_sha256": "81875a70e6a6190bf6deb6d3c57929d636fc3ab6a61a6180257372f17e83a29b"
+      },
+      {
+        "member": "mcp-abilities-elementor/readme.txt",
+        "status": "matched",
+        "expected_sha256": "a51119245bb27d446a42b7171e42441b74f128807206c371b5be07c1ab37bd63",
+        "actual_sha256": "a51119245bb27d446a42b7171e42441b74f128807206c371b5be07c1ab37bd63"
+      }
+    ],
+    "scope": "signed_release_members_only",
+    "additional_files_checked": false,
+    "file_contents_returned": false
+  },
+  "mcp_snippet_verification": {
+    "status": "PASS",
+    "assertion_count": 28,
+    "assertions": {
+      "own_draft_created": true,
+      "created_native_placement_priority_conditions": true,
+      "native_code_meta_readback": true,
+      "escaped_code_preserved": true,
+      "own_update_preserves_draft": true,
+      "updated_native_placement_priority_conditions": true,
+      "updated_code_exact": true,
+      "invalid_priority_rejected_before_callback": true,
+      "conflicting_metadata_rejected": true,
+      "rejected_updates_preserve_all_own_fields": true,
+      "own_force_delete_succeeded": true,
+      "deleted_object_not_found": true,
+      "original_snippet_ids_preserved": true,
+      "original_93680_metadata_title_status_preserved": true,
+      "original_93680_raw_content_preserved": true,
+      "original_93571_metadata_title_status_preserved": true,
+      "original_93571_raw_content_preserved": true,
+      "original_93562_metadata_title_status_preserved": true,
+      "original_93562_raw_content_preserved": true,
+      "native_assignments_unchanged_after_cleanup": true,
+      "no_own_cache_reference": true,
+      "saved_auto_update_choices_unchanged": true,
+      "elementor_saved_auto_update_enabled": true,
+      "immutable_native_receipt_matches_read_model": true,
+      "native_rollout_receipt_passed": true,
+      "all_signed_member_hashes_match": true,
+      "signed_manifest_and_install_identity_match": true,
+      "wrong_result_type_negative_control": true
+    },
+    "output_schema_cases": 9,
+    "original_snippets": [
+      {
+        "id": 93680,
+        "status": "draft",
+        "raw_content_sha256": "e458a384a550be9a15bf19fab1632c851d8a81adcff745a2ae70867320143310",
+        "meta_sha256": "d9be62be2a6e61458c8332c2ba39eec9c83791a3a4c02b562307cf079735c146"
+      },
+      {
+        "id": 93571,
+        "status": "draft",
+        "raw_content_sha256": "898b006e1e2c1f5fad5b4ed2f5ab3b13b48155fc57cf227fbf4ac0c5fa2d35ff",
+        "meta_sha256": "d9be62be2a6e61458c8332c2ba39eec9c83791a3a4c02b562307cf079735c146"
+      },
+      {
+        "id": 93562,
+        "status": "draft",
+        "raw_content_sha256": "ce1197786c37988d0888d4d1ddc9e6bbc75dd23af874ffcc6a8cdbd12f3b973a",
+        "meta_sha256": "1b5ee5b6609d59afff151c4fbe73470db964c6b76f1c2e1e5e01ff0569ece8ac"
+      }
+    ],
+    "own_test_object_id": 97212,
+    "own_test_object_published": false,
+    "cleanup": {
+      "object_deleted": true,
+      "native_assignments_unchanged": true,
+      "native_empty_location_keys_added": [
+        "elementor_head"
+      ],
+      "remaining_own_objects": [],
+      "remaining_own_assignments": []
+    },
+    "auto_update_choices_preserved": true
+  },
+  "mcp_domain_failures": [
+    {
+      "success": false,
+      "message": "Conflicting snippet field and meta: code"
+    },
+    {
+      "success": false,
+      "message": "Snippet not found"
+    }
+  ],
+  "input_validation_failure": {
+    "presentation": "proxy raw validation message before callback",
+    "raw": "Funksjonaliteten \"elementor/update-custom-code\" har ugyldig inndata. Grunn: input[priority] må være mellom 1 (inkludert) og 10 (inkludert)",
+    "isError": false
+  },
+  "scope": {
+    "forced_installations_on_other_sites": false,
+    "saved_update_policy_changed": false,
+    "existing_user_snippets_modified": false,
+    "existing_page_content_modified": false,
+    "own_published_snippets": false,
+    "other_plugins_modified": false,
+    "adapter_upgraded": false,
+    "cookiebot_or_findings_168_297_included": false
+  },
+  "limits": [
+    "G1 smoke verification uses one owned draft; the full 51-assertion rendering/placement/priority/conditions suite ran on licensed dev against the same exact package.",
+    "No G1 browser or published-snippet rendering test was performed.",
+    "Existing SDK 1.29.0 proxy transport was exercised; a separate TypeScript SDK 1.32.2 client was not run.",
+    "Managed-installation verification checks all 16 signed release members; it does not inventory additional untracked files.",
+    "No rollback was invoked because installation, health, integrity and smoke checks passed; the signed previous 2.3.54 package remains available."
+  ]
+}
