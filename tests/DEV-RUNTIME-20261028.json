@@ -1,0 +1,549 @@
+{
+  "site": "https://dev.devenia.com",
+  "candidate_version": "2.3.56",
+  "source_commit": "aad92ff993657da28ea33f511ffd48a5003f472d",
+  "candidate_sha256": "ff8507a3062d176b40e9335dd372ff45fa656d5e7f4fd14880e424c1701cba77",
+  "runs": [
+    {
+      "job": "/tmp/elementor-native-snippet-runtime-01a182c5/licensed-first",
+      "exit_code": 1,
+      "completed_at_utc": "2026-10-28T15:13:26.062082+00:00",
+      "pre_test_startup_error": "WP-CLI stdin evaluation rejected strict_types before test code executed"
+    },
+    {
+      "job": "/tmp/elementor-native-snippet-runtime-01a182c5/licensed-native",
+      "exit_code": 1,
+      "completed_at_utc": "2026-10-28T15:14:57.053516+00:00",
+      "report": {
+        "status": "FAIL",
+        "run": "mcp-snippet-20261028-151453-00949c",
+        "error": "http_head_priority_order",
+        "checks_passed": 32,
+        "checks_total": 34,
+        "checks": {
+          "create_exact": true,
+          "native_meta_only_exact_escaping": true,
+          "native_defaults_and_conditions": true,
+          "real_native_document_type": true,
+          "native_document_renders_exact_bytes": true,
+          "empty_code_never_revives_legacy_body": true,
+          "real_native_cache_relocation": true,
+          "empty_conditions_remove_native_assignment": true,
+          "framework_rejects_priority": true,
+          "framework_rejects_location": true,
+          "invalid_condition_has_no_partial_write": true,
+          "real_wp_error_create": true,
+          "real_wp_error_update": true,
+          "metadata_failure_preserves_code_and_assignments": true,
+          "real_unfiltered_html_capability_restriction": true,
+          "create_first": true,
+          "create_legacy": true,
+          "create_body-end": true,
+          "legacy_meta_caller_uses_native_storage": true,
+          "publish_111224": true,
+          "publish_111225": true,
+          "publish_111226": true,
+          "published_snippets_listed": true,
+          "anonymous_denied_list": true,
+          "anonymous_denied_get": true,
+          "anonymous_denied_create": true,
+          "anonymous_denied_update": true,
+          "anonymous_denied_delete": true,
+          "http_200_included-initial": true,
+          "http_head_priority_order": false,
+          "native_deletion_clears_own_assignments": false,
+          "cleanup_all_own_objects_removed": true,
+          "existing_snippet_inventory_preserved": true,
+          "unrelated_native_assignments_preserved": true
+        },
+        "http": [
+          {
+            "phase": "included-initial",
+            "page_id": 111221,
+            "status": 200,
+            "body_sha256": "237d3e1fda8e123e2cdadffa09925540b7a7b5675517a4300f5a9b19836ead73"
+          }
+        ],
+        "owned_object_ids": [
+          111221,
+          111222,
+          111223,
+          111224,
+          111225,
+          111226
+        ],
+        "remaining_object_ids": [],
+        "stale_assignments_removed_during_cleanup": [
+          111223,
+          111224,
+          111226,
+          111225
+        ],
+        "existing_snippet_count": 0,
+        "php": "8.3.6",
+        "wordpress": "7.1-RC3-63305",
+        "elementor": "4.3.5",
+        "elementor_pro": "4.3.2",
+        "mcp": "2.3.56"
+      }
+    },
+    {
+      "job": "/tmp/elementor-native-snippet-runtime-01a182c5/licensed-observed",
+      "exit_code": 1,
+      "completed_at_utc": "2026-10-28T15:19:21.589964+00:00",
+      "report": {
+        "status": "FAIL",
+        "run": "mcp-snippet-20261028-151919-3346bf",
+        "error": "http_200_included-initial",
+        "checks_passed": 31,
+        "checks_total": 33,
+        "checks": {
+          "create_exact": true,
+          "native_meta_only_exact_escaping": true,
+          "native_defaults_and_conditions": true,
+          "real_native_document_type": true,
+          "native_document_renders_exact_bytes": true,
+          "empty_code_never_revives_legacy_body": true,
+          "real_native_cache_relocation": true,
+          "empty_conditions_remove_native_assignment": true,
+          "framework_rejects_priority": true,
+          "framework_rejects_location": true,
+          "invalid_condition_has_no_partial_write": true,
+          "real_wp_error_create": true,
+          "real_wp_error_update": true,
+          "metadata_failure_preserves_code_and_assignments": true,
+          "real_unfiltered_html_capability_restriction": true,
+          "create_first": true,
+          "create_legacy": true,
+          "create_body-end": true,
+          "legacy_meta_caller_uses_native_storage": true,
+          "publish_111230": true,
+          "publish_111231": true,
+          "publish_111232": true,
+          "published_snippets_listed": true,
+          "anonymous_denied_list": true,
+          "anonymous_denied_get": true,
+          "anonymous_denied_create": true,
+          "anonymous_denied_update": true,
+          "anonymous_denied_delete": true,
+          "http_200_included-initial": false,
+          "native_deletion_clears_own_assignments": false,
+          "cleanup_all_own_objects_removed": true,
+          "existing_snippet_inventory_preserved": true,
+          "unrelated_native_assignments_preserved": true
+        },
+        "http": [
+          {
+            "phase": "included-initial",
+            "page_id": 111227,
+            "url": "https://dev.devenia.com/?page_id=111227&mcp_native_validation=mcp-snippet-20261028-151919-3346bf-included-initial",
+            "status": 302,
+            "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "positions": {
+              "first": false,
+              "exact": false,
+              "body-start": false,
+              "body-end": false,
+              "head_end": false,
+              "body_open": false,
+              "body_close": false
+            },
+            "own_page_title_present": false,
+            "cache_status": "DYNAMIC"
+          }
+        ],
+        "owned_object_ids": [
+          111227,
+          111228,
+          111229,
+          111230,
+          111231,
+          111232
+        ],
+        "remaining_object_ids": [],
+        "stale_assignments_removed_during_cleanup": [
+          111229,
+          111230,
+          111232,
+          111231
+        ],
+        "existing_snippet_count": 0,
+        "php": "8.3.6",
+        "wordpress": "7.1-RC3-63305",
+        "elementor": "4.3.5",
+        "elementor_pro": "4.3.2",
+        "mcp": "2.3.56"
+      }
+    },
+    {
+      "job": "/tmp/elementor-native-snippet-runtime-01a182c5/licensed-cli-render",
+      "exit_code": 1,
+      "completed_at_utc": "2026-10-28T15:25:29.584630+00:00",
+      "report": {
+        "status": "FAIL",
+        "run": "mcp-snippet-20261028-152503-78d97d",
+        "error": null,
+        "checks_passed": 47,
+        "checks_total": 49,
+        "checks": {
+          "create_exact": true,
+          "native_meta_only_exact_escaping": true,
+          "native_defaults_and_conditions": true,
+          "real_native_document_type": true,
+          "native_document_renders_exact_bytes": true,
+          "empty_code_never_revives_legacy_body": true,
+          "real_native_cache_relocation": true,
+          "empty_conditions_remove_native_assignment": true,
+          "framework_rejects_priority": true,
+          "framework_rejects_location": true,
+          "invalid_condition_has_no_partial_write": true,
+          "real_wp_error_create": true,
+          "real_wp_error_update": true,
+          "metadata_failure_preserves_code_and_assignments": true,
+          "real_unfiltered_html_capability_restriction": true,
+          "create_first": true,
+          "create_legacy": true,
+          "create_body-end": true,
+          "legacy_meta_caller_uses_native_storage": true,
+          "publish_111236": true,
+          "publish_111237": true,
+          "publish_111238": true,
+          "published_snippets_listed": true,
+          "anonymous_denied_list": true,
+          "anonymous_denied_get": true,
+          "anonymous_denied_create": true,
+          "anonymous_denied_update": true,
+          "anonymous_denied_delete": true,
+          "render_process_ok_included-initial": true,
+          "render_head_priority_order": true,
+          "render_body_start_and_end_placement": true,
+          "render_exact_escaped_code": true,
+          "render_process_ok_excluded-initial": true,
+          "render_excluded_page_has_no_snippet": true,
+          "render_process_ok_included-after-move": true,
+          "render_condition_update_removes_old_page": true,
+          "render_process_ok_excluded-after-move": true,
+          "render_condition_and_location_update": true,
+          "cache_matches_relocated_document": true,
+          "render_process_ok_disabled": true,
+          "render_draft_disables_rendering": false,
+          "delete_trashes_by_default": true,
+          "forced_delete_removes_own_snippet": true,
+          "native_cache_removes_deleted_assignment": true,
+          "deleted_snippet_returns_domain_failure": true,
+          "native_deletion_clears_own_assignments": false,
+          "cleanup_all_own_objects_removed": true,
+          "existing_snippet_inventory_preserved": true,
+          "unrelated_native_assignments_preserved": true
+        },
+        "render_requests": [
+          {
+            "phase": "included-initial",
+            "page_id": 111233,
+            "mode": "native_theme_via_existing_wp_cli",
+            "process_exit_code": 0,
+            "body_sha256": "393d4ab990cce6c2b3a81e8ad2c04c1e72235fcb4202485a3841454afd122ad4",
+            "positions": {
+              "first": 167656,
+              "exact": 167969,
+              "body-start": 188950,
+              "body-end": 269285,
+              "head_end": 171069,
+              "body_open": 171078,
+              "body_close": 269853
+            },
+            "own_page_title_present": true,
+            "process_error": "Notice: Function _load_textdomain_just_in_time was called <strong>incorrectly</strong>. Translation loading for the <code>pods</code> domain was triggered too early. This is usually an indicator for some code in the plugin or theme running too early. Translations should be loaded at the <code>init</code> action or later. Please see <a href=\"https://developer.wordpress.org/advanced-administration/debug/debug-wordpress/\">Debugging in WordPress</a> for more information. (This message was added in version 6.7.0.) in /var/www/dev.devenia.com/wp-includes/functions.php on line 6260"
+          },
+          {
+            "phase": "excluded-initial",
+            "page_id": 111234,
+            "mode": "native_theme_via_existing_wp_cli",
+            "process_exit_code": 0,
+            "body_sha256": "cc92a80eae02e981be283ab36070b4a16ac4f65eada012c673cd0c0318b3f273",
+            "positions": {
+              "first": false,
+              "exact": false,
+              "body-start": false,
+              "body-end": false,
+              "head_end": 165631,
+              "body_open": 165640,
+              "body_close": 263173
+            },
+            "own_page_title_present": true,
+            "process_error": "Notice: Function _load_textdomain_just_in_time was called <strong>incorrectly</strong>. Translation loading for the <code>pods</code> domain was triggered too early. This is usually an indicator for some code in the plugin or theme running too early. Translations should be loaded at the <code>init</code> action or later. Please see <a href=\"https://developer.wordpress.org/advanced-administration/debug/debug-wordpress/\">Debugging in WordPress</a> for more information. (This message was added in version 6.7.0.) in /var/www/dev.devenia.com/wp-includes/functions.php on line 6260"
+          },
+          {
+            "phase": "included-after-move",
+            "page_id": 111233,
+            "mode": "native_theme_via_existing_wp_cli",
+            "process_exit_code": 0,
+            "body_sha256": "4cd4a7acc63597a4bd1651ae5dee591306121a56c890ccf5a09e8c4b29dd4c06",
+            "positions": {
+              "first": 167656,
+              "exact": false,
+              "body-start": 188284,
+              "body-end": 268619,
+              "head_end": 170701,
+              "body_open": 170710,
+              "body_close": 269187
+            },
+            "own_page_title_present": true,
+            "process_error": "Notice: Function _load_textdomain_just_in_time was called <strong>incorrectly</strong>. Translation loading for the <code>pods</code> domain was triggered too early. This is usually an indicator for some code in the plugin or theme running too early. Translations should be loaded at the <code>init</code> action or later. Please see <a href=\"https://developer.wordpress.org/advanced-administration/debug/debug-wordpress/\">Debugging in WordPress</a> for more information. (This message was added in version 6.7.0.) in /var/www/dev.devenia.com/wp-includes/functions.php on line 6260"
+          },
+          {
+            "phase": "excluded-after-move",
+            "page_id": 111234,
+            "mode": "native_theme_via_existing_wp_cli",
+            "process_exit_code": 0,
+            "body_sha256": "5ffbc8a2dcd7cd7ca2061b84165d56e31ef98d0ba72a54a4122410618dbaf8dc",
+            "positions": {
+              "first": false,
+              "exact": 267684,
+              "body-start": false,
+              "body-end": false,
+              "head_end": 170388,
+              "body_open": 170397,
+              "body_close": 268298
+            },
+            "own_page_title_present": true,
+            "process_error": "Notice: Function _load_textdomain_just_in_time was called <strong>incorrectly</strong>. Translation loading for the <code>pods</code> domain was triggered too early. This is usually an indicator for some code in the plugin or theme running too early. Translations should be loaded at the <code>init</code> action or later. Please see <a href=\"https://developer.wordpress.org/advanced-administration/debug/debug-wordpress/\">Debugging in WordPress</a> for more information. (This message was added in version 6.7.0.) in /var/www/dev.devenia.com/wp-includes/functions.php on line 6260"
+          },
+          {
+            "phase": "disabled",
+            "page_id": 111234,
+            "mode": "native_theme_via_existing_wp_cli",
+            "process_exit_code": 0,
+            "body_sha256": "d54fd9bc036c14068d35a033a7514fcd5895dd463da29ebc76e6f5a1cabbf320",
+            "positions": {
+              "first": false,
+              "exact": 175369,
+              "body-start": false,
+              "body-end": false,
+              "head_end": 165631,
+              "body_open": 165640,
+              "body_close": 263482
+            },
+            "own_page_title_present": true,
+            "process_error": "Notice: Function _load_textdomain_just_in_time was called <strong>incorrectly</strong>. Translation loading for the <code>pods</code> domain was triggered too early. This is usually an indicator for some code in the plugin or theme running too early. Translations should be loaded at the <code>init</code> action or later. Please see <a href=\"https://developer.wordpress.org/advanced-administration/debug/debug-wordpress/\">Debugging in WordPress</a> for more information. (This message was added in version 6.7.0.) in /var/www/dev.devenia.com/wp-includes/functions.php on line 6260"
+          }
+        ],
+        "owned_object_ids": [
+          111233,
+          111234,
+          111235,
+          111236,
+          111237,
+          111238
+        ],
+        "remaining_object_ids": [],
+        "stale_assignments_removed_during_cleanup": [
+          111236,
+          111238,
+          111237
+        ],
+        "existing_snippet_count": 0,
+        "php": "8.3.6",
+        "wordpress": "7.1-RC3-63305",
+        "elementor": "4.3.5",
+        "elementor_pro": "4.3.2",
+        "mcp": "2.3.56"
+      }
+    },
+    {
+      "job": "/tmp/elementor-native-snippet-runtime-01a182c5/licensed-final-probe",
+      "exit_code": 1,
+      "completed_at_utc": "2026-10-28T15:27:54.232140+00:00",
+      "report": {
+        "status": "FAIL",
+        "run": "mcp-snippet-20261028-152730-f3fa69",
+        "error": null,
+        "checks_passed": 48,
+        "checks_total": 49,
+        "checks": {
+          "create_exact": true,
+          "native_meta_only_exact_escaping": true,
+          "native_defaults_and_conditions": true,
+          "real_native_document_type": true,
+          "native_document_renders_exact_bytes": true,
+          "empty_code_never_revives_legacy_body": true,
+          "real_native_cache_relocation": true,
+          "empty_conditions_remove_native_assignment": true,
+          "framework_rejects_priority": true,
+          "framework_rejects_location": true,
+          "invalid_condition_has_no_partial_write": true,
+          "real_wp_error_create": true,
+          "real_wp_error_update": true,
+          "metadata_failure_preserves_code_and_assignments": true,
+          "real_unfiltered_html_capability_restriction": true,
+          "create_first": true,
+          "create_legacy": true,
+          "create_body-end": true,
+          "legacy_meta_caller_uses_native_storage": true,
+          "publish_111242": true,
+          "publish_111243": true,
+          "publish_111244": true,
+          "published_snippets_listed": true,
+          "anonymous_denied_list": true,
+          "anonymous_denied_get": true,
+          "anonymous_denied_create": true,
+          "anonymous_denied_update": true,
+          "anonymous_denied_delete": true,
+          "render_process_ok_included-initial": true,
+          "render_head_priority_order": true,
+          "render_body_start_and_end_placement": true,
+          "render_exact_escaped_code": true,
+          "render_process_ok_excluded-initial": true,
+          "render_excluded_page_has_no_snippet": true,
+          "render_process_ok_included-after-move": true,
+          "render_condition_update_removes_old_page": true,
+          "render_process_ok_excluded-after-move": true,
+          "render_condition_and_location_update": true,
+          "cache_matches_relocated_document": true,
+          "render_process_ok_disabled": true,
+          "render_draft_disables_rendering": true,
+          "delete_trashes_by_default": true,
+          "forced_delete_removes_own_snippet": true,
+          "native_cache_removes_deleted_assignment": true,
+          "deleted_snippet_returns_domain_failure": true,
+          "native_deletion_clears_own_assignments": false,
+          "cleanup_all_own_objects_removed": true,
+          "existing_snippet_inventory_preserved": true,
+          "unrelated_native_assignments_preserved": true
+        },
+        "render_requests": [
+          {
+            "phase": "included-initial",
+            "page_id": 111239,
+            "mode": "native_theme_via_existing_wp_cli",
+            "process_exit_code": 0,
+            "body_sha256": "e5b810b71cb2ff9b2124cb2e3767af09491afe86c82b8f12dca8405a4a236e24",
+            "positions": {
+              "first": 167859,
+              "exact": 168172,
+              "body-start": 188946,
+              "body-end": 269491,
+              "head_end": 171069,
+              "body_open": 171078,
+              "body_close": 269853
+            },
+            "own_page_title_present": true,
+            "process_error": "Notice: Function _load_textdomain_just_in_time was called <strong>incorrectly</strong>. Translation loading for the <code>pods</code> domain was triggered too early. This is usually an indicator for some code in the plugin or theme running too early. Translations should be loaded at the <code>init</code> action or later. Please see <a href=\"https://developer.wordpress.org/advanced-administration/debug/debug-wordpress/\">Debugging in WordPress</a> for more information. (This message was added in version 6.7.0.) in /var/www/dev.devenia.com/wp-includes/functions.php on line 6260"
+          },
+          {
+            "phase": "excluded-initial",
+            "page_id": 111240,
+            "mode": "native_theme_via_existing_wp_cli",
+            "process_exit_code": 0,
+            "body_sha256": "592fb5187f193d370626cf8d50c1334b00626ab07b259868ffcd227030c2232e",
+            "positions": {
+              "first": false,
+              "exact": false,
+              "body-start": false,
+              "body-end": false,
+              "head_end": 165631,
+              "body_open": 165640,
+              "body_close": 263173
+            },
+            "own_page_title_present": true,
+            "process_error": "Notice: Function _load_textdomain_just_in_time was called <strong>incorrectly</strong>. Translation loading for the <code>pods</code> domain was triggered too early. This is usually an indicator for some code in the plugin or theme running too early. Translations should be loaded at the <code>init</code> action or later. Please see <a href=\"https://developer.wordpress.org/advanced-administration/debug/debug-wordpress/\">Debugging in WordPress</a> for more information. (This message was added in version 6.7.0.) in /var/www/dev.devenia.com/wp-includes/functions.php on line 6260"
+          },
+          {
+            "phase": "included-after-move",
+            "page_id": 111239,
+            "mode": "native_theme_via_existing_wp_cli",
+            "process_exit_code": 0,
+            "body_sha256": "7a8b62e3609bec5e029161b516135cb406cb9d5a78207ffed2c1c4da03dc9a28",
+            "positions": {
+              "first": 167859,
+              "exact": false,
+              "body-start": 188280,
+              "body-end": 268825,
+              "head_end": 170701,
+              "body_open": 170710,
+              "body_close": 269187
+            },
+            "own_page_title_present": true,
+            "process_error": "Notice: Function _load_textdomain_just_in_time was called <strong>incorrectly</strong>. Translation loading for the <code>pods</code> domain was triggered too early. This is usually an indicator for some code in the plugin or theme running too early. Translations should be loaded at the <code>init</code> action or later. Please see <a href=\"https://developer.wordpress.org/advanced-administration/debug/debug-wordpress/\">Debugging in WordPress</a> for more information. (This message was added in version 6.7.0.) in /var/www/dev.devenia.com/wp-includes/functions.php on line 6260"
+          },
+          {
+            "phase": "excluded-after-move",
+            "page_id": 111240,
+            "mode": "native_theme_via_existing_wp_cli",
+            "process_exit_code": 0,
+            "body_sha256": "3e4104f1fbec1177235fcd31b1de2fd1d0f668ab01e07bce881d4fbd5f8928a9",
+            "positions": {
+              "first": false,
+              "exact": 267887,
+              "body-start": false,
+              "body-end": false,
+              "head_end": 170388,
+              "body_open": 170397,
+              "body_close": 268298
+            },
+            "own_page_title_present": true,
+            "process_error": "Notice: Function _load_textdomain_just_in_time was called <strong>incorrectly</strong>. Translation loading for the <code>pods</code> domain was triggered too early. This is usually an indicator for some code in the plugin or theme running too early. Translations should be loaded at the <code>init</code> action or later. Please see <a href=\"https://developer.wordpress.org/advanced-administration/debug/debug-wordpress/\">Debugging in WordPress</a> for more information. (This message was added in version 6.7.0.) in /var/www/dev.devenia.com/wp-includes/functions.php on line 6260"
+          },
+          {
+            "phase": "disabled",
+            "page_id": 111240,
+            "mode": "native_theme_via_existing_wp_cli",
+            "process_exit_code": 0,
+            "body_sha256": "dfb41e45ffc3e6046c21504f2d3a0c058e8bf4fb5efb7e10fed42b838761da27",
+            "positions": {
+              "first": false,
+              "exact": false,
+              "body-start": false,
+              "body-end": false,
+              "head_end": 165631,
+              "body_open": 165640,
+              "body_close": 263482
+            },
+            "own_page_title_present": true,
+            "process_error": "Notice: Function _load_textdomain_just_in_time was called <strong>incorrectly</strong>. Translation loading for the <code>pods</code> domain was triggered too early. This is usually an indicator for some code in the plugin or theme running too early. Translations should be loaded at the <code>init</code> action or later. Please see <a href=\"https://developer.wordpress.org/advanced-administration/debug/debug-wordpress/\">Debugging in WordPress</a> for more information. (This message was added in version 6.7.0.) in /var/www/dev.devenia.com/wp-includes/functions.php on line 6260"
+          }
+        ],
+        "owned_object_ids": [
+          111239,
+          111240,
+          111241,
+          111242,
+          111243,
+          111244
+        ],
+        "remaining_object_ids": [],
+        "cleanup_ability_force_results": {
+          "111242": {
+            "success": true,
+            "id": 111242,
+            "title": "mcp-snippet-20261028-152730-f3fa69-first",
+            "message": "Custom code snippet \"mcp-snippet-20261028-152730-f3fa69-first\" permanently deleted"
+          },
+          "111243": {
+            "success": true,
+            "id": 111243,
+            "title": "mcp-snippet-20261028-152730-f3fa69-legacy",
+            "message": "Custom code snippet \"mcp-snippet-20261028-152730-f3fa69-legacy\" permanently deleted"
+          },
+          "111244": {
+            "success": true,
+            "id": 111244,
+            "title": "mcp-snippet-20261028-152730-f3fa69-body-end",
+            "message": "Custom code snippet \"mcp-snippet-20261028-152730-f3fa69-body-end\" permanently deleted"
+          }
+        },
+        "stale_assignments_removed_during_cleanup": [
+          111242,
+          111244,
+          111243
+        ],
+        "existing_snippet_count": 0,
+        "php": "8.3.6",
+        "wordpress": "7.1-RC3-63305",
+        "elementor": "4.3.5",
+        "elementor_pro": "4.3.2",
+        "mcp": "2.3.56"
+      }
+    }
+  ]
+}

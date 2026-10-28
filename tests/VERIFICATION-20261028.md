@@ -95,3 +95,34 @@ Real WordPress ability execution passed **9/9 available checks**, using the actu
 A pre-existing Pods early-translation notice appears during normal full WordPress bootstrap. It was already observed before this installation. It was not attributed to the snippet candidate or changed here.
 
 The same existing internal time session was resumed with the current database time and a fresh event key. No new session or historical backfill was created. There was no production installation, public update offer, merge, adapter upgrade or change to another module. This dev result supersedes the earlier pending-installation and not-run Plugin Check statements above; full positive native testing and HTTP/TypeScript client checks remain incomplete.
+
+## Licensed native runtime follow-up: one remaining failure
+
+After the user activated the existing dev license, readback confirmed `license_active: true` and `post_type_exists('elementor_snippet'): true`. Installed versions remain Elementor Pro **4.3.2**, Elementor **4.3.5**, and MCP **2.3.56**. Runtime source is still candidate `ff8507a3062d176b40e9335dd372ff45fa656d5e7f4fd14880e424c1701cba77` from `aad92ff993657da28ea33f511ffd48a5003f472d`; no runtime source or installed plugin was changed during this verification follow-up.
+
+The final native suite completed **48/49 checks**. Its terminal result is **FAIL**, solely at `native_deletion_clears_own_assignments`. Reproduction is [run-custom-code-wordpress.php](run-custom-code-wordpress.php), invoked on the exact dev root with `wp --allow-root eval-file <test-file> --use-include --user=<existing administrator ID>`. The runner is pinned to this approved target/version, uses actual WP_Ability input/output validation, real storage/permissions, native Pro Document/conditions/cache code, and the installed WordPress theme. It creates two own test pages and four inert JSON-script snippets, then removes its own objects even after a failing assertion. The collected runs, exact checks, rendering positions, object IDs and cleanup results are in [DEV-RUNTIME-20261028.json](DEV-RUNTIME-20261028.json).
+
+Verified in the real runtime:
+
+- Native meta-only CRUD storage, default head placement/priority, exact JSON/quotes/backslashes/Unicode, empty code without legacy-body fallback, and native Document byte-for-byte output.
+- Native cache relocation and condition removal; current input/output schemas; invalid priority/location rejection; invalid conditions without partial writes.
+- Real WordPress `WP_Error` handling for create and update, scoped metadata-write failure, native `unfiltered_html` sanitization, and anonymous denial of all five abilities. Failure injection is request-local and restricted to the own test objects; it does not corrupt a database or change a user/role.
+- Legacy meta callers; publish/list; actual theme-rendered head ordering at priorities 1 and 9; body-start/body-end placement; exact escaped code; include/exclude page conditions; condition/location changes; and changing a published snippet back to draft.
+- Default trash followed by permanent deletion removes the post and its native cache assignment.
+
+**Confirmed remaining defect:** direct `elementor/delete-custom-code` with `force:true` returns success and deletes the post, but its native condition-cache entry remains. In the final run, direct forced deletions of own snippets **111242, 111243 and 111244** all returned `success:true`; those same three IDs remained in `elementor_pro_theme_builder_conditions`. The source path is `includes/register-pro.php:646`: the force branch calls `wp_delete_post(..., true)` directly. Pro 4.3.2 registers `Conditions_Manager::purge_post_from_cache()` on `wp_trash_post`, with no corresponding permanent-delete hook. The successful trash-then-force path is the counterexample that isolates this missing native purge from generic deletion or cache-storage failure.
+
+The smallest owning follow-up is to invoke the existing native conditions-manager purge after a successful direct permanent deletion, preserving other assignments and avoiding purge if deletion fails. This report does not change that runtime code or deploy another version. Candidate 2.3.56 therefore has **not** passed the complete native suite.
+
+Rendering evidence and resolved test confounders:
+
+- Anonymous HTTP to the dev page returns **302 to the same site's wp-login.php**. The earlier followed response with HTTP 200 was the login page, so it did not establish a priority or rendering defect. No further request followed that redirect during diagnosis.
+- Rendering was instead performed through the already authorized administrator WP-CLI Interface: fresh WordPress processes run `WP::main()`, `template_redirect`, `template_include` and the real page template. No browser login, auth token, user, password, role or access setting was created or changed. This verifies native theme output, not an authenticated HTTP/MCP/browser client.
+- The administrator toolbar can contain a snippet title after the snippet is disabled. The final assertions locate the actual script's exact `id` attribute rather than a matching title string. Draft suppression passes with that correct signal.
+- WP-CLI stdin evaluation rejected `strict_types` before the first test started; using its native `--use-include` mode resolved the test invocation.
+
+Cleanup is verified. The final run removed all **six** own objects. Its three orphaned entries were removed through Pro's existing cache Interface, only for those own IDs. The separate final readback checked **all 24 own object IDs** created across the four runtime/diagnostic runs: **zero posts/pages/snippets remain and zero own cache references remain**. The native snippet inventory is back to its original count **0**; unrelated native assignments were preserved. Empty location keys are normalized for assignment comparison, never restored from a backup. No backup was created. License status remains active.
+
+Earlier evidence remains scoped: local **70/75** assertions pass but did not cover real force-delete hooks; the **119** adapter assertions concern response assembly, not native cache deletion. The earlier **9/9** dev checks verified unavailable-feature and denied/error paths before licensing. Official Plugin Check remains **0 errors / 0 warnings** for the unchanged exact candidate; that result does not prove this behavioral path. Public HTTP, TypeScript SDK and browser-client checks remain unverified. The existing Pods bootstrap notice is unchanged.
+
+No production rollout, public promotion, merge, adapter update, other-module source change or license write occurred. The same approved internal time session was resumed with a fresh key and current time; no new session, second minimum or backfill was created.
