@@ -2,14 +2,14 @@
 
 Inspect an Elementor page, find the widget or shared setting behind a problem, and make a targeted change through an authenticated MCP client. Keep the page editable in Elementor and check the rendered result after saving.
 
-[![Release 2.3.57](https://img.shields.io/badge/release-2.3.57-blue.svg)](https://downloads.devenia.com/mcp-abilities-elementor.zip)
+[![Release 2.3.58](https://img.shields.io/badge/release-2.3.58-blue.svg)](https://downloads.devenia.com/mcp-abilities-elementor.zip)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0.html)
 [![WordPress](https://img.shields.io/badge/WordPress-6.9%2B-blue.svg)](https://wordpress.org)
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://www.php.net/)
 
 **Tested up to:** 7.1 (validated with WordPress 7.1-RC3)
 
-**Stable tag:** 2.3.57
+**Stable tag:** 2.3.58
 
 **License:** GPLv2 or later
 
@@ -19,7 +19,7 @@ Inspect an Elementor page, find the widget or shared setting behind a problem, a
 
 The add-on registers 89 Elementor abilities. They cover document inspection and editing, individual widgets and containers, shared templates and Kit settings, design observations, cache control and selected site tools. Elementor Pro supplies the optional Theme Builder, custom-code and form-submission features.
 
-The frontend integration supplies missing JavaScript messages and Swiper arrow labels from native site translations. Existing translations, customized defaults and individual carousel settings remain authoritative.
+The frontend integration supplies missing JavaScript messages, Swiper arrow labels and native dialog close names from native site translations. Existing translations, customized defaults and individual carousel settings remain authoritative.
 
 For example, a course page may have the wrong booking link and cramped mobile text. Inspect the button for the link problem and its container for the spacing problem. Changing a shared Kit or linked template can affect other pages, so choose that scope deliberately.
 
@@ -264,6 +264,10 @@ For update notifications in WordPress, install [Devenia MCP Updater](https://dow
 5. Read one existing Elementor page before making changes.
 
 ## Recent Changes
+
+### 2.3.58
+
+- Use Elementor’s current native close message for dialog close buttons while preserving explicit labels and dialog behavior.
 
 ### 2.3.57
 

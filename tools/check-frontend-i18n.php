@@ -120,6 +120,27 @@ namespace {
 		mcp_abilities_elementor_enqueue_frontend_i18n();
 		check( false === wp_scripts()->get_data( 'swiper', 'after' ), "$case leaves Swiper scripts unchanged" );
 	}
+	$fixtures['dialog_no'] = mcp_abilities_elementor_dialog_i18n_script( array( 'close' => 'Lukk' ) );
+	$fixtures['dialog_en'] = mcp_abilities_elementor_dialog_i18n_script( array( 'close' => 'Close' ) );
+	check( '' === $fixtures['dialog_en'], 'English dialog settings unchanged' );
+	check( '' === mcp_abilities_elementor_dialog_i18n_script( array() ), 'missing close name not invented' );
+	check( '' === mcp_abilities_elementor_dialog_i18n_script( array( 'close' => 42 ) ), 'non-string close ignored' );
+	check( '' === mcp_abilities_elementor_dialog_i18n_script( array( 'close' => '  ' ) ), 'empty close ignored' );
+	$fixtures['dialog_special'] = mcp_abilities_elementor_dialog_i18n_script( array( 'close' => $special ) );
+	check( false === strpos( $fixtures['dialog_special'], '</script>' ), 'dialog close JSON escaped' );
+	reset_case( array( 'close' => 'Lukk' ) );
+	$GLOBALS['test_script_states']['elementor-dialog'] = array( 'registered' => true, 'done' => false );
+	mcp_abilities_elementor_enqueue_frontend_i18n();
+	check( 1 === count( wp_scripts()->get_data( 'elementor-dialog', 'after' ) ), 'dialog registration follows actual native handle even without carousel messages' );
+	mcp_abilities_elementor_enqueue_frontend_i18n();
+	check( 1 === count( wp_scripts()->get_data( 'elementor-dialog', 'after' ) ), 'dialog enqueue idempotent' );
+	foreach ( array( 'english', 'done', 'missing', 'admin' ) as $case ) {
+		reset_case( array( 'close' => 'english' === $case ? 'Close' : 'Lukk' ) );
+		$GLOBALS['test_script_states']['elementor-dialog'] = array( 'registered' => 'missing' !== $case, 'done' => 'done' === $case );
+		if ( 'admin' === $case ) { $GLOBALS['test_admin'] = true; }
+		mcp_abilities_elementor_enqueue_frontend_i18n();
+		check( false === wp_scripts()->get_data( 'elementor-dialog', 'after' ), "$case preserves dialog script state" );
+	}
 	if ( isset( $argv[2] ) ) { file_put_contents( $argv[2], json_encode( $fixtures, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE ) . "\n" ); }
 	echo "Frontend i18n PHP boundary checks passed: {$checks}.\n";
 }

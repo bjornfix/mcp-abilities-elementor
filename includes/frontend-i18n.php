@@ -89,6 +89,36 @@ function mcp_abilities_elementor_swiper_i18n_script( array $messages ): string {
 }
 
 /**
+ * Supply a missing dialog close name from the native current-language message.
+ *
+ * Registers a native lightbox subtype before construction. Original defaults,
+ * explicit per-dialog labels, controls and geometry remain authoritative.
+ *
+ * @param array $messages Native frontend i18n settings.
+ * @return string Native dialog registration, or an empty string.
+ */
+function mcp_abilities_elementor_dialog_i18n_script( array $messages ): string {
+	$close = $messages['close'] ?? null;
+	if ( ! is_string( $close ) || '' === trim( $close ) || 'Close' === $close ) {
+		return '';
+	}
+	$json = wp_json_encode( $close, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT );
+	if ( false === $json ) {
+		return '';
+	}
+	return '(function(w){var D=w.DialogsManager;'
+		. 'if(!D||typeof D.getWidgetType!=="function"||typeof D.addWidgetType!=="function"){return;}'
+		. 'var Base=D.getWidgetType("lightbox");var $=w.jQuery;'
+		. 'if(!Base||typeof Base.extend!=="function"||!$||typeof $.extend!=="function"||Base.mcpCloseLocalized){return;}'
+		. 'var label=' . $json . ';var Localized=Base.extend("lightbox",{getDefaultSettings:function(){'
+		. 'var defaults=Base.prototype.getDefaultSettings.apply(this,arguments);'
+		. 'var attrs=defaults&&defaults.closeButtonOptions&&defaults.closeButtonOptions.attributes;'
+		. 'if(attrs&&Object.prototype.hasOwnProperty.call(attrs,"aria-label")){return defaults;}'
+		. 'return $.extend(true,{},defaults,{closeButtonOptions:{attributes:{"aria-label":label}}});}});'
+		. 'Localized.mcpCloseLocalized=true;D.addWidgetType("lightbox",Localized);})(window);';
+}
+
+/**
  * Fill missing lightbox messages through the standard WordPress i18n runtime.
  *
  * This runs after Elementor has assembled its native frontend settings. It
@@ -116,6 +146,11 @@ function mcp_abilities_elementor_enqueue_frontend_i18n(): void {
 		if ( ! in_array( $swiper_script, $before_swiper, true ) ) {
 			wp_add_inline_script( 'swiper', $swiper_script, 'after' );
 		}
+	}
+	$dialog_script = mcp_abilities_elementor_dialog_i18n_script( $messages );
+	if ( '' !== $dialog_script && wp_script_is( 'elementor-dialog', 'registered' ) && ! wp_script_is( 'elementor-dialog', 'done' )
+		&& ! in_array( $dialog_script, (array) wp_scripts()->get_data( 'elementor-dialog', 'after' ), true ) ) {
+		wp_add_inline_script( 'elementor-dialog', $dialog_script, 'after' );
 	}
 	$script = mcp_abilities_elementor_frontend_i18n_script( $messages, get_locale() );
 	if ( '' === $script ) {
