@@ -91,7 +91,8 @@ function mcp_abilities_elementor_swiper_i18n_script( array $messages ): string {
 /**
  * Supply a missing dialog close name from the native current-language message.
  *
- * Registers a native lightbox subtype before construction. Original defaults,
+ * Adapts the native frontend manager factory before construction, including
+ * dialogs loaded on demand. The native subtype preserves original defaults,
  * explicit per-dialog labels, controls and geometry remain authoritative.
  *
  * @param array $messages Native frontend i18n settings.
@@ -106,16 +107,24 @@ function mcp_abilities_elementor_dialog_i18n_script( array $messages ): string {
 	if ( false === $json ) {
 		return '';
 	}
-	return '(function(w){var D=w.DialogsManager;'
+	return '(function(w){var label=' . $json . ';'
+		. 'function register(){var D=w.DialogsManager;var $=w.jQuery;'
 		. 'if(!D||typeof D.getWidgetType!=="function"||typeof D.addWidgetType!=="function"){return;}'
-		. 'var Base=D.getWidgetType("lightbox");var $=w.jQuery;'
+		. 'var Base=D.getWidgetType("lightbox");'
 		. 'if(!Base||typeof Base.extend!=="function"||!$||typeof $.extend!=="function"||Base.mcpCloseLocalized){return;}'
-		. 'var label=' . $json . ';var Localized=Base.extend("lightbox",{getDefaultSettings:function(){'
+		. 'var Localized=Base.extend("lightbox",{getDefaultSettings:function(){'
 		. 'var defaults=Base.prototype.getDefaultSettings.apply(this,arguments);'
 		. 'var attrs=defaults&&defaults.closeButtonOptions&&defaults.closeButtonOptions.attributes;'
 		. 'if(attrs&&Object.prototype.hasOwnProperty.call(attrs,"aria-label")){return defaults;}'
 		. 'return $.extend(true,{},defaults,{closeButtonOptions:{attributes:{"aria-label":label}}});}});'
-		. 'Localized.mcpCloseLocalized=true;D.addWidgetType("lightbox",Localized);})(window);';
+		. 'Localized.mcpCloseLocalized=true;D.addWidgetType("lightbox",Localized);}'
+		. 'function install(){var F=w.elementorFrontend;'
+		. 'if(!F||typeof F.getDialogsManager!=="function"||F.getDialogsManager.mcpCloseLocalized){return;}'
+		. 'var original=F.getDialogsManager;var localized=function(){register();return original.apply(this,arguments);};'
+		. 'localized.mcpCloseLocalized=true;F.getDialogsManager=localized;register();}'
+		. 'var $=w.jQuery;if(typeof $==="function"){var events=$(w);'
+		. 'if(events&&typeof events.on==="function"){events.on("elementor/frontend/init",install);}}'
+		. 'register();install();})(window);';
 }
 
 /**
@@ -148,10 +157,12 @@ function mcp_abilities_elementor_enqueue_frontend_i18n(): void {
 		}
 	}
 	$dialog_script = mcp_abilities_elementor_dialog_i18n_script( $messages );
-	if ( '' !== $dialog_script && wp_script_is( 'elementor-dialog', 'registered' ) && ! wp_script_is( 'elementor-dialog', 'done' )
-		&& ! in_array( $dialog_script, (array) wp_scripts()->get_data( 'elementor-dialog', 'after' ), true ) ) {
-		wp_add_inline_script( 'elementor-dialog', $dialog_script, 'after' );
+	// Native dialogs may load on demand, so an inline script on that handle is not delivered.
+	// Register on the queued frontend and adapt its public manager factory before construction.
+	if ( '' !== $dialog_script && ! in_array( $dialog_script, (array) wp_scripts()->get_data( $handle, 'before' ), true ) ) {
+		wp_add_inline_script( $handle, $dialog_script, 'before' );
 	}
+
 	$script = mcp_abilities_elementor_frontend_i18n_script( $messages, get_locale() );
 	if ( '' === $script ) {
 		return;

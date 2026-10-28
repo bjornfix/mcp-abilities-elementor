@@ -2,14 +2,14 @@
 
 Inspect an Elementor page, find the widget or shared setting behind a problem, and make a targeted change through an authenticated MCP client. Keep the page editable in Elementor and check the rendered result after saving.
 
-[![Release 2.3.58](https://img.shields.io/badge/release-2.3.58-blue.svg)](https://downloads.devenia.com/mcp-abilities-elementor.zip)
+[![Release 2.3.59](https://img.shields.io/badge/release-2.3.59-blue.svg)](https://downloads.devenia.com/mcp-abilities-elementor.zip)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0.html)
 [![WordPress](https://img.shields.io/badge/WordPress-6.9%2B-blue.svg)](https://wordpress.org)
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://www.php.net/)
 
 **Tested up to:** 7.1 (validated with WordPress 7.1-RC3)
 
-**Stable tag:** 2.3.58
+**Stable tag:** 2.3.59
 
 **License:** GPLv2 or later
 
@@ -264,6 +264,10 @@ For update notifications in WordPress, install [Devenia MCP Updater](https://dow
 5. Read one existing Elementor page before making changes.
 
 ## Recent Changes
+
+### 2.3.59
+
+- Apply the native current-language dialog close name when dialogs load on demand, while preserving custom labels and native popup behavior.
 
 ### 2.3.58
 
