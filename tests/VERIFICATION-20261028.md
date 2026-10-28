@@ -64,3 +64,34 @@ The external adapter fixture is the pre-existing local `mcp-adapter-071-identity
 Execution used Bubblewrap with no external network, an empty environment, read-only source/fixture/toolchain mounts, and a 16 MiB scratch filesystem. Limits: 30 seconds wall time, 15 seconds CPU, 512 MiB address space, 32 processes, 128 open files and 1 MiB per output file. Only the needed local Python validator packages were mounted, without the host home directory or credentials. PHP 8.3 ran without its normal configuration and with the existing ctype extension. No dependencies were installed.
 
 Limitations remain explicit: no full WordPress/database/Elementor Pro runtime, HTTP transport, TypeScript SDK 1.32.2 client run, or official candidate Plugin Check was performed. The earlier read-only dev inspection found a working WordPress/WP-CLI/Plugin Check environment but no Elementor Pro. Dev installation and the previously denied time-session resume remain pending and were not retried.
+
+## Authorized dev installation and official Plugin Check
+
+The user explicitly approved installing the existing Elementor Pro code and this MCP candidate on `https://dev.devenia.com`. This step deliberately created **no backup**. The normal combined gate helper creates a rollback archive, so the documented SSH/WP-CLI installation and official check commands were used directly under the user's narrower instruction. No shared helper or release policy was changed.
+
+Installed and active on `/var/www/dev.devenia.com`:
+
+- Elementor Pro **4.3.2**, using the existing unmodified plugin code from `/var/www/g1.devenia.com/wp-content/plugins/elementor-pro`. All **1,326 source files** were compared by SHA-256 with their installed dev counterparts. Production source files were read without modification; no license data or site content was copied. The temporary install ZIP SHA-256 was `084a30a91b10f9d5629a3c4dee2b91f57102c9baa8facb729fd0c4f7dedd945a`.
+- MCP Abilities for Elementor **2.3.56**, private candidate SHA-256 `ff8507a3062d176b40e9335dd372ff45fa656d5e7f4fd14880e424c1701cba77`, from source commit `aad92ff993657da28ea33f511ffd48a5003f472d`. All **16 installed package members** match the candidate identity. Both plugin directories have `www-data:www-data` ownership.
+- Existing runtime: PHP **8.3.6**, WordPress **7.1-RC3-63305**, Elementor **4.3.5**, Plugin Check **2.1.0**.
+
+Official Plugin Check is now **PASSED: zero errors, zero warnings**, without exceptions. It finished at `2026-10-28T14:55:53.465208+00:00` with exit code **0**, empty stderr and this exact stdout:
+
+```text
+Success: Checks complete. No errors found.
+```
+
+The command used `--slug=mcp-abilities-elementor --mode=update --format=strict-json --warning-severity=low --include-low-severity-warnings --skip-themes`. Other active plugins were skipped for this command only, matching the shared gate's policy; none was deactivated. The shared `interpretPluginCheckResult` accepts this exact native empty-finding result as `wp-plugin-check-exit-zero-strict-json-or-native-empty-v1`, with error and warning counts both zero. Raw terminal files remain in `/tmp/devenia-plugin-check-jobs/dev/mcp-abilities-elementor/ff8507a3062d176b40e9335dd372ff45fa656d5e7f4fd14880e424c1701cba77/`. No public artifact promotion was performed.
+
+Real WordPress ability execution passed **9/9 available checks**, using the actual framework input/output validation and permissions rather than the local doubles:
+
+- Create and list report the native Custom Code post type as unavailable.
+- Priority `11` is rejected as `ability_invalid_input` by the real WordPress schema validator.
+- Anonymous list/get/create/update/delete are all rejected as `ability_invalid_permissions`.
+- The snippet inventory is unchanged; **zero test objects were created**. The attempted create explicitly requested a draft and used only an inert test comment.
+
+**Full positive native WordPress/Elementor Pro snippet testing remains blocked by the dev environment.** Pro's license API reports `license_active: false`; the Custom Code feature entitlement reports true, but there are zero existing snippets and `post_type_exists('elementor_snippet')` remains false. Pro's own `can_use_custom_code()` requires an active license with the feature, or existing published snippets. The current site therefore cannot exercise native snippet creation, update, conditions/cache relocation, rendering, ordering or deletion through the ordinary registered Interface. No license was connected or copied, no fallback snippet was seeded to activate Pro's legacy path, and no post type or third-party code was forced into service. The remaining prerequisite is a valid active license on dev, or an explicitly selected existing licensed test environment.
+
+A pre-existing Pods early-translation notice appears during normal full WordPress bootstrap. It was already observed before this installation. It was not attributed to the snippet candidate or changed here.
+
+The same existing internal time session was resumed with the current database time and a fresh event key. No new session or historical backfill was created. There was no production installation, public update offer, merge, adapter upgrade or change to another module. This dev result supersedes the earlier pending-installation and not-run Plugin Check statements above; full positive native testing and HTTP/TypeScript client checks remain incomplete.
