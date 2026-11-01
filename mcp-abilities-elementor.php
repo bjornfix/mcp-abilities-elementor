@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://devenia.com/plugins/mcp-abilities-elementor/
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.3.59
+ * Version: 2.3.60
  * Author: basicus
  * Author URI: https://profiles.wordpress.org/basicus/
  * License: GPL-2.0+
@@ -6300,8 +6300,8 @@ function mcp_abilities_elementor_normalize_popup_display_settings( $popup_settin
 
 	// Elementor Pro popup documents expect `timing` to exist. If page-load
 	// triggering is enabled and no explicit delay is provided, treat it as 0.
-	if ( isset( $triggers['page_load'] ) && 'yes' === $triggers['page_load'] && ! isset( $timing['page_load_delay'] ) ) {
-		$timing['page_load_delay'] = 0;
+	if ( isset( $triggers['page_load'] ) && 'yes' === $triggers['page_load'] && ! isset( $triggers['page_load_delay'] ) ) {
+		$triggers['page_load_delay'] = 0;
 	}
 
 	$popup_settings['triggers'] = $triggers;
@@ -6343,11 +6343,15 @@ function mcp_abilities_elementor_build_popup_display_settings( array $popup_disp
 	if ( ! empty( $popup_display['timing'] ) && is_array( $popup_display['timing'] ) ) {
 		$timing = $popup_display['timing'];
 		if ( isset( $timing['show_after'] ) ) {
-			$popup_settings['timing']['page_load_delay'] = (int) $timing['show_after'];
+			$popup_settings['triggers']['page_load_delay'] = max( 0, (int) $timing['show_after'] );
+			unset( $popup_settings['timing']['page_load_delay'] );
 		}
 		if ( isset( $timing['show_times'] ) ) {
-			$popup_settings['timing']['times_count'] = (int) $timing['show_times'];
+			$popup_settings['timing']['times_times'] = max( 1, (int) $timing['show_times'] );
 			$popup_settings['timing']['times']       = 'yes';
+			if ( ! in_array( $popup_settings['timing']['times_count'] ?? '', array( 'open', 'close' ), true ) ) {
+				$popup_settings['timing']['times_count'] = 'close';
+			}
 		}
 	}
 

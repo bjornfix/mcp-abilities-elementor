@@ -3,7 +3,7 @@ Contributors: basicus
 Tags: mcp, elementor, page builder, ai, automation
 Requires at least: 6.9
 Tested up to: 7.1
-Stable tag: 2.3.59
+Stable tag: 2.3.60
 Requires PHP: 8.0
 Requires Plugins: elementor
 License: GPLv2 or later
@@ -64,6 +64,9 @@ For update notifications in WordPress, install [Devenia MCP Updater](https://dow
 * [Stable Download](https://downloads.devenia.com/mcp-abilities-elementor.zip)
 
 == Changelog ==
+
+= 2.3.60 =
+* Save popup delays and maximum display counts in Elementor’s native fields, preserving existing visitor rules and valid count modes.
 
 = 2.3.59 =
 * Apply the native current-language dialog close name when dialogs load on demand, while preserving custom labels and native popup behavior.
