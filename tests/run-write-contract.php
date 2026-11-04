@@ -39,6 +39,7 @@ namespace {
 	}
 	function get_post( int $id ) { return $GLOBALS['posts'][ $id ] ?? null; }
 	function current_user_can( ...$args ): bool { return true; }
+	function current_filter(): string { return ''; }
 	function get_permalink( int $id ): string { return 'https://example.com/?p=' . $id; }
 	function apply_filters( string $name, $value, ...$args ) { return $value; }
 	function is_wp_error( $value ): bool { return false; }
@@ -123,6 +124,24 @@ namespace {
 	expect( $result['success'] && 0 === $writes, 'unchanged legacy styles remain allowed during text edits' );
 	$result = call_write( 'delete-element', array( 'id' => 1, 'element_id' => 'e0', 'force_delete' => true, 'allow_legacy_style_preservation' => true, 'cache_scope' => 'none' ) );
 	expect( $result['success'] && 25 === count( json_decode( $meta[1]['_elementor_data'], true ) ), 'deletion preserves unrelated legacy styles through shared save' );
+
+	foreach ( array( 'add-widget', 'add-container' ) as $ability ) {
+		$addition = array( 'id' => 1, 'element_id' => 'newitem', 'cache_scope' => 'none' );
+		if ( 'add-widget' === $ability ) { $addition['widget_type'] = 'heading'; }
+		if ( 'add-container' === $ability ) { $addition['template_lookup_status'] = 'not_a_reusable_pattern'; }
+		seed( $legacy );
+		$result = call_write( $ability, $addition );
+		expect( ! $result['success'] && 0 === $writes, 'native additions remain strict by default' );
+		$result = call_write( $ability, $addition + array( 'allow_legacy_style_preservation' => true ) );
+		expect( $result['success'] && 27 === count( json_decode( $meta[1]['_elementor_data'], true ) ), 'native additions can preserve unchanged existing styles explicitly: ' . $ability . ' / ' . ( $result['message'] ?? '' ) . ' / ' . json_encode( array_slice( $result['violations'] ?? array(), 0, 1 ) ) );
+		expect( $legacy === array_slice( json_decode( $meta[1]['_elementor_data'], true ), 0, 26 ), 'adding inherited content leaves legacy element bytes unchanged' );
+		expect( ! isset( json_decode( $meta[1]['_elementor_data'], true )[26]['settings']['allow_legacy_style_preservation'] ), 'preservation choice is not saved as widget content' );
+		foreach ( array( array( 'background_color' => '#fedcba' ), array( '__globals__' => array( 'background_color' => 'globals/colors?id=missing' ) ) ) as $bad_settings ) {
+			seed( $legacy );
+			$result = call_write( $ability, $addition + array( 'allow_legacy_style_preservation' => true, 'settings' => $bad_settings ) );
+			expect( ! $result['success'] && 0 === $writes, 'legacy preservation never permits new local colors or invalid token references' );
+		}
+	}
 
 	seed( array( element( 'a' ) ) );
 	$bad_data = array( element( 'a', array( 'width' => 'calc(100% - 2px)' ) ) );

@@ -457,6 +457,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 					array(
 						'elements' => array( 'type' => 'array', 'items' => array( 'type' => 'object' ), 'description' => 'Native child elements. For matched_template_used, include a linked template widget here.' ),
 					'cache_scope' => mcp_abilities_elementor_cache_scope_schema(),
+						'allow_legacy_style_preservation' => array( 'type' => 'boolean', 'default' => false, 'description' => 'Allow additions when every existing style violation remains unchanged; new or changed local styling is still rejected.' ),
 					)
 				),
 				'additionalProperties' => false,
@@ -509,7 +510,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 					return array( 'success' => false, 'message' => 'Parent element not found' );
 				}
 
-				$save = mcp_abilities_elementor_save_document_data( $post_id, $data, (string) ( $input['cache_scope'] ?? 'post' ) );
+				$save = mcp_abilities_elementor_save_document_data( $post_id, $data, (string) ( $input['cache_scope'] ?? 'post' ), ! empty( $input['allow_legacy_style_preservation'] ) );
 				if ( empty( $save['success'] ) ) {
 					return $save;
 				}
@@ -551,6 +552,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 							'element_id'        => array( 'type' => 'string', 'description' => 'Optional explicit element ID.' ),
 							'settings'          => array( 'type' => 'object', 'description' => 'Widget settings merged with convenience inputs.' ),
 							'cache_scope'       => array( 'type' => 'string', 'enum' => array( 'none', 'post', 'site' ), 'default' => 'post' ),
+							'allow_legacy_style_preservation' => array( 'type' => 'boolean', 'default' => false, 'description' => 'Allow additions when every existing style violation remains unchanged; new or changed local styling is still rejected.' ),
 						),
 						$extra_properties
 					),
@@ -605,7 +607,7 @@ function mcp_abilities_elementor_register_document_abilities(): void {
 						return array( 'success' => false, 'message' => 'Parent element not found' );
 					}
 
-					$save = mcp_abilities_elementor_save_document_data( $post_id, $data, (string) ( $input['cache_scope'] ?? 'post' ) );
+					$save = mcp_abilities_elementor_save_document_data( $post_id, $data, (string) ( $input['cache_scope'] ?? 'post' ), ! empty( $input['allow_legacy_style_preservation'] ) );
 					if ( empty( $save['success'] ) ) {
 						return $save;
 					}

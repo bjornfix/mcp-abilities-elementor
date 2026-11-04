@@ -2,14 +2,14 @@
 
 Inspect an Elementor page, find the widget or shared setting behind a problem, and make a targeted change through an authenticated MCP client. Keep the page editable in Elementor and check the rendered result after saving.
 
-[![Release 2.3.61](https://img.shields.io/badge/release-2.3.61-blue.svg)](https://downloads.devenia.com/mcp-abilities-elementor.zip)
+[![Release 2.3.62](https://img.shields.io/badge/release-2.3.62-blue.svg)](https://downloads.devenia.com/mcp-abilities-elementor.zip)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0.html)
 [![WordPress](https://img.shields.io/badge/WordPress-6.9%2B-blue.svg)](https://wordpress.org)
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://www.php.net/)
 
 **Tested up to:** 7.1 (validated with WordPress 7.1-RC3)
 
-**Stable tag:** 2.3.61
+**Stable tag:** 2.3.62
 
 **License:** GPLv2 or later
 
@@ -227,7 +227,7 @@ Inspect the button's native controls, then preview a focused settings merge:
 {"ability_name":"elementor/merge-element-settings","parameters":{"id":123,"element_id":"abc1234","settings":{"link":{"url":"https://example.com/courses/drawing/"}},"dry_run":true}}
 ```
 
-Use the real element ID from inspection. Review the preview before submitting the intended save. Existing style violations can still block the document; `allow_legacy_style_preservation:true` permits unchanged legacy style violations, not newly introduced ones.
+Use the real element ID from inspection. Review the preview before submitting the intended save. Existing style violations can still block the document. Native widget and container additions support the same explicit preservation option as targeted settings edits and removals; `allow_legacy_style_preservation:true` permits unchanged legacy style violations, not newly introduced ones.
 
 Inspect shared styles and available templates before authoring repeated content:
 
@@ -264,6 +264,10 @@ For update notifications in WordPress, install [Devenia MCP Updater](https://dow
 5. Read one existing Elementor page before making changes.
 
 ## Recent Changes
+
+### 2.3.62
+
+Add native widgets and containers while explicitly preserving unchanged legacy styles. New local styling and invalid global references remain rejected.
 
 ### 2.3.61
 
