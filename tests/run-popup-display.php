@@ -19,6 +19,8 @@ namespace {
 	function current_user_can( ...$args ): bool { return $GLOBALS['can_edit']; }
 	function get_post( $id ) { return $GLOBALS['posts'][ $id ] ?? null; }
 	function get_post_meta( $id, $key, $single = true ) { return $GLOBALS['meta'][ $id ][ $key ] ?? ''; }
+	function get_posts( $args ): array { return array( 11 ); }
+	function get_the_title( $id ): string { return $GLOBALS['posts'][ $id ]->post_title; }
 	function update_post_meta( $id, $key, $value ): bool { $GLOBALS['meta'][ $id ][ $key ] = $value; return true; }
 	function admin_url( $path ): string { return 'https://example.com/wp-admin/' . $path; }
 	function get_permalink( $id ): string { return 'https://example.com/template/' . $id; }
@@ -45,7 +47,7 @@ namespace {
 		$j = $i + 1;
 		while ( is_array( $tokens[ $j ] ) && T_WHITESPACE === $tokens[ $j ][0] ) { ++$j; }
 		$name = is_array( $tokens[ $j ] ) ? $tokens[ $j ][1] : '';
-		if ( ! in_array( $name, array( 'mcp_abilities_elementor_normalize_popup_display_settings', 'mcp_abilities_elementor_build_popup_display_settings' ), true ) ) { continue; }
+		if ( ! in_array( $name, array( 'mcp_abilities_elementor_normalize_popup_display_settings', 'mcp_abilities_elementor_build_popup_display_settings', 'mcp_abilities_elementor_audit_theme_builder_runtime_health' ), true ) ) { continue; }
 		$code = '';
 		$depth = 0;
 		$started = false;
@@ -92,6 +94,20 @@ namespace {
 	$can_edit = false;
 	$r = $update( array( 'id' => 11, 'popup_display' => $input ) );
 	check( ! $r['success'] && $before === $meta, 'denied update does not mutate settings' );
+	$valid = $meta[11][$display_key];
+	check( mcp_abilities_elementor_audit_theme_builder_runtime_health()['healthy'], 'runtime audit accepts the zero-delay native settings written by update-template' );
+	check( $before === $meta, 'runtime audit does not mutate saved popup settings' );
+	$meta[11][$display_key]['triggers']['page_load_delay'] = 9;
+	check( mcp_abilities_elementor_audit_theme_builder_runtime_health()['healthy'], 'runtime audit accepts a nonzero native trigger delay' );
+	unset( $meta[11][$display_key]['triggers']['page_load_delay'] );
+	check( ! mcp_abilities_elementor_audit_theme_builder_runtime_health()['healthy'], 'runtime audit rejects a missing required trigger delay' );
+	$meta[11][$display_key]['timing']['page_load_delay'] = 0;
+	$invalid = mcp_abilities_elementor_audit_theme_builder_runtime_health();
+	check( ! $invalid['healthy'] && ! $invalid['issues'][0]['details']['has_page_load_delay'], 'obsolete timing-group delay does not satisfy the native trigger requirement' );
+	$meta[11][$display_key] = $valid;
+	unset( $meta[11][$display_key]['timing'] );
+	check( ! mcp_abilities_elementor_audit_theme_builder_runtime_health()['healthy'], 'runtime audit still rejects a missing timing group' );
+	$meta[11][$display_key] = $valid;
 	if ( $errors ) {
 		fwrite( STDERR, implode( "\n", $errors ) . "\n" );
 		exit( 1 );

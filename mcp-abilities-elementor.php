@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Elementor
  * Plugin URI: https://devenia.com/plugins/mcp-abilities-elementor/
  * Description: Elementor abilities for MCP. Get, update, and patch Elementor page data. Manage templates and cache.
- * Version: 2.3.60
+ * Version: 2.3.61
  * Author: basicus
  * Author URI: https://profiles.wordpress.org/basicus/
  * License: GPL-2.0+
@@ -6396,7 +6396,7 @@ function mcp_abilities_elementor_audit_theme_builder_runtime_health(): array {
 			$triggers       = $raw_is_array && is_array( $popup_settings['triggers'] ?? null ) ? $popup_settings['triggers'] : array();
 			$timing         = $raw_is_array && is_array( $popup_settings['timing'] ?? null ) ? $popup_settings['timing'] : null;
 
-			if ( ! $raw_is_array || null === $timing || ( isset( $triggers['page_load'] ) && 'yes' === $triggers['page_load'] && ! isset( $timing['page_load_delay'] ) ) ) {
+			if ( ! $raw_is_array || null === $timing || ( isset( $triggers['page_load'] ) && 'yes' === $triggers['page_load'] && ! isset( $triggers['page_load_delay'] ) ) ) {
 				$issues[] = array(
 					'id'           => $template_id,
 					'title'        => $title,
@@ -6407,7 +6407,7 @@ function mcp_abilities_elementor_audit_theme_builder_runtime_health(): array {
 						'has_triggers'       => ! empty( $triggers ),
 						'has_timing_array'   => is_array( $timing ),
 						'page_load_trigger'  => isset( $triggers['page_load'] ) && 'yes' === $triggers['page_load'],
-						'has_page_load_delay'=> is_array( $timing ) && isset( $timing['page_load_delay'] ),
+						'has_page_load_delay'=> isset( $triggers['page_load_delay'] ),
 					),
 					'recommendation'=> 'Normalize popup display settings so both triggers and timing arrays exist before relying on interactive frontend runtime.',
 				);
